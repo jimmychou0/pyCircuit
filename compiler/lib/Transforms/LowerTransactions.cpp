@@ -5711,24 +5711,18 @@ private:
             target->getNumOperands() != 3 ||
             target->getAttrDictionary() != op.getAttrDictionary() ||
             target->getPropertiesAsAttribute() !=
-                op.getPropertiesAsAttribute()) {
-          llvm::errs() << "DBG-state-auth-fail kind=" << isa<gfir::StateOp>(target)
-                       << " loc=" << (target->getLoc() != op.getLoc())
-                       << " res=" << (target->getNumResults() != 1)
-                       << " types=" << (target->getResultTypes() != op.getResultTypes())
-                       << " ops=" << (target->getNumOperands() != 3)
-                       << " attrs=" << (target->getAttrDictionary() != op.getAttrDictionary())
-                       << " props=" << (target->getPropertiesAsAttribute() != op.getPropertiesAsAttribute()) << "\n";
-          op.print(llvm::errs()); llvm::errs() << "\n--- target:\n";
-          target->print(llvm::errs()); llvm::errs() << "\n";
+                op.getPropertiesAsAttribute())
           return reject("original logical state owner/Q/type/domain/initial differs");
-        }
         for (auto [original, actual] :
              llvm::zip(op.getOperands(), target->getOperands())) {
           auto expected = authenticated.lookupOrNull(original);
           if (!expected || actual != expected)
             return reject("original logical state domain/initial binding differs");
         }
+        // Cover registers the authenticated replacement in the clone
+        // inventory exactly as exactClone registers an unchanged clone.
+        if (failed(cover(target)))
+          return failure();
       } else if (auto memory = dyn_cast<ac::InstanceOp>(op);
                  memory && memory->hasAttr("ac.source_memory")) {
         NamedAttrList expected(memory->getAttrs());
