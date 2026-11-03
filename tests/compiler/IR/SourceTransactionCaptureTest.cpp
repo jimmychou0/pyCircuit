@@ -5647,7 +5647,9 @@ TEST_F(SourceTransactionCaptureTest,
       if (mutation == "metadata")
         system->removeAttr("ac.entry_boundary");
       else if (mutation == "contract")
-        (*package)->setAttr("ac.routed_contract", b.getI64IntegerAttr(2));
+        // Downgrade the boundary package to the non-boundary contract
+        // version, exercising the pairing rule rather than version validity.
+        (*package)->setAttr("ac.routed_contract", b.getI64IntegerAttr(4));
       else if (mutation == "extra-key") {
         auto boundary =
             system->getAttrOfType<DictionaryAttr>("ac.entry_boundary");
