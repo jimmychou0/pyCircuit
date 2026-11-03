@@ -299,7 +299,7 @@ FailureOr<Operation *> directState(ModuleOp module, DictionaryAttr declaration,
     if (found)
       return module->emitOpError()
              << "state declaration resolves to multiple logical or physical allocations";
-    if (isa<SourceStateOp>(instance)) {
+    if (isa<acir::LogicalStateOpInterface>(instance)) {
       if (instance->getNumOperands() != 3 || instance->getNumResults() != 1)
         return instance->emitOpError() << "logical state requires clock, reset, initial and one Q result";
       found = instance;
@@ -332,25 +332,27 @@ LogicalResult bindStateEndpoint(StateEndpoint &result, Operation *storage,
   result.ownerBindings = bound;
   result.payloadType = *payload;
   result.q = storage->getResult(0);
-  if (auto logical = dyn_cast<SourceStateOp>(storage)) {
+  if (auto logical = dyn_cast<acir::LogicalStateOpInterface>(storage)) {
     result.form = StateEndpointForm::Logical;
     result.storageBindings = bound;
-    result.clock = logical.getClk();
-    result.reset = logical.getRst();
-    result.initial = logical.getInitial();
+    result.clock = logical.getStateClock();
+    result.reset = logical.getStateReset();
+    result.initial = logical.getStateInitial();
     for (auto update :
          owner.getBody().front().getOps<acir::LogicalStateUpdateOpInterface>()) {
       if (failed(budget.debit(1, update))) return failure();
       if (update->getNumOperands() != 3 || update->getNumResults() ||
           update->getNumRegions())
         return update.emitOpError() << "logical state update requires three operands and no results or regions";
-      if (update.getUpdatedStateQ() != logical.getQ()) continue;
+      if (update.getUpdatedStateQ() != logical.getStateQ()) continue;
       if (result.update)
-        return logical.emitOpError() << "logical state requires exactly one update";
+        return logical.getOperation()->emitOpError()
+               << "logical state requires exactly one update";
       result.update = update;
     }
     if (!result.update)
-      return logical.emitOpError() << "logical state requires exactly one update";
+      return logical.getOperation()->emitOpError()
+             << "logical state requires exactly one update";
     result.data = result.update.getStateCandidate();
     result.enable = result.update.getStateWriteIntent();
     auto candidate = analysis.resolveType(result.data.getType(), bound, result.update);
@@ -4526,13 +4528,16 @@ private:
         continue;
       }
       if (auto update = dyn_cast<acir::LogicalStateUpdateOpInterface>(consumer)) {
-        auto logical = update.getUpdatedStateQ().getDefiningOp<SourceStateOp>();
+        auto logical =
+            update.getUpdatedStateQ()
+                .getDefiningOp<acir::LogicalStateOpInterface>();
         if (route.kind == PrivateRoute::Data && operand == 1 && logical &&
-            stateTerminal(endpoint.scope, logical, route.state))
+            stateTerminal(endpoint.scope, logical.getOperation(), route.state))
           continue;
         if (route.kind == PrivateRoute::Enable && operand == 2 && logical) {
           auto found = stateIndex.find({currentOccurrence, logical.getOperation()});
-          if (found != stateIndex.end() && stateTerminal(endpoint.scope, logical, found->second)) {
+          if (found != stateIndex.end() &&
+              stateTerminal(endpoint.scope, logical.getOperation(), found->second)) {
             auto allowed = enableTarget(route, found->second);
             if (failed(allowed)) return failure();
             if (*allowed) continue;

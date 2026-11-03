@@ -823,36 +823,7 @@ LogicalResult SourceStateOp::verify() {
       return emitOpError() << "state declarations require distinct occurrence "
                               "identities within their module";
   }
-  HardwareAnalysis analysis((*this)->getParentOfType<mlir::ModuleOp>());
-  auto bindings = scope(*this);
-  if (failed(predicate(analysis, getClk(), bindings, *this, "state clock")) ||
-      failed(predicate(analysis, getRst(), bindings, *this, "state reset")))
-    return failure();
-  if (!areEquivalentHardwareTypes(getInitial().getType(), getQ().getType()))
-    return emitOpError() << "initial value and old-Q payload types must match";
-  if (Attribute constraint = (*this)->getAttr("ac.payload_constraint"))
-    if (failed(detail::verifySourceCallHardwareConstraint(
-            constraint, getQ().getType(), analysis, owner, *this,
-            "state payload", detail::SourceCallWidthMode::SymbolicFixedBits)))
-      return failure();
-  if (stage && stage.getValue() == "routed") {
-    StateUpdateOp pairedUpdate;
-    for (Operation *user : getQ().getUsers()) {
-      auto update = dyn_cast<StateUpdateOp>(user);
-      if (!update || update->getBlock() != (*this)->getBlock() ||
-          update->getNumOperands() != 3 || update.getState() != getQ())
-        continue;
-      if (pairedUpdate && pairedUpdate != update)
-        return emitOpError()
-               << "routed logical state requires exactly one same-block update";
-      // Q may also be this update's candidate, so its users can repeat it.
-      pairedUpdate = update;
-    }
-    if (!pairedUpdate)
-      return emitOpError()
-             << "routed logical state requires exactly one same-block update";
-  }
-  return staticInitializer(analysis, getInitial(), bindings, *this);
+  return verifyLogicalStateDeclarationBinding(*this);
 }
 
 void StateUpdateOp::getEffects(

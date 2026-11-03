@@ -53,6 +53,16 @@ admissionPairLogicalStateUpdate(acir::LogicalStateOpInterface state,
 /// previous per-op verification did. This is bound verification: parsing or
 /// mlir::verify alone never authorizes publication, refinement or
 /// execution (see B1-boundary.md).
+/// Full routed-bound verification of one logical-state declaration:
+/// structural contract, width-one clock/reset controls, initial/Q payload
+/// equivalence, optional payload constraint, the routed exactly-one-update
+/// pairing and the closed static-initializer DAG. Pass a shared immutable
+/// analysis and bindings when the package traversal already owns one.
+mlir::LogicalResult verifyLogicalStateDeclarationBinding(
+    acir::LogicalStateOpInterface state,
+    const HardwareAnalysis *analysis = nullptr,
+    const HardwareBindings *bindings = nullptr);
+
 mlir::LogicalResult verifyLogicalStateUpdateBinding(
     acir::LogicalStateUpdateOpInterface update,
     const HardwareAnalysis *analysis = nullptr,

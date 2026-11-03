@@ -4,6 +4,7 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Operation.h"
 #include "SourceCheckBudget.h"
+#include "ACIRSourceContracts.h"
 #include "pycircuit/Dialect/ACIR/ACIROps.h"
 #include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
 
@@ -54,6 +55,58 @@ admissionPairLogicalStateUpdate(acir::LogicalStateOpInterface state,
     return state.getOperation()->emitOpError()
            << "logical state has no update binding";
   return result;
+}
+
+LogicalResult verifyLogicalStateDeclarationBinding(
+    acir::LogicalStateOpInterface state, const HardwareAnalysis *shared,
+    const HardwareBindings *sharedBindings) {
+  Operation *operation = state.getOperation();
+  if (failed(acir::verifyLogicalStateStructure(operation)))
+    return failure();
+  auto owner = cast<ModuleOp>(operation->getParentOp());
+  HardwareAnalysis owned(operation->getParentOfType<mlir::ModuleOp>());
+  const HardwareAnalysis &analysis = shared ? *shared : owned;
+  HardwareBindings ownedBindings = stateOwnerScope(operation);
+  const HardwareBindings &bindings =
+      sharedBindings ? *sharedBindings : ownedBindings;
+  if (failed(stateControlPredicate(analysis, state.getStateClock(), bindings,
+                                   operation, "state clock")) ||
+      failed(stateControlPredicate(analysis, state.getStateReset(), bindings,
+                                   operation, "state reset")))
+    return failure();
+  if (!areEquivalentHardwareTypes(state.getStateInitial().getType(),
+                                  state.getStateQ().getType()))
+    return operation->emitOpError()
+           << "initial value and old-Q payload types must match";
+  if (Attribute constraint = state.getStatePayloadConstraint())
+    if (failed(detail::verifySourceCallHardwareConstraint(
+            constraint, state.getStateQ().getType(), analysis, owner,
+            operation, "state payload",
+            detail::SourceCallWidthMode::SymbolicFixedBits)))
+      return failure();
+  auto package = operation->getParentOfType<mlir::ModuleOp>();
+  auto stage = package ? package->getAttrOfType<StringAttr>("ac.stage")
+                       : StringAttr();
+  if (stage && stage.getValue() == "routed") {
+    acir::LogicalStateUpdateOpInterface pairedUpdate;
+    for (Operation *user : state.getStateQ().getUsers()) {
+      auto update = dyn_cast<acir::LogicalStateUpdateOpInterface>(user);
+      if (!update || update->getBlock() != operation->getBlock() ||
+          update->getNumOperands() != 3 ||
+          update.getUpdatedStateQ() != state.getStateQ())
+        continue;
+      if (pairedUpdate && pairedUpdate != update)
+        return operation->emitOpError()
+               << "routed logical state requires exactly one same-block update";
+      // Q may also be this update's candidate, so its users can repeat it.
+      pairedUpdate = update;
+    }
+    if (!pairedUpdate)
+      return operation->emitOpError()
+             << "routed logical state requires exactly one same-block update";
+  }
+  return detail::verifyClosedStateInitializer(analysis, state.getStateInitial(),
+                                              bindings, operation);
 }
 
 LogicalResult verifyLogicalStateUpdateBinding(

@@ -357,7 +357,8 @@ struct Engine {
         out.push_back({input, path});
       return success();
     };
-    if (isa<BitsConstantOp, BitsConstant4Op, EnumCreateOp, SourceStateOp>(op))
+    if (isa<BitsConstantOp, BitsConstant4Op, EnumCreateOp,
+             acir::LogicalStateOpInterface>(op))
       return out;
     if (isa<EnumToBitsOp, EnumFromBitsOp>(op)) {
       out.push_back({op->getOperand(0), {}});
@@ -860,7 +861,7 @@ struct Engine {
           if (failed(visit({value, path})))
             return failure();
       }
-      if (auto logical = dyn_cast<SourceStateOp>(op)) {
+      if (auto logical = dyn_cast<acir::LogicalStateOpInterface>(op)) {
         for (Value input : logical->getOperands()) {
           auto leaves = paths(input.getType(), bindings, logical);
           if (failed(leaves)) return failure();
