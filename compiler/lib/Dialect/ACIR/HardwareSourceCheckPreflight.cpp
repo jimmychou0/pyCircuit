@@ -2,6 +2,7 @@
 #include "HardwareSourceCheckPreflight.h"
 #include "ACIRSourceContracts.h"
 #include "HardwareSampledAdmission.h"
+#include "pycircuit/Dialect/ACIR/LogicalStateValidation.h"
 #include "mlir/IR/Verifier.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/ScopeExit.h"
@@ -1403,6 +1404,18 @@ private:
                            definition)))
         return failure();
       auto &indices = localIndices[definition];
+      // The declaration inventory is the enumeration authority for routed
+      // states' bound checks (B1-boundary.md): resolved control widths,
+      // constraint semantics, initializer closure and same-block pairing
+      // with the update's bound intent check — once per declaration,
+      // including retained definitions outside the instance closure. This
+      // work was previously unbudgeted native-verifier work; catalog keeps
+      // it without new debits.
+      for (auto &op : definition.getBody().front())
+        if (auto logical = dyn_cast<acir::LogicalStateOpInterface>(&op))
+          if (failed(verifyLogicalStateDeclarationBinding(logical, &analysis,
+                                                           &local)))
+            return failure();
       auto sampling = catalogSampling(definition, local, bindings);
       if (failed(sampling))
         return failure();
@@ -1513,7 +1526,8 @@ private:
     }
     SmallVector<Operation *> allocations;
     for (Operation &op : definition.getBody().front()) {
-      if (!isa<InstanceOp, CollectionOp, SourceStateOp>(op))
+      if (!isa<InstanceOp, CollectionOp>(op) &&
+          !isa<acir::LogicalStateOpInterface>(op))
         continue;
       if (failed(budget.debit(Budget::bytes(sizeof(Allocation)), &op)) ||
           failed(
@@ -1539,7 +1553,7 @@ private:
                << "duplicate allocation occurrence identity";
     for (Operation *allocation : allocations) {
       Allocation edge{allocation, {}, {}, {}};
-      if (isa<SourceStateOp>(allocation)) {
+      if (auto logical = dyn_cast<acir::LogicalStateOpInterface>(allocation)) {
         edge.form = HardwareCheckCommitEndpointForm::Logical;
       } else if (auto queue = dyn_cast<InstanceOp>(allocation);
           queue && isQueueInstance(queue)) {

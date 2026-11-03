@@ -16,6 +16,7 @@ class StringRef;
 namespace acir::ac {
 
 class HardwareAnalysis;
+class SourceStateOp;
 struct HardwareBindings;
 
 namespace detail {
@@ -62,6 +63,12 @@ mlir::LogicalResult verifyLogicalStateDeclarationBinding(
     acir::LogicalStateOpInterface state,
     const HardwareAnalysis *analysis = nullptr,
     const HardwareBindings *bindings = nullptr);
+
+/// Source-side bound verification of one source ac.state declaration:
+/// the shared declaration-bound sequence plus the closed static
+/// initializer. The routed pairing belongs to the GFIR declaration
+/// binding above (B1-boundary.md).
+mlir::LogicalResult verifyLogicalStateSourceBinding(SourceStateOp state);
 
 mlir::LogicalResult verifyLogicalStateUpdateBinding(
     acir::LogicalStateUpdateOpInterface update,

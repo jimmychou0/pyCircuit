@@ -1,4 +1,5 @@
 #include "EntryBoundary.h"
+#include "pycircuit/Interfaces/LogicalStateInterfaces.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/SymbolTable.h"
 #include "llvm/ADT/DenseSet.h"
@@ -232,7 +233,10 @@ LogicalResult verifyEntryBoundary(const HardwareAnalysis &analysis, bool normali
     if (failed(debit(8, &op))) return failure();
     if (auto instance = dyn_cast<InstanceOp>(op)) { child = instance; ++children; }
     if (normalizedInput && !isa<InstanceOp, YieldOp>(op)) return error() << "normalized entry boundary accepts only canonical child and yield";
-    if (isa<SourceStateOp, SourceMethodOp, SourceTransactionOp, CollectionOp>(op))
+    if (isa<SourceStateOp, SourceMethodOp, SourceTransactionOp, CollectionOp>(
+            op) ||
+        isa<acir::LogicalStateOpInterface, acir::LogicalStateUpdateOpInterface>(
+            op))
       return error() << "entry boundary cannot own storage, collections or source declarations";
   }
   if (children != 1 || !child || child.getInstanceName() != "entry" ||

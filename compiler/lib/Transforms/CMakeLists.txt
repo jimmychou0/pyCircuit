@@ -9,6 +9,7 @@ add_acir_library(ACIRTransforms SOURCES
   TransactionValueAvailability.cpp
   LINK_LIBRARIES
     ACIRDialect
+    GFIRDialect
     PycircuitStateInterfaces
     MLIRPass
     MLIRArithDialect

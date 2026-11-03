@@ -25,7 +25,7 @@ hardwareStatePrimitives(mlir::ModuleOp routed, SourceCheckBudget &budget) {
   }
   bool hasState = false;
   for (auto module : routed.getOps<ac::ModuleOp>())
-    for (auto state : module.getBody().front().getOps<ac::SourceStateOp>()) {
+    for (auto state : module.getBody().front().getOps<gfir::StateOp>()) {
       if (!charge(budget, state)) return failure();
       hasState = true;
     }
@@ -35,17 +35,17 @@ hardwareStatePrimitives(mlir::ModuleOp routed, SourceCheckBudget &budget) {
   return result;
 }
 
-FailureOr<ac::StateUpdateOp> logicalUpdate(ac::SourceStateOp state,
-                                         SourceCheckBudget &budget) {
-  // Shared admission pairing through the common interface; this refinement
-  // helper keeps its concrete return type until the GFIR migration.
+FailureOr<gfir::StateUpdateOp> logicalUpdate(gfir::StateOp state,
+                                             SourceCheckBudget &budget) {
+  // Shared admission pairing through the common interface; refinement
+  // consumes the routed GFIR classes concretely.
   auto paired = ac::admissionPairLogicalStateUpdate(state, budget);
   if (failed(paired))
     return failure();
-  return cast<ac::StateUpdateOp>(paired->getOperation());
+  return cast<gfir::StateUpdateOp>(paired->getOperation());
 }
 
-bool unconditionalScalarState(ac::SourceStateOp state,
+bool unconditionalScalarState(gfir::StateOp state,
                               acir::LogicalStateUpdateOpInterface update,
                               const ac::HardwareAnalysis &analysis,
                               SourceCheckBudget &budget) {
@@ -77,7 +77,7 @@ public:
 
 private:
   struct StatePair {
-    ac::SourceStateOp source;
+    gfir::StateOp source;
     Operation *target;
     SmallVector<ac::TableSplatOp, 3> splats;
   };
@@ -111,7 +111,7 @@ private:
         for (Operation &op : left) {
           if (!charge(budget, &op)) return failure();
           if (isa<acir::LogicalStateUpdateOpInterface>(op)) continue;
-          if (auto state = dyn_cast<ac::SourceStateOp>(op)) {
+          if (auto state = dyn_cast<gfir::StateOp>(op)) {
             StatePair pair{state, nullptr, {}};
             if (isa<ac::TableType>(state.getQ().getType()))
               for (unsigned i = 0; i < 3; ++i) {

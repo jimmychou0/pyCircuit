@@ -53,6 +53,7 @@ add_acir_library(ACIRDialect SOURCES
   HardwareDependencySerialization.cpp
   HardwareWorkPartition.cpp
   "${PYCIRCUIT_SOURCE_DIR}/lib/Compiler/SourceIdentifier.cpp"
+  "${PYCIRCUIT_SOURCE_DIR}/lib/IR/StateDeclarationContracts.cpp"
 )
 add_dependencies(ACIRDialect
   ACIRDialectIncGen

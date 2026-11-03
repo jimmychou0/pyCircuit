@@ -1,5 +1,6 @@
 #include "ACIRSourceContracts.h"
 #include "pycircuit/Dialect/ACIR/LogicalStateValidation.h"
+#include "IR/StateDeclarationContracts.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/IR/Verifier.h"
 #include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
@@ -49,13 +50,8 @@ LogicalResult occurrence(Operation *operation) {
 }
 
 LogicalResult namedDeclaration(Operation *operation, StringAttr name) {
-  auto module = dyn_cast_or_null<ModuleOp>(operation->getParentOp());
-  if (!module || !name)
-    return operation->emitOpError() << "requires named direct module placement";
-  if (failed(detail::verifyPythonAstIdentifier(
-          name.getValue(), true, [&] { return operation->emitOpError(); })))
-    return failure();
-  return occurrence(operation);
+  // Single shared leaf implementation for source and routed declarations.
+  return acir::verifyNamedLogicalDeclaration(operation, name);
 }
 
 LogicalResult predicate(const HardwareAnalysis &analysis, Value value,
@@ -284,106 +280,7 @@ FailureOr<Type> selectedStateType(Operation *operation, ArrayAttr selectors,
                              indices);
 }
 
-LogicalResult staticInitializer(const HardwareAnalysis &analysis, Value initial,
-                                const HardwareBindings &bindings,
-                                Operation *state) {
-  // Prove closure of the existing literal/constructor graph. This performs
-  // no SSA arithmetic evaluation and never obtains values from runtime wires.
-  struct Frame {
-    Operation *operation;
-    unsigned nextOperand = 0;
-  };
-  SmallVector<Frame> stack;
-  llvm::DenseSet<Operation *> active, complete;
-  auto push = [&](Value value) -> LogicalResult {
-    auto *operation = value.getDefiningOp();
-    if (!operation || operation->getParentOp() != bindings.owner ||
-        !isa<BitsConstantOp, BitsConstant4Op, EnumCreateOp, StructCreateOp,
-             TableCreateOp, TableSplatOp, StructGetOp, EnumToBitsOp,
-             BitsExtractOp, BitsResizeOp>(operation))
-      return state->emitOpError()
-             << "state initializer requires a closed static "
-                "literal/constructor "
-                "DAG; runtime values and unsupported computations are rejected";
-    if (!active.insert(operation).second)
-      return state->emitOpError()
-             << "state initializer constructor DAG is cyclic";
-    if (failed(mlir::verify(operation))) return failure();
-    bool concrete = true;
-    for (TypeRange types : {TypeRange(operation->getOperandTypes()), TypeRange(operation->getResultTypes())})
-      for (Type type : types) {
-        bool closed = false;
-        if (failed(detail::verifySourceTemplateType(analysis, type, bindings, operation, &closed)))
-          return failure();
-        concrete &= closed;
-      }
-    for (NamedAttribute attr : operation->getAttrs())
-      if (failed(detail::verifyHardwareAttributeScope(attr.getValue(), bindings.owner)))
-        return failure();
-    // Independently closed attributes remain checked even when some operand
-    // or result width depends on a formal. Only width-relative fit may defer.
-    std::function<LogicalResult(Attribute, unsigned)> checkAttribute =
-        [&](Attribute attribute, unsigned depth) -> LogicalResult {
-      if (depth > 128) return state->emitOpError() << "initializer expression depth exceeded";
-      if (auto expression = dyn_cast<StaticExprAttr>(attribute)) {
-        if (analysis.isStaticEvaluable(expression, bindings))
-          return success(succeeded(analysis.evaluateStatic(expression, bindings, operation)));
-        return checkAttribute(expression.getTree(), depth + 1);
-      }
-      if (auto array = dyn_cast<ArrayAttr>(attribute))
-        for (Attribute child : array)
-          if (failed(checkAttribute(child, depth + 1))) return failure();
-      if (auto dictionary = dyn_cast<DictionaryAttr>(attribute))
-        for (NamedAttribute field : dictionary)
-          if (field.getName() != "origin" && field.getName() != "location" &&
-              failed(checkAttribute(field.getValue(), depth + 1))) return failure();
-      return success();
-    };
-    for (NamedAttribute attr : operation->getAttrs())
-      if (failed(checkAttribute(attr.getValue(), 0))) return failure();
-    auto nonnegative = [&](StaticExprAttr expression, StringRef description) -> LogicalResult {
-      if (!analysis.isStaticEvaluable(expression, bindings)) return success();
-      auto value = analysis.evaluateStatic(expression, bindings, operation);
-      auto integer = succeeded(value) ? dyn_cast<MathIntAttr>(*value) : MathIntAttr();
-      if (!integer || llvm::APSInt(integer.getCanonicalValue()).isNegative())
-        return operation->emitOpError() << description << " requires a nonnegative Integer";
-      return success();
-    };
-    if (auto constant = dyn_cast<BitsConstantOp>(operation))
-      if (failed(nonnegative(constant.getValue(), "state initializer constant"))) return failure();
-    if (auto extract = dyn_cast<BitsExtractOp>(operation))
-      if (failed(nonnegative(extract.getLow(), "state initializer extract low"))) return failure();
-    if (concrete && failed(analysis.verifyResolvedOperation(operation, bindings)))
-      return failure();
-    stack.push_back({operation});
-    return success();
-  };
-  if (failed(push(initial)))
-    return failure();
-  while (!stack.empty()) {
-    auto &frame = stack.back();
-    if (frame.nextOperand == frame.operation->getNumOperands()) {
-      complete.insert(frame.operation);
-      active.erase(frame.operation);
-      stack.pop_back();
-      continue;
-    }
-    Value input = frame.operation->getOperand(frame.nextOperand++);
-    if (complete.contains(input.getDefiningOp()))
-      continue;
-    if (failed(push(input)))
-      return failure();
-  }
-  return success();
-}
-
 } // namespace
-
-LogicalResult detail::verifyClosedStateInitializer(
-    const HardwareAnalysis &analysis, Value initial,
-    const HardwareBindings &bindings, Operation *site) {
-  return staticInitializer(analysis, initial, bindings, site);
-}
 
 FailureOr<Type> detail::resolveSourceBranchResultType(
     Type actualType, const HardwareAnalysis &analysis,
@@ -823,16 +720,7 @@ LogicalResult SourceStateOp::verify() {
       return emitOpError() << "state declarations require distinct occurrence "
                               "identities within their module";
   }
-  return verifyLogicalStateDeclarationBinding(*this);
-}
-
-void StateUpdateOp::getEffects(
-    llvm::SmallVectorImpl<MemoryEffects::EffectInstance> &effects) {
-  effects.emplace_back(MemoryEffects::Write::get(), SourceStateResource::get());
-}
-
-LogicalResult StateUpdateOp::verify() {
-  return verifyLogicalStateUpdateBinding(*this);
+  return verifyLogicalStateSourceBinding(*this);
 }
 
 LogicalResult SourceStateReadOp::verify() {
@@ -1224,7 +1112,7 @@ Operation *detail::findUnloweredTransaction(Operation *root) {
     pending.push_back(root);
   while (!pending.empty()) {
     Operation *operation = pending.pop_back_val();
-    if (isa<SourceStateOp, StateUpdateOp, SourceStateReadOp, SourceStateWriteOp,
+    if (isa<SourceStateOp, SourceStateReadOp, SourceStateWriteOp,
             SourceFormalWriteOp, SourceMethodOp, SourceMethodCallOp, SourceTransactionOp,
             SourceBranchOp, SourceQueuePopOp, SourceQueuePeekOp,
             SourceQueuePushOp>(operation) ||

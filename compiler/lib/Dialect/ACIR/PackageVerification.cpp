@@ -3,7 +3,9 @@
 #include "EntryBoundary.h"
 #include "HardwareSourceChecks.h"
 #include "HardwareValueAvailability.h"
+#include "pycircuit/Dialect/ACIR/RoutedStageAdmission.h"
 #include "pycircuit/Dialect/ACIR/SourceUnitValidation.h"
+#include "pycircuit/Interfaces/LogicalStateInterfaces.h"
 
 using namespace mlir;
 namespace acir::ac {
@@ -28,10 +30,20 @@ LogicalResult detail::verifyHardwarePackageStage(
                       : "executable hardware verification requires final hardware; routed packages require state refinement");
   if ((routed || boundary || package->hasAttr("ac.routed_contract")) &&
       (!marker || !marker.getType().isSignlessInteger(64) ||
-       marker.getValue() != (boundary ? 3 : 2)))
+       marker.getValue() != (boundary ? 5 : 4)))
     return package.emitOpError()
            << "unsupported or missing ac.routed_contract; regenerate the routed artifact";
   auto closed = package.walk([&](Operation *operation) {
+    // HWIR rejects every routed logical-state interface unconditionally,
+    // including retained dead regions; source state forms stay rejected by
+    // their own declaration contract.
+    if (!routed && operation != package.getOperation() &&
+        isa<acir::LogicalStateOpInterface,
+            acir::LogicalStateUpdateOpInterface>(operation)) {
+      operation->emitOpError()
+          << "logical state cannot cross into executable final hardware";
+      return WalkResult::interrupt();
+    }
     // A reference denotes a source allocation, never a runtime payload or an
     // inert annotation on a closed hardware graph. Routing must consume both
     // bindings and callable contracts before either standalone boundary.
@@ -65,9 +77,16 @@ LogicalResult detail::verifyHardwarePackageStage(
     }
     if (!routed || operation == package.getOperation() ||
         isa<ModuleOp, ModuleImportOp, StructOp, EnumOp, SystemOp, InstanceOp,
-            CollectionOp, RuleOp, YieldOp, SourceExpectOp, SourceObserveOp,
-            SourceStateOp, StateUpdateOp>(operation) ||
+            CollectionOp, RuleOp, YieldOp, SourceExpectOp,
+            SourceObserveOp>(operation) ||
         isCombinationalHardwareOperation(operation))
+      return WalkResult::advance();
+    // Stage-specific extension classes are admitted by their owning dialect
+    // (GFIR registers exactly its two logical-state operations); interface
+    // presence or dialect registration alone admits nothing else.
+    if (auto *admission = operation->getDialect()
+                              ->getRegisteredInterface<acir::RoutedStageAdmission>();
+        admission && admission->isRoutedPackageOperation(operation))
       return WalkResult::advance();
     operation->emitOpError() << "operation outside closed routed hardware package";
     return WalkResult::interrupt();

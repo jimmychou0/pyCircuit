@@ -1,5 +1,6 @@
 #include "ACIRSourceContracts.h"
 #include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
+#include "pycircuit/Interfaces/LogicalStateInterfaces.h"
 #include "pycircuit/Dialect/ACIR/SourceMethodAnalysis.h"
 #include "pycircuit/Dialect/ACIR/SourceIdentifier.h"
 #include "llvm/ADT/DenseSet.h"
@@ -285,7 +286,8 @@ FailureOr<ResolvedQueueConfig> checkQueue(const HardwareAnalysis &analysis,
     return error() << "queue requires a nonempty instance_name";
   for (Operation &other : owner.getBody().front())
     if (&other != queue.getOperation() &&
-        isa<SourceStateOp, InstanceOp, CollectionOp, QueueOp>(other) &&
+        (isa<SourceStateOp, InstanceOp, CollectionOp, QueueOp>(other) ||
+         isa<acir::LogicalStateOpInterface>(other)) &&
         other.getAttrOfType<StringAttr>("instance_name") == instanceName)
       return error() << "instance_name must be unique within parent";
   auto occurrence = queue->getAttrOfType<DictionaryAttr>("occurrence");

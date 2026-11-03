@@ -1,6 +1,8 @@
 #include "pycircuit/Dialect/ACIR/ACIRDialect.h"
 #include "pycircuit/Dialect/ACIR/ACIROps.h"
 #include "pycircuit/Dialect/ACIR/LogicalStateValidation.h"
+#include "pycircuit/Dialect/GFIR/GFIRDialect.h"
+#include "pycircuit/Dialect/GFIR/GFIROps.h"
 #include "Dialect/ACIR/SourceCheckBudget.h"
 #include "pycircuit/Interfaces/LogicalStateInterfaces.h"
 
@@ -36,14 +38,16 @@ std::string preamble() {
 )ir";
 }
 
+// The routed fixture carries the GFIR spellings; the source ac.state class
+// never implements the routed interface after the migration.
 std::string routedPackage() {
   return preamble() + R"ir(
-module attributes {ac.stage = "routed", ac.routed_contract = 2 : i64} {
+module attributes {ac.stage = "routed", ac.routed_contract = 4 : i64} {
   "ac.module"() ({
   ^bb0(%clk: !b1, %rst: !b1, %candidate: !b7, %intent: !b1):
     %initial = "ac.bits.constant"() {value = #w7} : () -> !b7
-    %q = "ac.state"(%clk, %rst, %initial) {instance_name = "count", occurrence = #occ} : (!b1, !b1, !b7) -> !b7
-    "ac.state.update"(%q, %candidate, %intent) : (!b7, !b7, !b1) -> ()
+    %q = "gfir.state"(%clk, %rst, %initial) {instance_name = "count", occurrence = #occ} : (!b1, !b1, !b7) -> !b7
+    "gfir.state.update"(%q, %candidate, %intent) : (!b7, !b7, !b1) -> ()
     "ac.yield"(%q) : (!b7) -> ()
   }) {sym_name = "Counter", source_owner = #owner, parameters = [], type_parameters = [], function_type = (!b1, !b1, !b7, !b1) -> !b7, input_names = ["clk", "rst", "candidate", "intent"], output_names = ["q"]} : () -> ()
 }
@@ -54,6 +58,7 @@ class LogicalStateInterfacesTest : public ::testing::Test {
 protected:
   LogicalStateInterfacesTest() {
     context.loadDialect<acir::ac::ACIRDialect>();
+    context.loadDialect<acir::gfir::GFIRDialect>();
   }
 
   mlir::OwningOpRef<mlir::ModuleOp> parse(llvm::StringRef text) {
@@ -77,6 +82,26 @@ TEST_F(LogicalStateInterfacesTest, StructureVerifiersAcceptWellFormedPair) {
   ASSERT_TRUE(static_cast<bool>(update));
   EXPECT_TRUE(mlir::succeeded(acir::verifyLogicalStateStructure(state.getOperation())));
   EXPECT_TRUE(mlir::succeeded(acir::verifyLogicalStateUpdateStructure(update.getOperation())));
+}
+
+// The interface implementer is the routed GFIR class alone; a source ac.state
+// declaration exposes neither contract even in a routed module graph.
+TEST_F(LogicalStateInterfacesTest, SourceStateIsNotAnInterfaceImplementer) {
+  auto file = parse(preamble() + R"ir(
+module attributes {ac.stage = "routed", ac.routed_contract = 4 : i64} {
+  "ac.module"() ({
+  ^bb0(%clk: !b1, %rst: !b1, %candidate: !b7, %intent: !b1):
+    %initial = "ac.bits.constant"() {value = #w7} : () -> !b7
+    %q = "ac.state"(%clk, %rst, %initial) {instance_name = "count", occurrence = #occ} : (!b1, !b1, !b7) -> !b7
+    "gfir.state.update"(%q, %candidate, %intent) : (!b7, !b7, !b1) -> ()
+    "ac.yield"(%q) : (!b7) -> ()
+  }) {sym_name = "Counter", source_owner = #owner, parameters = [], type_parameters = [], function_type = (!b1, !b1, !b7, !b1) -> !b7, input_names = ["clk", "rst", "candidate", "intent"], output_names = ["q"]} : () -> ()
+}
+)ir");
+  ASSERT_TRUE(file);
+  acir::LogicalStateOpInterface state;
+  (*file)->walk([&](acir::LogicalStateOpInterface found) { state = found; });
+  EXPECT_FALSE(static_cast<bool>(state));
 }
 
 mlir::Value stateQ(mlir::OwningOpRef<mlir::ModuleOp> &file) {
@@ -146,21 +171,21 @@ TEST_F(LogicalStateInterfacesTest, StructureVerifiersRejectMalformedShapes) {
 
   // Generic creation bypasses the ODS builders, so the op kind still
   // implements the interface while the actual shape violates the contract.
-  mlir::OperationState badUpdate(unknown, "ac.state.update");
+  mlir::OperationState badUpdate(unknown, "gfir.state.update");
   auto *twoOperand = builder.create(badUpdate);
   mlir::ScopedDiagnosticHandler capture(
       &context, [&](mlir::Diagnostic &) { return mlir::success(); });
   EXPECT_TRUE(mlir::failed(
       acir::verifyLogicalStateUpdateStructure(twoOperand)));
 
-  mlir::OperationState regionUpdate(unknown, "ac.state.update");
+  mlir::OperationState regionUpdate(unknown, "gfir.state.update");
   regionUpdate.addOperands({stateQ(file), stateQ(file), intentOf(file)});
   regionUpdate.addRegion();
   auto *withRegion = builder.create(regionUpdate);
   EXPECT_TRUE(mlir::failed(
       acir::verifyLogicalStateUpdateStructure(withRegion)));
 
-  mlir::OperationState noResultState(unknown, "ac.state");
+  mlir::OperationState noResultState(unknown, "gfir.state");
   auto *emptyState = builder.create(noResultState);
   EXPECT_TRUE(mlir::failed(
       acir::verifyLogicalStateStructure(emptyState)));

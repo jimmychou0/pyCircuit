@@ -357,14 +357,18 @@ def ACIR_RuleOp : ACIR_Op<"rule", [IsolatedFromAbove, SingleBlock, Pure]> {
   let hasRegionVerifier = 1;
 }
 
-// Typed source effects remain explicit until routing; logical declarations and
-// their updates remain until state refinement. None is executable final
-// hardware, and state effects are never marked Pure.
+// Typed source effects remain explicit until routing; logical declarations
+// remain source-owned until routing replaces them by gfir.state. None is
+// executable final hardware, and state effects are never marked Pure.
 def ACIR_SourceStateOp : ACIR_Op<"state", [
-    DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
-    LogicalStateOpInterface,
-    NativeOpTrait<"acir::LogicalStateContractTrait">]> {
+    DeclareOpInterfaceMethods<MemoryEffectsOpInterface>]> {
   let summary = "Declare one source-owned state and its old-Q value";
+  let description = [{
+    A source-stage declaration. Routing authenticates each declaration and
+    constructs its routed gfir.state replacement; this class never enters a
+    routed package and does not implement the routed logical-state
+    interface (B1-boundary.md).
+  }];
   let arguments = (ins ACIR_BitsType:$clk, ACIR_BitsType:$rst,
       ACIR_HardwareType:$initial, StrAttr:$instance_name,
       DictionaryAttr:$occurrence);
@@ -374,50 +378,6 @@ def ACIR_SourceStateOp : ACIR_Op<"state", [
     ::mlir::DictionaryAttr getPayloadConstraint() {
       return (*this)->getAttrOfType<::mlir::DictionaryAttr>("ac.payload_constraint");
     }
-    // Transitional routed-logical-state contract: the routed package today
-    // carries this operation class, so it exposes the common interface. The
-    // GFIR state migration moves the implementation to gfir.state and this
-    // class drops the interface again (B1-boundary.md).
-    ::mlir::Value getStateClock() { return getClk(); }
-    ::mlir::Value getStateReset() { return getRst(); }
-    ::mlir::Value getStateInitial() { return getInitial(); }
-    ::mlir::Value getStateQ() { return getQ(); }
-    ::mlir::StringAttr getStateInstanceName() {
-      return (*this)->getAttrOfType<::mlir::StringAttr>("instance_name");
-    }
-    ::mlir::DictionaryAttr getStateOccurrence() {
-      return (*this)->getAttrOfType<::mlir::DictionaryAttr>("occurrence");
-    }
-    ::mlir::DictionaryAttr getStatePayloadConstraint() {
-      return getPayloadConstraint();
-    }
-  }];
-}
-
-def ACIR_StateUpdateOp : ACIR_Op<"state.update", [
-    DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
-    LogicalStateUpdateOpInterface,
-    NativeOpTrait<"acir::LogicalStateContractTrait">]> {
-  let summary = "Bind one routed logical state's candidate and write intent";
-  let description = [{
-    A declarative binding in the owning module graph of a routed package.
-    state is the direct old-Q result of one same-block ac.state declaration;
-    candidate has exactly that payload type and intent resolves to one bit.
-    Every routed logical state has exactly one update. This operation has no
-    attributes, results or regions and is not a Work-time state mutation.
-    False intent holds old Q; commit, reset and failure retain the package's
-    verified transaction semantics. Hardware refinement removes the logical
-    declaration and update together before final verification and emission.
-  }];
-  let arguments = (ins ACIR_HardwareType:$state,
-      ACIR_HardwareType:$candidate, ACIR_BitsType:$intent);
-  let hasVerifier = 1;
-  let extraClassDeclaration = [{
-    // Transitional routed-logical-state contract; moves to
-    // gfir.state.update with the B1 migration.
-    ::mlir::Value getUpdatedStateQ() { return getState(); }
-    ::mlir::Value getStateCandidate() { return getCandidate(); }
-    ::mlir::Value getStateWriteIntent() { return getIntent(); }
   }];
 }
 

@@ -283,7 +283,8 @@ FailureOr<Operation *> directState(ModuleOp module, DictionaryAttr declaration,
   Operation *found = nullptr;
   for (Operation &operation : module.getBody().front()) {
     auto *instance = &operation;
-    if (!isa<InstanceOp, CollectionOp, SourceStateOp>(instance))
+    if (!isa<InstanceOp, CollectionOp>(instance) &&
+        !isa<acir::LogicalStateOpInterface>(instance))
       continue;
     if (failed(budget.debit(1, instance)))
       return failure();
@@ -1151,14 +1152,15 @@ parseTransactionWiring(ModuleOp module, const HardwareAnalysis &analysis,
     result.states.push_back({declaration, *storage});
   }
   auto &body = module.getBody().front();
-  for (auto logical : body.getOps<SourceStateOp>()) {
+  for (auto logical : body.getOps<acir::LogicalStateOpInterface>()) {
     bool inventoried = false;
     for (const auto &entry : result.states) {
       if (failed(budget.debit(1, logical))) return failure();
       inventoried |= entry.storage == logical.getOperation();
     }
     if (!inventoried)
-      return logical.emitOpError() << "logical state is missing its transaction inventory";
+      return logical->emitOpError()
+             << "logical state is missing its transaction inventory";
   }
   uint64_t nextPair = ports->sourceInputCount;
   for (auto raw : incoming) {
@@ -3173,7 +3175,7 @@ private:
     for (auto &operation : module.getBody().front()) {
       if (failed(budget.debit(1, &operation)))
         return failure();
-      witness |= isa<SourceStateOp>(operation);
+      witness |= isa<acir::LogicalStateOpInterface>(operation);
       if (auto rule = dyn_cast<RuleOp>(operation)) {
         witness |= rule->hasAttr("ac.sampled_admission");
         if (auto required =
@@ -4711,7 +4713,7 @@ bool localWitness(ModuleOp module) {
       module->hasAttr("ac.internal_ports"))
     return true;
   for (auto &operation : module.getBody().front()) {
-    if (isa<SourceStateOp>(operation) ||
+    if (isa<acir::LogicalStateOpInterface>(operation) ||
         operation.hasAttr("ac.sampled_admission") ||
         operation.hasAttr("ac.transaction_wiring"))
       return true;
