@@ -3,7 +3,6 @@
 #include "EntryBoundary.h"
 #include "HardwareSourceChecks.h"
 #include "HardwareValueAvailability.h"
-#include "pycircuit/Dialect/ACIR/RoutedStageAdmission.h"
 #include "pycircuit/Dialect/ACIR/SourceUnitValidation.h"
 #include "pycircuit/Interfaces/LogicalStateInterfaces.h"
 
@@ -81,12 +80,13 @@ LogicalResult detail::verifyHardwarePackageStage(
             SourceObserveOp>(operation) ||
         isCombinationalHardwareOperation(operation))
       return WalkResult::advance();
-    // Stage-specific extension classes are admitted by their owning dialect
-    // (GFIR registers exactly its two logical-state operations); interface
-    // presence or dialect registration alone admits nothing else.
-    if (auto *admission = operation->getDialect()
-                              ->getRegisteredInterface<acir::RoutedStageAdmission>();
-        admission && admission->isRoutedPackageOperation(operation))
+    // The routed stage admits exactly the GFIR dialect's registered
+    // operations (its two logical-state classes); the owning dialect's
+    // registration is the whitelist, so no interface, callback or third
+    // party can extend it. The op-name namespace is compared directly: raw
+    // unverified IR with an unloaded dialect rejects cleanly here instead
+    // of dereferencing an absent dialect pointer.
+    if (operation->getName().getDialectNamespace() == "gfir")
       return WalkResult::advance();
     operation->emitOpError() << "operation outside closed routed hardware package";
     return WalkResult::interrupt();

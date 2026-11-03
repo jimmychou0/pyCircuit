@@ -6,7 +6,7 @@ include "mlir/IR/DialectBase.td"
 def GFIR_Dialect : Dialect {
   let name = "gfir";
   let cppNamespace = "::acir::gfir";
-  let summary = "pycircuit routed graph-firmware stage dialect";
+  let summary = "pycircuit routed General Flow IR stage dialect";
   let description = [{
     GFIR owns the routed package's logical state operations. Routing
     constructs gfir.state as the authenticated replacement of one source

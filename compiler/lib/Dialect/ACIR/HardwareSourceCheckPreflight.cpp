@@ -1555,6 +1555,15 @@ private:
       Allocation edge{allocation, {}, {}, {}};
       if (auto logical = dyn_cast<acir::LogicalStateOpInterface>(allocation)) {
         edge.form = HardwareCheckCommitEndpointForm::Logical;
+        // Actual-binding verification: this visit resolves every instance
+        // binding of the definition, and controls, intent width, constraint
+        // semantics and initializer closure are re-checked under the actual
+        // resolved bindings (B1-boundary's once-per-required-binding rule).
+        // The catalog pass separately covers every declaration under its
+        // lexical owner scope, including retained unreachable definitions.
+        if (failed(verifyLogicalStateDeclarationBinding(logical, &analysis,
+                                                         &scope)))
+          return failure();
       } else if (auto queue = dyn_cast<InstanceOp>(allocation);
           queue && isQueueInstance(queue)) {
         if (failed(analysis.resolveQueue(queue, scope)))
