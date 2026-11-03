@@ -4,6 +4,7 @@
 #include "Transforms/LowerTransactions.h"
 #include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
 #include "pycircuit/Dialect/ACIR/SourceUnitValidation.h"
+#include "pycircuit/Interfaces/LogicalStateInterfaces.h"
 #include "pycircuit/Transforms/Passes.h"
 #include "mlir/AsmParser/AsmParser.h"
 #include "mlir/IR/AttrTypeSubElements.h"
@@ -980,7 +981,14 @@ FailureOr<OwningOpRef<mlir::ModuleOp>> refineVerifiedAnchor(
   if (fingerprint.empty() || anchorSha256(fingerprint) != anchor.verifiedPackageSha256)
     return emitError() << "loaded anchor changed after native verification";
   ac::HardwareSourceCheckLimits limits;
-  if (ac::detail::findUnloweredTransaction((*anchor.package).getOperation())) limits.maxWorkUnits = 1024 * 1024;
+  // Loaded routed anchors carry their logical states as GFIR operations; the
+  // previous unlowered-source scan recognized the retired ac.state classes.
+  // Keep the tighter stateful refinement budget for any routed logical state,
+  // detected through the common interface without a GFIR dependency here.
+  bool stateful = false;
+  (*anchor.package)->walk(
+      [&](acir::LogicalStateOpInterface) { stateful = true; });
+  if (stateful) limits.maxWorkUnits = 1024 * 1024;
   ac::detail::SourceCheckBudget budget(limits);
   auto candidate = acir::detail::materializeHardwareState(*anchor.package, budget);
   if (failed(candidate) || failed(acir::detail::verifyHardwareStateMaterialization(

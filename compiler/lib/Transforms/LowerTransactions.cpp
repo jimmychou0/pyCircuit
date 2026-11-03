@@ -5705,6 +5705,7 @@ private:
         if (!isa<gfir::StateOp>(target) ||
             target->getLoc() != op.getLoc() ||
             target->getNumResults() != 1 ||
+            target->getNumRegions() != 0 ||
             target->getResultTypes() != op.getResultTypes() ||
             target->getNumOperands() != 3 ||
             target->getAttrDictionary() != op.getAttrDictionary() ||

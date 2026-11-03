@@ -52,20 +52,13 @@ admissionPairLogicalStateUpdate(acir::LogicalStateOpInterface state,
 mlir::FailureOr<acir::LogicalStateUpdateOpInterface>
 verifySameBlockStateUpdatePairing(acir::LogicalStateOpInterface state);
 
-/// Full routed-bound verification of one update binding: structural
-/// contract, direct module-graph placement in a versioned routed package,
-/// empty admitted attribute shape, Q defined by the same-block routed state
-/// declaration, candidate payload equivalence and width-one write intent.
-/// Pass a shared immutable analysis and bindings when the package traversal
-/// already owns one; null constructs them from the package exactly as the
-/// previous per-op verification did. This is bound verification: parsing or
-/// mlir::verify alone never authorizes publication, refinement or
-/// execution (see B1-boundary.md).
 /// Full routed-bound verification of one logical-state declaration:
 /// structural contract, width-one clock/reset controls, initial/Q payload
 /// equivalence, optional payload constraint, the routed exactly-one-update
 /// pairing and the closed static-initializer DAG. Pass a shared immutable
 /// analysis and bindings when the package traversal already owns one.
+/// This is bound verification: parsing or mlir::verify alone never
+/// authorizes publication, refinement or execution (see B1-boundary.md).
 mlir::LogicalResult verifyLogicalStateDeclarationBinding(
     acir::LogicalStateOpInterface state,
     const HardwareAnalysis *analysis = nullptr,
@@ -77,6 +70,13 @@ mlir::LogicalResult verifyLogicalStateDeclarationBinding(
 /// binding above (B1-boundary.md).
 mlir::LogicalResult verifyLogicalStateSourceBinding(SourceStateOp state);
 
+/// Full routed-bound verification of one update binding: structural
+/// contract, direct module-graph placement in a versioned routed package,
+/// empty admitted attribute shape, Q defined by the same-block routed state
+/// declaration, candidate payload equivalence and width-one write intent.
+/// Pass a shared immutable analysis and bindings when the package traversal
+/// already owns one; null constructs them from the package exactly as the
+/// previous per-op verification did.
 mlir::LogicalResult verifyLogicalStateUpdateBinding(
     acir::LogicalStateUpdateOpInterface update,
     const HardwareAnalysis *analysis = nullptr,

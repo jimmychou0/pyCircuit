@@ -808,6 +808,23 @@ TEST_F(RoutedAnchorTest, StandaloneRejectsMissingUpdateAndInvalidOwner) {
   }
 }
 
+TEST_F(RoutedAnchorTest, NativeLocalVerificationDoesNotProveBoundInitializer) {
+  // B1's native/package distinction, made observable: a gfir.state whose
+  // initial operand is a runtime input is well shaped for parsing and the
+  // native local verifier, which proves structure and placement only. The
+  // closed static-initializer obligation belongs to the package's bound
+  // declaration walk and rejects exactly there.
+  auto file = parse(statePackage());
+  ASSERT_TRUE(file);
+  auto state = find<gfir::StateOp>(*file);
+  ASSERT_TRUE(state);
+  state->setOperand(2, state->getBlock()->getArgument(2));
+  EXPECT_TRUE(mlir::succeeded(mlir::verify(*file)))
+      << "the well-shaped replacement must pass native local verification";
+  rejects([&] { return verifyRoutedPackage(*file); },
+          "state initializer requires a closed static literal/constructor DAG");
+}
+
 TEST_F(RoutedAnchorTest, StandaloneRequiresMarkerAndRejectsRemainingSourceOps) {
   for (bool missing : {true, false}) {
     auto file = parse(fullStateAnchor());

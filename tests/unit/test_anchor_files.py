@@ -90,8 +90,8 @@ def _artifact(root: Path):
     }
     manifest = {
         "kind": "pycircuit-anchor",
-        "schema": 1,
-        "routed_contract": 2,
+        "schema": 3,
+        "routed_contract": 4,
         "owner": {"kind": "anchor", "source": source, "definition": symbol},
         "root": symbol,
         "configuration": configuration,
