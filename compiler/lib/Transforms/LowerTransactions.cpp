@@ -4025,20 +4025,22 @@ LogicalResult materialize(PreparedTransactionLowering &prepared,
   }
   for (auto original : prepared.states) {
     auto replaced = cast<ac::SourceStateOp>(mapping.lookup(original.operator->()));
-    // gfir.state keeps the declaration's exact operands, attributes, one Q
-    // result and location. Q uses and the object/value locator mapping move
-    // to the replacement before the source declaration clone is erased, so
-    // the candidate never retains the source class.
+    // gfir.state keeps the declaration's exact operands, one Q result,
+    // instance_name/occurrence properties, optional payload constraint and
+    // location. The ODS builder stores the declared attributes in the
+    // property shape, matching the source declaration's storage exactly.
+    // Q uses and the object/value locator mapping move to the replacement
+    // before the source declaration clone is erased, so the candidate never
+    // retains the source class.
     OpBuilder builder(replaced);
-    OperationState state(original.getLoc(), gfir::StateOp::getOperationName());
-    state.addOperands(
-        {replaced.getClk(), replaced.getRst(), replaced.getInitial()});
-    state.addTypes(replaced.getQ().getType());
-    state.addAttribute("instance_name", original.getInstanceNameAttr());
-    state.addAttribute("occurrence", original.getOccurrence());
+    SmallVector<NamedAttribute> retained;
     if (auto constraint = replaced.getPayloadConstraint())
-      state.addAttribute("ac.payload_constraint", constraint);
-    auto routed = cast<gfir::StateOp>(builder.create(state));
+      retained.push_back(builder.getNamedAttr("ac.payload_constraint",
+                                              constraint));
+    auto routed = builder.create<gfir::StateOp>(
+        original.getLoc(), replaced.getQ().getType(), replaced.getClk(),
+        replaced.getRst(), replaced.getInitial(),
+        original.getInstanceNameAttr(), original.getOccurrence(), retained);
     replaced.getQ().replaceAllUsesWith(routed.getQ());
     mapping.map(original.operator->(), routed.getOperation());
     mapping.map(original.getQ(), routed.getQ());
@@ -4049,10 +4051,8 @@ LogicalResult materialize(PreparedTransactionLowering &prepared,
         candidate(module, {}, original.getQ(), original.getQ().getType(),
                   original.getClk().getType(), original.getOccurrence(),
                   original.getLoc(), terminal);
-    OperationState update(original.getLoc(),
-                          gfir::StateUpdateOp::getOperationName());
-    update.addOperands({routed.getQ(), data, intent});
-    terminal.create(update);
+    terminal.create<gfir::StateUpdateOp>(original.getLoc(), routed.getQ(),
+                                         data, intent);
   }
   SmallVector<Operation *> retired;
   for (auto replacement : replacements) {
@@ -5712,7 +5712,6 @@ private:
             target->getAttrDictionary() != op.getAttrDictionary() ||
             target->getPropertiesAsAttribute() !=
                 op.getPropertiesAsAttribute())
-          { op.print(llvm::errs()); llvm::errs() << "\n---TARGET---\n"; target->print(llvm::errs()); llvm::errs() << "\n"; }
           return reject("original logical state owner/Q/type/domain/initial differs");
         for (auto [original, actual] :
              llvm::zip(op.getOperands(), target->getOperands())) {
