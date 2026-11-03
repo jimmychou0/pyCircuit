@@ -85,6 +85,49 @@ module attributes {ac.stage = "routed", ac.routed_contract = 4 : i64, ac.source_
 )ir";
 }
 
+// Two declarations share one 37-operand initializer DAG. The shared
+// table.create exposes the per-state, per-operand-edge growth (S*M) that
+// the initializer budget must cover.
+std::string sharedInitializerAnchor() {
+  std::string elements, types;
+  for (unsigned i = 0; i < 37; ++i) {
+    elements += "%one, ";
+    types += "!b1, ";
+  }
+  elements.erase(elements.size() - 2);
+  types.erase(types.size() - 2);
+  std::string zero = "#ac.static_expr<{kind = \"literal\", value = {kind = "
+                     "\"integer\", value = #ac.math_int<0>}, origin = #occ, "
+                     "location = #span}>";
+  return preamble() +
+      "\n#second = {site = {definition = @Counter, ast_path = [{kind = "
+      "\"index\", value = 4 : i64}]}, expansion = []}\n!tbl = !ac.table<[#w37], "
+      "!b1>\nmodule attributes {ac.stage = \"routed\", ac.routed_contract = 4 "
+      ": i64, ac.source_units = [#owner]} {\n"
+      "  \"ac.module\"() ({\n"
+      "  ^bb0(%clk: !b1, %rst: !b1):\n"
+      "    %one = \"ac.bits.constant\"() {value = #w1} : () -> !b1\n"
+      "    %false = \"ac.bits.constant\"() {value = " + zero + "} : () -> !b1\n"
+      "    %shared = \"ac.table.create\"(" + elements +
+      ") {shape = [#w37]} : (" + types + ") -> !tbl\n"
+      "    %left = \"gfir.state\"(%clk, %rst, %shared) {instance_name = "
+      "\"left\", occurrence = #occ} : (!b1, !b1, !tbl) -> !tbl\n"
+      "    %right = \"gfir.state\"(%clk, %rst, %shared) {instance_name = "
+      "\"right\", occurrence = #second} : (!b1, !b1, !tbl) -> !tbl\n"
+      "    \"gfir.state.update\"(%left, %left, %false) : (!tbl, !tbl, !b1) -> ()\n"
+      "    \"gfir.state.update\"(%right, %right, %false) : (!tbl, !tbl, !b1) -> ()\n"
+      "    \"ac.yield\"(%left, %right) : (!tbl, !tbl) -> ()\n"
+      "  }) {sym_name = \"Counter\", source_owner = #owner, parameters = [], "
+      "type_parameters = [], function_type = (!b1, !b1) -> (!tbl, !tbl), "
+      "input_names = [\"pyc_clk\", \"pyc_rst\"], output_names = "
+      "[\"left_value\", \"right_value\"], ac.domain_inputs = {clock = 0 : i64, "
+      "reset = 1 : i64}, ac.transaction_wiring = {states = [#occ, #second], "
+      "incoming = [], writers = []}} : () -> ()\n"
+      "  \"ac.system\"() {entry = {callee = @Counter, parameters = [], "
+      "type_arguments = []}, domain = \"default\"} : () -> ()\n"
+      "}\n";
+}
+
 // Deliberately omit the second input from payload dependencies. Its
 // availability must still contribute under the extern all_inputs contract.
 std::string fullExternAnchor(bool cycle = false, bool zeroInputs = false,
@@ -806,6 +849,33 @@ TEST_F(RoutedAnchorTest, StandaloneRejectsMissingUpdateAndInvalidOwner) {
               "direct result of a same-module gfir.state");
     }
   }
+}
+
+TEST_F(RoutedAnchorTest, SharedInitializerDagWorkIsBudgeted) {
+  // Two declarations share one 37-operand initializer DAG: the budget pays
+  // per state and per operand edge (S*M), not once per distinct node. A
+  // tight budget that covers the pairing scan and update binding rejects
+  // inside the initializer walk; default limits admit the whole package.
+  auto file = parse(sharedInitializerAnchor());
+  ASSERT_TRUE(file);
+  EXPECT_TRUE(mlir::succeeded(capture([&] { return verifyRoutedPackage(*file); })))
+      << diagnostics;
+  acir::LogicalStateOpInterface state;
+  file->walk([&](acir::LogicalStateOpInterface found) {
+    if (!state) state = found;
+  });
+  ASSERT_TRUE(static_cast<bool>(state));
+  HardwareAnalysis analysis(*file);
+  HardwareBindings bindings = stateOwnerScope(state.getOperation());
+  HardwareSourceCheckLimits tight;
+  tight.maxWorkUnits = 8;
+  detail::SourceCheckBudget budget{tight};
+  EXPECT_TRUE(mlir::failed(capture([&] {
+    return verifyLogicalStateDeclarationBinding(state, &analysis, &bindings,
+                                                &budget);
+  })));
+  EXPECT_NE(diagnostics.find("exceeds analysis work budget"), std::string::npos)
+      << diagnostics;
 }
 
 TEST_F(RoutedAnchorTest, RoutedAdmissionIsClosedToForgedGfirNames) {

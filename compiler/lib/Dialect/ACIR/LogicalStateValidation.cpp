@@ -41,8 +41,20 @@ LogicalResult staticInitializer(const HardwareAnalysis &analysis, Value initial,
              << "state initializer requires a closed static "
                 "literal/constructor "
                 "DAG; runtime values and unsupported computations are rejected";
-    // The complete set deduplicates operations, so each charges once.
-    if (budget && failed(budget->debit(1, state)))
+    // The complete set deduplicates operations, so each charges once; the
+    // charge covers the operation's own checks plus its operand-edge
+    // traversal steps, operand/result type checks and attribute checks.
+    // Shared initializer DAGs therefore pay per state and per operand edge
+    // (S*M growth), not once per distinct node.
+    if (budget &&
+        failed(budget->debit(
+            SourceCheckBudget::add(
+                uint64_t(1),
+                SourceCheckBudget::add(
+                    SourceCheckBudget::add(operation->getNumOperands(),
+                                           operation->getNumResults()),
+                    operation->getAttrs().size())),
+            state)))
       return failure();
     if (!active.insert(operation).second)
       return state->emitOpError()
