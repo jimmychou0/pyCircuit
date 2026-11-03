@@ -9,6 +9,8 @@
 #include "mlir/IR/Verifier.h"
 #include "mlir/Parser/Parser.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/Builders.h"
+#include "mlir/IR/OperationSupport.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/raw_ostream.h"
 #include "gtest/gtest.h"
@@ -77,6 +79,19 @@ TEST_F(LogicalStateInterfacesTest, StructureVerifiersAcceptWellFormedPair) {
   EXPECT_TRUE(mlir::succeeded(acir::verifyLogicalStateUpdateStructure(update.getOperation())));
 }
 
+mlir::Value stateQ(mlir::OwningOpRef<mlir::ModuleOp> &file) {
+  acir::LogicalStateOpInterface state;
+  (*file)->walk([&](acir::LogicalStateOpInterface found) { state = found; });
+  return state.getStateQ();
+}
+
+mlir::Value intentOf(mlir::OwningOpRef<mlir::ModuleOp> &file) {
+  acir::LogicalStateUpdateOpInterface update;
+  (*file)->walk(
+      [&](acir::LogicalStateUpdateOpInterface found) { update = found; });
+  return update.getStateWriteIntent();
+}
+
 TEST_F(LogicalStateInterfacesTest, StructureVerifiersRejectWrongKind) {
   auto file = parse(routedPackage());
   ASSERT_TRUE(file);
@@ -88,9 +103,9 @@ TEST_F(LogicalStateInterfacesTest, StructureVerifiersRejectWrongKind) {
   ASSERT_TRUE(static_cast<bool>(update));
   mlir::ScopedDiagnosticHandler capture(
       &context, [&](mlir::Diagnostic &) { return mlir::success(); });
-  // The update has no result and no instance_name/occurrence attributes, so
-  // the state contract must reject it, and the state op's extra result must
-  // reject the update contract.
+  // Wrong-kind rejection: each verifier returns at its interface-cast
+  // check when handed the other contract's op. Shape-level arms are
+  // covered separately via generic malformed construction below.
   EXPECT_TRUE(mlir::failed(acir::verifyLogicalStateStructure(update.getOperation())));
   EXPECT_TRUE(mlir::failed(acir::verifyLogicalStateUpdateStructure(state.getOperation())));
 }
@@ -121,6 +136,35 @@ TEST_F(LogicalStateInterfacesTest, AdmissionPairingFindsSingleUpdate) {
       acir::ac::admissionPairLogicalStateUpdate(state, budget);
   ASSERT_TRUE(mlir::succeeded(paired));
   EXPECT_EQ(paired->getUpdatedStateQ(), state.getStateQ());
+}
+
+TEST_F(LogicalStateInterfacesTest, StructureVerifiersRejectMalformedShapes) {
+  auto file = parse(routedPackage());
+  ASSERT_TRUE(file);
+  mlir::OpBuilder builder(&file->getBodyRegion());
+  mlir::Location unknown = mlir::UnknownLoc::get(&context);
+
+  // Generic creation bypasses the ODS builders, so the op kind still
+  // implements the interface while the actual shape violates the contract.
+  mlir::OperationState badUpdate(unknown, "ac.state.update");
+  auto *twoOperand = builder.create(badUpdate);
+  mlir::ScopedDiagnosticHandler capture(
+      &context, [&](mlir::Diagnostic &) { return mlir::success(); });
+  EXPECT_TRUE(mlir::failed(
+      acir::verifyLogicalStateUpdateStructure(twoOperand)));
+
+  mlir::OperationState regionUpdate(unknown, "ac.state.update");
+  regionUpdate.addOperands({stateQ(file), stateQ(file), intentOf(file)});
+  regionUpdate.addRegion();
+  auto *withRegion = builder.create(regionUpdate);
+  EXPECT_TRUE(mlir::failed(
+      acir::verifyLogicalStateUpdateStructure(withRegion)));
+
+  mlir::OperationState noResultState(unknown, "ac.state");
+  auto *emptyState = builder.create(noResultState);
+  EXPECT_TRUE(mlir::failed(
+      acir::verifyLogicalStateStructure(emptyState)));
+  EXPECT_TRUE(mlir::failed(mlir::verify(twoOperand)));
 }
 
 } // namespace

@@ -362,7 +362,8 @@ def ACIR_RuleOp : ACIR_Op<"rule", [IsolatedFromAbove, SingleBlock, Pure]> {
 // hardware, and state effects are never marked Pure.
 def ACIR_SourceStateOp : ACIR_Op<"state", [
     DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
-    LogicalStateOpInterface]> {
+    LogicalStateOpInterface,
+    NativeOpTrait<"acir::LogicalStateContractTrait">]> {
   let summary = "Declare one source-owned state and its old-Q value";
   let arguments = (ins ACIR_BitsType:$clk, ACIR_BitsType:$rst,
       ACIR_HardwareType:$initial, StrAttr:$instance_name,
@@ -395,7 +396,8 @@ def ACIR_SourceStateOp : ACIR_Op<"state", [
 
 def ACIR_StateUpdateOp : ACIR_Op<"state.update", [
     DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
-    LogicalStateUpdateOpInterface]> {
+    LogicalStateUpdateOpInterface,
+    NativeOpTrait<"acir::LogicalStateContractTrait">]> {
   let summary = "Bind one routed logical state's candidate and write intent";
   let description = [{
     A declarative binding in the owning module graph of a routed package.
