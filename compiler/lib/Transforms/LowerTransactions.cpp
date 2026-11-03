@@ -5712,6 +5712,7 @@ private:
             target->getAttrDictionary() != op.getAttrDictionary() ||
             target->getPropertiesAsAttribute() !=
                 op.getPropertiesAsAttribute())
+          { op.print(llvm::errs()); llvm::errs() << "\n---TARGET---\n"; target->print(llvm::errs()); llvm::errs() << "\n"; }
           return reject("original logical state owner/Q/type/domain/initial differs");
         for (auto [original, actual] :
              llvm::zip(op.getOperands(), target->getOperands())) {
