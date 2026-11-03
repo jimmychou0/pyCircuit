@@ -1,0 +1,29 @@
+{
+  "base": "cae4567b",
+  "files": {
+    "CMakeLists.txt": "94becf262365cbeffd08b1fd37d40b16f91982cc643804069ed43760694316ab",
+    "compiler/include/pycircuit/CMakeLists.txt": "4afdf9a17d470182f31ec0da86a2933099668e445e1a02d7824b896b96bb068a",
+    "compiler/include/pycircuit/Dialect/ACIR/ACIROps.h": "fac1e211f99ccf45d3e967cd04faeac6ca9dfa7faddf7a9befa389a7e6388109",
+    "compiler/include/pycircuit/Dialect/ACIR/ACIROps.td": "0796f0f0ee146c36e2576f114d3beab749eabe54661360dfcd45c240f0f23524",
+    "compiler/include/pycircuit/Dialect/ACIR/CMakeLists.txt": "8825c3f4e65f7f33e3a8ee9495113bd7e5ca567876dd03d07b321eb3613b2464",
+    "compiler/include/pycircuit/Dialect/ACIR/LogicalStateValidation.h": "fc7b59c3fc142eec17974bd2125d02087f3c7833519609c198a8851adc98916a",
+    "compiler/include/pycircuit/Interfaces/CMakeLists.txt": "3051af870d5fa7296441e8a62259e9bfdcff457663812b03d5b89f67e0a7f815",
+    "compiler/include/pycircuit/Interfaces/LogicalStateInterfaces.h": "1e2ab28e8d05250255d3e01973a8b8eefb1c86b1fcdc9b8af65d6acb66bcef8b",
+    "compiler/include/pycircuit/Interfaces/LogicalStateInterfaces.td": "ee8bc3996a12f888658f2d5c50296d3f9dc7424e5b8e3e0bdd86df5d856d5b20",
+    "compiler/lib/CMakeLists.txt": "2e0da86a88e093bed2226ef873f0b66aa35b65506343e96d80d502eac75c3f19",
+    "compiler/lib/Dialect/ACIR/ACIRTransactionOps.cpp": "cd3808bc2bb7f3df7bde5cb311a9258a9fb71703143c2320dc90596475418228",
+    "compiler/lib/Dialect/ACIR/CMakeLists.txt": "5a0293a9177ca68525d5d259d535bfe54074a269b4ba2f1d76d1f8626aa24415",
+    "compiler/lib/Dialect/ACIR/HardwareAnalysisDependencies.cpp": "a06e4ea8e449e03cee4839eb8becc15bc3ff0796b4208968700fb62305c69dd3",
+    "compiler/lib/Dialect/ACIR/HardwareSampledAdmission.cpp": "3b8f51f2f435f443436a378bf7d351f42e88e0c9b5bbaa823778036877759aee",
+    "compiler/lib/Dialect/ACIR/HardwareSampledAdmission.h": "40edf7da1b34854866329ca9357f40c05a83f88a4aeae56c3fe080f6a0500756",
+    "compiler/lib/Dialect/ACIR/LogicalStateValidation.cpp": "21084262ab855d5b9c6ff6e0e7911a56258a44e0ec8d6a93be7ae0a1b6d4b46c",
+    "compiler/lib/Interfaces/CMakeLists.txt": "7fb1e2ccce9f1ac271beb3dfee28b4825885536183e1b7bb49a5dbde48c46826",
+    "compiler/lib/Interfaces/LogicalStateInterfaces.cpp": "606a2b0ed61254a214c78b5acb3a813197fa482d64fa65d71356082032be11c6",
+    "compiler/lib/Transforms/CMakeLists.txt": "e9db8e0f8e2d090256f3656514a49628241881a5eeaf6af72213c76063e1f4f2",
+    "compiler/lib/Transforms/LowerTransactions.cpp": "8471dde7aff28457a6de22c4a9e5b74670344289d2399cb9a772221870ff63f2",
+    "compiler/lib/Transforms/TransactionHardwareState.inc": "a37d43059b3ab765723471e1a14166d37b1cdcaafb3223e41ab3d79b0d9e6a1e",
+    "tests/compiler/IR/CMakeLists.txt": "ea457584d4df0b2cc4d92c8bfb4690a9397b32ae8440b9e59f846b7526d176f5",
+    "tests/compiler/IR/LogicalStateInterfacesTest.cpp": "e7a158f8aa80a3071948e72ea4ede410df74797b64e680976041c1b9f8126a9e"
+  },
+  "head": "f0366b1ce92d5ab5112c3a2294385ac3b566ef4b"
+}
