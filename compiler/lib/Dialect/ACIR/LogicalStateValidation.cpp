@@ -163,6 +163,28 @@ admissionPairLogicalStateUpdate(acir::LogicalStateOpInterface state,
   return result;
 }
 
+FailureOr<acir::LogicalStateUpdateOpInterface>
+verifySameBlockStateUpdatePairing(acir::LogicalStateOpInterface state) {
+  Operation *operation = state.getOperation();
+  acir::LogicalStateUpdateOpInterface pairedUpdate;
+  for (Operation *user : state.getStateQ().getUsers()) {
+    auto update = dyn_cast<acir::LogicalStateUpdateOpInterface>(user);
+    if (!update || update->getBlock() != operation->getBlock() ||
+        update->getNumOperands() != 3 ||
+        update.getUpdatedStateQ() != state.getStateQ())
+      continue;
+    if (pairedUpdate && pairedUpdate != update)
+      return operation->emitOpError()
+             << "routed logical state requires exactly one same-block update";
+    // Q may also be this update's candidate, so its users can repeat it.
+    pairedUpdate = update;
+  }
+  if (!pairedUpdate)
+    return operation->emitOpError()
+           << "routed logical state requires exactly one same-block update";
+  return pairedUpdate;
+}
+
 namespace {
 
 // Shared declaration-bound sequence used by the routed interface binding and
@@ -217,25 +239,12 @@ LogicalResult verifyLogicalStateDeclarationBinding(
   auto stage = package ? package->getAttrOfType<StringAttr>("ac.stage")
                        : StringAttr();
   if (stage && stage.getValue() == "routed") {
-    acir::LogicalStateUpdateOpInterface pairedUpdate;
-    for (Operation *user : state.getStateQ().getUsers()) {
-      auto update = dyn_cast<acir::LogicalStateUpdateOpInterface>(user);
-      if (!update || update->getBlock() != operation->getBlock() ||
-          update->getNumOperands() != 3 ||
-          update.getUpdatedStateQ() != state.getStateQ())
-        continue;
-      if (pairedUpdate && pairedUpdate != update)
-        return operation->emitOpError()
-               << "routed logical state requires exactly one same-block update";
-      // Q may also be this update's candidate, so its users can repeat it.
-      pairedUpdate = update;
-    }
-    if (!pairedUpdate)
-      return operation->emitOpError()
-             << "routed logical state requires exactly one same-block update";
+    auto pairedUpdate = verifySameBlockStateUpdatePairing(state);
+    if (failed(pairedUpdate))
+      return failure();
     // The single enumeration also carries the paired update's bound check
     // (resolved intent width under the same bindings).
-    if (failed(verifyLogicalStateUpdateBinding(pairedUpdate, &analysis,
+    if (failed(verifyLogicalStateUpdateBinding(*pairedUpdate, &analysis,
                                                &bindings)))
       return failure();
   }

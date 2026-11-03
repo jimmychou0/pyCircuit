@@ -71,7 +71,10 @@ LogicalResult StateOp::verify() {
     if (failed(acir::verifyPayloadConstraintShape(getOperation(), constraint,
                                                   getQ().getType())))
       return failure();
-  return success();
+  // Same-block pairing is local: exactly one update binds this Q. The
+  // package declaration binding re-establishes the complete inventory.
+  return success(succeeded(
+      acir::ac::verifySameBlockStateUpdatePairing(*this)));
 }
 
 void StateUpdateOp::getEffects(

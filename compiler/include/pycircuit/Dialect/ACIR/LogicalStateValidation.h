@@ -45,6 +45,13 @@ mlir::FailureOr<acir::LogicalStateUpdateOpInterface>
 admissionPairLogicalStateUpdate(acir::LogicalStateOpInterface state,
                                 detail::SourceCheckBudget &budget);
 
+/// Local same-block pairing of one routed state declaration and its single
+/// update, without bindings or budget: the GFIR native verifier proves it
+/// locally and the package declaration binding re-establishes it. A Q used
+/// in both the state and candidate positions of one update counts once.
+mlir::FailureOr<acir::LogicalStateUpdateOpInterface>
+verifySameBlockStateUpdatePairing(acir::LogicalStateOpInterface state);
+
 /// Full routed-bound verification of one update binding: structural
 /// contract, direct module-graph placement in a versioned routed package,
 /// empty admitted attribute shape, Q defined by the same-block routed state
