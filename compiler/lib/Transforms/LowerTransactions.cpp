@@ -4033,14 +4033,12 @@ LogicalResult materialize(PreparedTransactionLowering &prepared,
     // before the source declaration clone is erased, so the candidate never
     // retains the source class.
     OpBuilder builder(replaced);
-    SmallVector<NamedAttribute> retained;
-    if (auto constraint = replaced.getPayloadConstraint())
-      retained.push_back(builder.getNamedAttr("ac.payload_constraint",
-                                              constraint));
     auto routed = builder.create<gfir::StateOp>(
         original.getLoc(), replaced.getQ().getType(), replaced.getClk(),
         replaced.getRst(), replaced.getInitial(),
-        original.getInstanceNameAttr(), original.getOccurrence(), retained);
+        original.getInstanceNameAttr(), original.getOccurrence());
+    if (auto constraint = replaced.getPayloadConstraint())
+      routed->setAttr("ac.payload_constraint", constraint);
     replaced.getQ().replaceAllUsesWith(routed.getQ());
     mapping.map(original.operator->(), routed.getOperation());
     mapping.map(original.getQ(), routed.getQ());
