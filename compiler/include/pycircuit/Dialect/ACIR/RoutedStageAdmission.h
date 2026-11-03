@@ -14,6 +14,8 @@ namespace acir {
 // refinement or execution by itself.
 struct RoutedStageAdmission
     : public mlir::DialectInterface::Base<RoutedStageAdmission> {
+  using Base::Base;
+
   // Return true when the operation is one of this dialect's admitted routed
   // stage classes. The default admits nothing.
   virtual bool isRoutedPackageOperation(mlir::Operation *operation) const {

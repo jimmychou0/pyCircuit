@@ -12,7 +12,9 @@ namespace acir::gfir {
 // (B1-boundary.md). Interface presence or dialect registration alone never
 // admits any other operation, and no user extension op is accepted.
 struct GFIRRoutedStageAdmission : acir::RoutedStageAdmission {
-  using acir::RoutedStageAdmission::Base;
+  explicit GFIRRoutedStageAdmission(Dialect *dialect)
+      : acir::RoutedStageAdmission(dialect) {}
+
   bool isRoutedPackageOperation(Operation *operation) const override {
     return isa<StateOp, StateUpdateOp>(operation);
   }
