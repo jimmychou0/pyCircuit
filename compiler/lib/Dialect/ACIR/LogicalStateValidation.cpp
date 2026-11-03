@@ -78,7 +78,11 @@ LogicalResult verifyLogicalStateDeclarationBinding(
                                   state.getStateQ().getType()))
     return operation->emitOpError()
            << "initial value and old-Q payload types must match";
-  if (Attribute constraint = state.getStatePayloadConstraint())
+  // Test the raw attribute so a present-but-malformed constraint is still
+  // rejected downstream, matching the previous untyped branch; the
+  // interface getter alone would silently skip a non-Dictionary attribute.
+  if (Attribute constraint =
+          operation->getAttr("ac.payload_constraint"))
     if (failed(detail::verifySourceCallHardwareConstraint(
             constraint, state.getStateQ().getType(), analysis, owner,
             operation, "state payload",
