@@ -16,6 +16,7 @@
 #include "mlir/Parser/Parser.h"
 #include "mlir/Pass/PassManager.h"
 #include "pycircuit/Dialect/ACIR/ACIRDialect.h"
+#include "pycircuit/Dialect/GFIR/GFIRDialect.h"
 #include "pycircuit/Dialect/ACIR/ACIROps.h"
 #include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
 #include "pycircuit/Dialect/ACIR/SourceMethodAnalysis.h"
@@ -55,6 +56,7 @@ protected:
 
   void SetUp() override {
     context.loadDialect<ac::ACIRDialect>();
+    context.loadDialect<acir::gfir::GFIRDialect>();
     ASSERT_FALSE(llvm::sys::fs::createUniqueDirectory(
         "source-transaction-capture", directory));
     handler = std::make_unique<ScopedDiagnosticHandler>(
@@ -5117,6 +5119,7 @@ def Read(values: ac.table[N, ac.u8], index: ac.u2, *, N: int = 4) -> ac.u8:
   file->print(stream);
   MLIRContext fresh;
   fresh.loadDialect<ac::ACIRDialect>();
+  fresh.loadDialect<acir::gfir::GFIRDialect>();
   auto reloaded = parseSourceString<ModuleOp>(text, &fresh);
   ASSERT_TRUE(reloaded);
   auto reads = operations<ac::TableReadOp>(*reloaded);

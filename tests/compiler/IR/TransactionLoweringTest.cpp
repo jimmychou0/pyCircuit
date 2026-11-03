@@ -14,6 +14,7 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "pycircuit/Dialect/ACIR/ACIRDialect.h"
+#include "pycircuit/Dialect/GFIR/GFIRDialect.h"
 #include "pycircuit/Dialect/ACIR/ACIROps.h"
 #include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
 #include "pycircuit/Dialect/ACIR/SourceMethodAnalysis.h"
@@ -147,7 +148,10 @@ protected:
   mlir::MLIRContext context;
   mlir::OpBuilder builder{&context};
   std::string diagnostics;
-  void SetUp() override { context.loadDialect<ACIRDialect>(); }
+  void SetUp() override {
+    context.loadDialect<ACIRDialect>();
+    context.loadDialect<gfir::GFIRDialect>();
+  }
   template <typename Function> decltype(auto) capture(Function function) {
     diagnostics.clear();
     mlir::ScopedDiagnosticHandler handler(
@@ -4517,6 +4521,7 @@ TEST_F(SourceLinkStageTest,
   // object or source registry is supplied to the standalone consumer.
   mlir::MLIRContext fresh;
   fresh.loadDialect<ACIRDialect>();
+  fresh.loadDialect<gfir::GFIRDialect>();
   auto restored = mlir::parseSourceString<mlir::ModuleOp>(saved, &fresh);
   ASSERT_TRUE(restored);
   EXPECT_TRUE(mlir::succeeded(verifyRoutedPackage(*restored)));
