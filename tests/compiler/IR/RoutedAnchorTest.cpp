@@ -9,6 +9,8 @@
 #include "pycircuit/Dialect/ACIR/ACIROps.h"
 #include "pycircuit/Dialect/GFIR/GFIRDialect.h"
 #include "pycircuit/Dialect/GFIR/GFIROps.h"
+#include "Dialect/ACIR/SourceCheckBudget.h"
+#include "pycircuit/Dialect/ACIR/LogicalStateValidation.h"
 #include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
 #include "pycircuit/Dialect/ACIR/SourceEffects.h"
 #include "llvm/ADT/STLExtras.h"
@@ -871,7 +873,7 @@ TEST_F(RoutedAnchorTest, SharedInitializerDagWorkIsBudgeted) {
   });
   ASSERT_TRUE(static_cast<bool>(state));
   HardwareAnalysis analysis(*file);
-  HardwareBindings bindings = stateOwnerScope(state.getOperation());
+  HardwareBindings bindings = ac::stateOwnerScope(state.getOperation());
   HardwareSourceCheckLimits tight;
   tight.maxWorkUnits = 8;
   detail::SourceCheckBudget budget{tight};
