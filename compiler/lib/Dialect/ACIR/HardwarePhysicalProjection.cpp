@@ -167,7 +167,7 @@ FailureOr<HardwarePhysicalProjection> HardwareAnalysis::getPhysicalProjection(
       if (op.getNumOperands() <= initialIndex ||
           failed(detail::verifyClosedStateInitializer(
               *this, op.getOperand(initialIndex), occurrence.bindings, &op,
-              &budget))))
+              &budget)))
         return failure();
     }
     auto uses = definition.walk([&](Operation *op) {
