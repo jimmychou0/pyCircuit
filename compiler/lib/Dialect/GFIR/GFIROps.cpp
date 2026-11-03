@@ -3,6 +3,7 @@
 #include "Dialect/ACIR/ACIRSourceContracts.h"
 #include "pycircuit/Dialect/ACIR/ACIROps.h"
 #include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
+#include "pycircuit/Dialect/ACIR/LogicalStateValidation.h"
 #include "pycircuit/Dialect/ACIR/SourceEffects.h"
 #include "IR/StateDeclarationContracts.h"
 #include "mlir/IR/BuiltinOps.h"
