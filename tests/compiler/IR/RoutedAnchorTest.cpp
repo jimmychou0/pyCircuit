@@ -858,8 +858,13 @@ TEST_F(RoutedAnchorTest, SharedInitializerDagWorkIsBudgeted) {
   // inside the initializer walk; default limits admit the whole package.
   auto file = parse(sharedInitializerAnchor());
   ASSERT_TRUE(file);
-  EXPECT_TRUE(mlir::succeeded(capture([&] { return verifyRoutedPackage(*file); })))
-      << diagnostics;
+  std::string text;
+  mlir::ScopedDiagnosticHandler handler(&context, [&](mlir::Diagnostic &d) {
+    llvm::raw_string_ostream out(text);
+    d.print(out);
+    return mlir::success();
+  });
+  EXPECT_TRUE(mlir::succeeded(verifyRoutedPackage(*file))) << text;
   acir::LogicalStateOpInterface state;
   file->walk([&](acir::LogicalStateOpInterface found) {
     if (!state) state = found;
@@ -870,12 +875,11 @@ TEST_F(RoutedAnchorTest, SharedInitializerDagWorkIsBudgeted) {
   HardwareSourceCheckLimits tight;
   tight.maxWorkUnits = 8;
   detail::SourceCheckBudget budget{tight};
-  EXPECT_TRUE(mlir::failed(capture([&] {
-    return verifyLogicalStateDeclarationBinding(state, &analysis, &bindings,
-                                                &budget);
-  })));
-  EXPECT_NE(diagnostics.find("exceeds analysis work budget"), std::string::npos)
-      << diagnostics;
+  text.clear();
+  EXPECT_TRUE(mlir::failed(verifyLogicalStateDeclarationBinding(
+      state, &analysis, &bindings, &budget)));
+  EXPECT_NE(text.find("exceeds analysis work budget"), std::string::npos)
+      << text;
 }
 
 TEST_F(RoutedAnchorTest, RoutedAdmissionIsClosedToForgedGfirNames) {

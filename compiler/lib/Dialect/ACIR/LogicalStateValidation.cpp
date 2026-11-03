@@ -48,11 +48,12 @@ LogicalResult staticInitializer(const HardwareAnalysis &analysis, Value initial,
     // (S*M growth), not once per distinct node.
     if (budget &&
         failed(budget->debit(
-            SourceCheckBudget::add(
+            detail::SourceCheckBudget::add(
                 uint64_t(1),
-                SourceCheckBudget::add(
-                    SourceCheckBudget::add(operation->getNumOperands(),
-                                           operation->getNumResults()),
+                detail::SourceCheckBudget::add(
+                    detail::SourceCheckBudget::add(
+                        operation->getNumOperands(),
+                        operation->getNumResults()),
                     operation->getAttrs().size())),
             state)))
       return failure();
