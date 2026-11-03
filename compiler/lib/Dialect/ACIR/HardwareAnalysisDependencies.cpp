@@ -839,7 +839,7 @@ struct Engine {
     for (Operation &op : module.getBody().front().without_terminator()) {
       if (failed(charge(1, &op)))
         return failure();
-      if (isa<SourceObserveOp, SourceExpectOp, StateUpdateOp>(op)) {
+      if (isa<SourceObserveOp, SourceExpectOp, acir::LogicalStateUpdateOpInterface>(op)) {
         for (auto operand : op.getOperands()) {
           auto leaves = paths(operand.getType(), bindings, &op);
           if (failed(leaves))

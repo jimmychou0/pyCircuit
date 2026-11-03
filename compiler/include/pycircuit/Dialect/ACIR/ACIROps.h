@@ -2,6 +2,7 @@
 #define ACIR_DIALECT_ACIR_ACIROPS_H
 
 #include "pycircuit/Dialect/ACIR/ACIRTypes.h"
+#include "pycircuit/Interfaces/LogicalStateInterfaces.h"
 #include "mlir/Bytecode/BytecodeOpInterface.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/OpDefinition.h"

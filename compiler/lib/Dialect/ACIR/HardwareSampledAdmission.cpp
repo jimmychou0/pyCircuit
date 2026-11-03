@@ -338,20 +338,21 @@ LogicalResult bindStateEndpoint(StateEndpoint &result, Operation *storage,
     result.clock = logical.getClk();
     result.reset = logical.getRst();
     result.initial = logical.getInitial();
-    for (auto update : owner.getBody().front().getOps<StateUpdateOp>()) {
+    for (auto update :
+         owner.getBody().front().getOps<acir::LogicalStateUpdateOpInterface>()) {
       if (failed(budget.debit(1, update))) return failure();
       if (update->getNumOperands() != 3 || update->getNumResults() ||
           update->getNumRegions())
         return update.emitOpError() << "logical state update requires three operands and no results or regions";
-      if (update.getState() != logical.getQ()) continue;
+      if (update.getUpdatedStateQ() != logical.getQ()) continue;
       if (result.update)
         return logical.emitOpError() << "logical state requires exactly one update";
       result.update = update;
     }
     if (!result.update)
       return logical.emitOpError() << "logical state requires exactly one update";
-    result.data = result.update.getCandidate();
-    result.enable = result.update.getIntent();
+    result.data = result.update.getStateCandidate();
+    result.enable = result.update.getStateWriteIntent();
     auto candidate = analysis.resolveType(result.data.getType(), bound, result.update);
     auto intentWidth = analysis.getPackedWidth(result.enable.getType(), bound, result.update);
     if (failed(candidate) || failed(intentWidth)) return failure();
@@ -4524,8 +4525,8 @@ private:
           return failure();
         continue;
       }
-      if (auto update = dyn_cast<StateUpdateOp>(consumer)) {
-        auto logical = update.getState().getDefiningOp<SourceStateOp>();
+      if (auto update = dyn_cast<acir::LogicalStateUpdateOpInterface>(consumer)) {
+        auto logical = update.getUpdatedStateQ().getDefiningOp<SourceStateOp>();
         if (route.kind == PrivateRoute::Data && operand == 1 && logical &&
             stateTerminal(endpoint.scope, logical, route.state))
           continue;

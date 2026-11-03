@@ -37,28 +37,22 @@ hardwareStatePrimitives(mlir::ModuleOp routed, SourceCheckBudget &budget) {
 
 FailureOr<ac::StateUpdateOp> logicalUpdate(ac::SourceStateOp state,
                                          SourceCheckBudget &budget) {
-  ac::StateUpdateOp result;
-  for (auto *user : state.getQ().getUsers()) {
-    if (!charge(budget, state)) return failure();
-    auto update = dyn_cast<ac::StateUpdateOp>(user);
-    if (!update || update.getState() != state.getQ()) continue;
-    // One operation may use Q in both the state and candidate positions.
-    if (result && result != update)
-      return state.emitOpError() << "logical state has multiple update bindings";
-    result = update;
-  }
-  if (!result)
-    return state.emitOpError() << "logical state has no update binding";
-  return result;
+  // Shared admission pairing through the common interface; this refinement
+  // helper keeps its concrete return type until the GFIR migration.
+  auto paired = ac::admissionPairLogicalStateUpdate(state, budget);
+  if (failed(paired))
+    return failure();
+  return cast<ac::StateUpdateOp>(paired->getOperation());
 }
 
-bool unconditionalScalarState(ac::SourceStateOp state, ac::StateUpdateOp update,
+bool unconditionalScalarState(ac::SourceStateOp state,
+                              acir::LogicalStateUpdateOpInterface update,
                               const ac::HardwareAnalysis &analysis,
                               SourceCheckBudget &budget) {
   if (isa<ac::TableType>(state.getQ().getType())) return false;
-  auto rule = update.getIntent().getDefiningOp<ac::RuleOp>();
+  auto rule = update.getStateWriteIntent().getDefiningOp<ac::RuleOp>();
   return rule && rule->getParentOp() == state->getParentOp() &&
-         knownTrue(update.getIntent(), analysis, budget);
+         knownTrue(update.getStateWriteIntent(), analysis, budget);
 }
 
 // Derive lexical correspondence from the two live graphs. A materializer map is
@@ -116,7 +110,7 @@ private:
         auto next = right.begin();
         for (Operation &op : left) {
           if (!charge(budget, &op)) return failure();
-          if (isa<ac::StateUpdateOp>(op)) continue;
+          if (isa<acir::LogicalStateUpdateOpInterface>(op)) continue;
           if (auto state = dyn_cast<ac::SourceStateOp>(op)) {
             StatePair pair{state, nullptr, {}};
             if (isa<ac::TableType>(state.getQ().getType()))

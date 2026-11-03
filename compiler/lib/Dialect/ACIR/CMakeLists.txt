@@ -1,4 +1,5 @@
 add_acir_library(ACIRDialect SOURCES
+  LogicalStateValidation.cpp
   ACIRConstantOps.cpp
   ACIRSourceControlFlowOps.cpp
   ACIRDialect.cpp
@@ -60,6 +61,7 @@ add_dependencies(ACIRDialect
   ACIROpsIncGen
 )
 target_link_libraries(ACIRDialect PUBLIC
+  PycircuitStateInterfaces
   LLVMCore
   MLIRArithDialect
   MLIRFuncDialect

@@ -9,6 +9,8 @@
 #include "Dialect/ACIR/HardwareSourceChecks.h"
 #include "Dialect/ACIR/SourceTransactionSummary.h"
 #include "pycircuit/Dialect/ACIR/SourceMethodAnalysis.h"
+#include "pycircuit/Interfaces/LogicalStateInterfaces.h"
+#include "pycircuit/Dialect/ACIR/LogicalStateValidation.h"
 #include "pycircuit/Dialect/ACIR/SourceUnitValidation.h"
 #include "pycircuit/Transforms/Passes.h"
 

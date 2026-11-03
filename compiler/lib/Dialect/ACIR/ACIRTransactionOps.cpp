@@ -1,4 +1,5 @@
 #include "ACIRSourceContracts.h"
+#include "pycircuit/Dialect/ACIR/LogicalStateValidation.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/IR/Verifier.h"
 #include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
@@ -19,10 +20,10 @@ using namespace mlir;
 namespace acir::ac {
 namespace {
 
+// Single-implementation delegates to the shared logical-state validation
+// helpers; call sites keep their historical names.
 HardwareBindings scope(Operation *operation) {
-  HardwareBindings bindings;
-  bindings.owner = operation->getParentOfType<ModuleOp>();
-  return bindings;
+  return stateOwnerScope(operation);
 }
 
 LogicalResult moduleOccurrence(Operation *operation, DictionaryAttr identity,
@@ -60,14 +61,7 @@ LogicalResult namedDeclaration(Operation *operation, StringAttr name) {
 LogicalResult predicate(const HardwareAnalysis &analysis, Value value,
                         const HardwareBindings &bindings, Operation *site,
                         StringRef description) {
-  if (!isa<BitsType>(value.getType()))
-    return site->emitOpError() << description << " requires width-one Bits";
-  auto width = analysis.getPackedWidth(value.getType(), bindings, site);
-  if (failed(width))
-    return failure();
-  if (*width != 1)
-    return site->emitOpError() << description << " requires width-one Bits";
-  return success();
+  return stateControlPredicate(analysis, value, bindings, site, description);
 }
 
 bool equivalentTypes(TypeRange left, TypeRange right) {
@@ -867,33 +861,7 @@ void StateUpdateOp::getEffects(
 }
 
 LogicalResult StateUpdateOp::verify() {
-  auto owner = dyn_cast_or_null<ModuleOp>((*this)->getParentOp());
-  auto package = owner
-                     ? dyn_cast_or_null<mlir::ModuleOp>(owner->getParentOp())
-                     : mlir::ModuleOp();
-  auto stage = package ? package->getAttrOfType<StringAttr>("ac.stage")
-                       : StringAttr();
-  auto contract = package
-                      ? package->getAttrOfType<IntegerAttr>("ac.routed_contract")
-                      : IntegerAttr();
-  if (!owner || !package || !stage || stage.getValue() != "routed" ||
-      package->hasAttr("ac.unit_kind") || !contract ||
-      !contract.getType().isSignlessInteger(64) || (contract.getValue() != 2 && contract.getValue() != 3))
-    return emitOpError()
-           << "requires direct module graph placement in a versioned routed "
-              "package";
-  if (!(*this)->getAttrs().empty())
-    return emitOpError() << "state update does not accept attributes";
-  auto state = getState().getDefiningOp<SourceStateOp>();
-  if (!state || state->getBlock() != (*this)->getBlock())
-    return emitOpError()
-           << "state must be the direct result of a same-module ac.state";
-  if (!areEquivalentHardwareTypes(getState().getType(),
-                                  getCandidate().getType()))
-    return emitOpError() << "candidate must exactly match the state payload type";
-  HardwareAnalysis analysis(package);
-  return predicate(analysis, getIntent(), scope(*this), *this,
-                   "state update intent");
+  return verifyLogicalStateUpdateBinding(*this);
 }
 
 LogicalResult SourceStateReadOp::verify() {
