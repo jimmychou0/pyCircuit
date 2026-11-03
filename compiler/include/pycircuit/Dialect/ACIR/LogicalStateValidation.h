@@ -46,23 +46,29 @@ admissionPairLogicalStateUpdate(acir::LogicalStateOpInterface state,
                                 detail::SourceCheckBudget &budget);
 
 /// Local same-block pairing of one routed state declaration and its single
-/// update, without bindings or budget: the GFIR native verifier proves it
-/// locally and the package declaration binding re-establishes it. A Q used
-/// in both the state and candidate positions of one update counts once.
+/// update, without bindings: the GFIR native verifier proves it locally and
+/// the package declaration binding re-establishes it. A Q used in both the
+/// state and candidate positions of one update counts once. Pass a budget
+/// to charge one unit per examined Q user when running inside the bounded
+/// source-check plan; native verification passes none.
 mlir::FailureOr<acir::LogicalStateUpdateOpInterface>
-verifySameBlockStateUpdatePairing(acir::LogicalStateOpInterface state);
+verifySameBlockStateUpdatePairing(acir::LogicalStateOpInterface state,
+                                  detail::SourceCheckBudget *budget = nullptr);
 
 /// Full routed-bound verification of one logical-state declaration:
 /// structural contract, width-one clock/reset controls, initial/Q payload
 /// equivalence, optional payload constraint, the routed exactly-one-update
 /// pairing and the closed static-initializer DAG. Pass a shared immutable
 /// analysis and bindings when the package traversal already owns one.
+/// Pass a budget to charge the Q-user pairing scan and the initializer DAG
+/// traversal; native verification passes none.
 /// This is bound verification: parsing or mlir::verify alone never
 /// authorizes publication, refinement or execution (see B1-boundary.md).
 mlir::LogicalResult verifyLogicalStateDeclarationBinding(
     acir::LogicalStateOpInterface state,
     const HardwareAnalysis *analysis = nullptr,
-    const HardwareBindings *bindings = nullptr);
+    const HardwareBindings *bindings = nullptr,
+    detail::SourceCheckBudget *budget = nullptr);
 
 /// Source-side bound verification of one source ac.state declaration:
 /// the shared declaration-bound sequence plus the closed static

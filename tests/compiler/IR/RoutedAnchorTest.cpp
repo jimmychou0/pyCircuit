@@ -808,8 +808,24 @@ TEST_F(RoutedAnchorTest, StandaloneRejectsMissingUpdateAndInvalidOwner) {
   }
 }
 
-TEST_F(RoutedAnchorTest, NativeLocalVerificationDoesNotProveBoundInitializer) {
-  // B1's native/package distinction, made observable: a gfir.state whose
+TEST_F(RoutedAnchorTest, RoutedAdmissionIsClosedToForgedGfirNames) {
+  // Generic construction can build unregistered raw IR carrying a forged
+  // gfir.* name. Routed admission is limited to the two registered GFIR
+  // operations, so the stage walk rejects the forged name outright.
+  auto file = parse(fullStateAnchor());
+  ASSERT_TRUE(file);
+  auto state = find<gfir::StateOp>(*file);
+  ASSERT_TRUE(state);
+  mlir::OpBuilder builder(state->getBlock()->getTerminator());
+  mlir::OperationState forged(state.getLoc(), "gfir.unknown");
+  forged.addOperands({state.getQ()});
+  forged.addTypes(state.getQ().getType());
+  builder.create(forged);
+  rejects([&] { return verifyRoutedPackage(*file); },
+          "operation outside closed routed hardware package");
+}
+
+TEST_F(RoutedAnchorTest, NativeLocalVerificationDoesNotProveBoundInitializer) {  // B1's native/package distinction, made observable: a gfir.state whose
   // initial operand is a runtime-selected wire is well shaped for parsing
   // and the native local verifier, which proves structure and placement
   // only. The closed static-initializer obligation belongs to the

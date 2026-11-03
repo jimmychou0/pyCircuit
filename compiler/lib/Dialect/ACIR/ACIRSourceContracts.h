@@ -42,10 +42,14 @@ mlir::LogicalResult verifySourceTemplateType(
     bool *concrete = nullptr);
 
 // Existing source-state initializer grammar, also used to prove physical
-// elaboration initialization under each actual storage binding.
+// elaboration initialization under each actual storage binding. Pass a
+// budget to charge the per-operation DAG traversal when the caller runs
+// inside the bounded source-check plan; native verification passes none.
+class SourceCheckBudget;
 mlir::LogicalResult verifyClosedStateInitializer(
     const HardwareAnalysis &analysis, mlir::Value initial,
-    const HardwareBindings &bindings, mlir::Operation *site);
+    const HardwareBindings &bindings, mlir::Operation *site,
+    SourceCheckBudget *budget = nullptr);
 
 // Optional source-call authority on existing hardware module declarations.
 mlir::LogicalResult verifyModuleSourceCallContract(mlir::Operation *owner);

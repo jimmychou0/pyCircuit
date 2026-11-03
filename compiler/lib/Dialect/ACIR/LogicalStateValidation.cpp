@@ -19,9 +19,12 @@ namespace {
 
 LogicalResult staticInitializer(const HardwareAnalysis &analysis, Value initial,
                                 const HardwareBindings &bindings,
-                                Operation *state) {
+                                Operation *state,
+                                detail::SourceCheckBudget *budget) {
   // Prove closure of the existing literal/constructor graph. This performs
   // no SSA arithmetic evaluation and never obtains values from runtime wires.
+  // Inside the bounded source-check plan each visited DAG operation charges
+  // one unit; native verification passes no budget.
   struct Frame {
     Operation *operation;
     unsigned nextOperand = 0;
@@ -38,6 +41,9 @@ LogicalResult staticInitializer(const HardwareAnalysis &analysis, Value initial,
              << "state initializer requires a closed static "
                 "literal/constructor "
                 "DAG; runtime values and unsupported computations are rejected";
+    // The complete set deduplicates operations, so each charges once.
+    if (budget && failed(budget->debit(1, state)))
+      return failure();
     if (!active.insert(operation).second)
       return state->emitOpError()
              << "state initializer constructor DAG is cyclic";
@@ -114,8 +120,9 @@ LogicalResult staticInitializer(const HardwareAnalysis &analysis, Value initial,
 
 LogicalResult detail::verifyClosedStateInitializer(
     const HardwareAnalysis &analysis, Value initial,
-    const HardwareBindings &bindings, Operation *site) {
-  return staticInitializer(analysis, initial, bindings, site);
+    const HardwareBindings &bindings, Operation *site,
+    SourceCheckBudget *budget) {
+  return staticInitializer(analysis, initial, bindings, site, budget);
 }
 
 HardwareBindings stateOwnerScope(Operation *operation) {
@@ -164,10 +171,14 @@ admissionPairLogicalStateUpdate(acir::LogicalStateOpInterface state,
 }
 
 FailureOr<acir::LogicalStateUpdateOpInterface>
-verifySameBlockStateUpdatePairing(acir::LogicalStateOpInterface state) {
+verifySameBlockStateUpdatePairing(acir::LogicalStateOpInterface state,
+                                  detail::SourceCheckBudget *budget) {
   Operation *operation = state.getOperation();
   acir::LogicalStateUpdateOpInterface pairedUpdate;
   for (Operation *user : state.getStateQ().getUsers()) {
+    // One unit per examined user, matching the admission helper's charge.
+    if (budget && failed(budget->debit(1, operation)))
+      return failure();
     auto update = dyn_cast<acir::LogicalStateUpdateOpInterface>(user);
     if (!update || update->getBlock() != operation->getBlock() ||
         update->getNumOperands() != 3 ||
@@ -220,7 +231,8 @@ LogicalResult declarationBoundChecks(Operation *operation, Value clock,
 
 LogicalResult verifyLogicalStateDeclarationBinding(
     acir::LogicalStateOpInterface state, const HardwareAnalysis *shared,
-    const HardwareBindings *sharedBindings) {
+    const HardwareBindings *sharedBindings,
+    detail::SourceCheckBudget *budget) {
   Operation *operation = state.getOperation();
   if (failed(acir::verifyLogicalStateStructure(operation)))
     return failure();
@@ -239,17 +251,20 @@ LogicalResult verifyLogicalStateDeclarationBinding(
   auto stage = package ? package->getAttrOfType<StringAttr>("ac.stage")
                        : StringAttr();
   if (stage && stage.getValue() == "routed") {
-    auto pairedUpdate = verifySameBlockStateUpdatePairing(state);
+    auto pairedUpdate = verifySameBlockStateUpdatePairing(state, budget);
     if (failed(pairedUpdate))
       return failure();
     // The single enumeration also carries the paired update's bound check
-    // (resolved intent width under the same bindings).
+    // (resolved intent width under the same bindings); its fixed work
+    // charges one unit inside the bounded plan.
+    if (budget && failed(budget->debit(1, operation)))
+      return failure();
     if (failed(verifyLogicalStateUpdateBinding(*pairedUpdate, &analysis,
                                                &bindings)))
       return failure();
   }
   return detail::verifyClosedStateInitializer(analysis, state.getStateInitial(),
-                                              bindings, operation);
+                                              bindings, operation, budget);
 }
 
 LogicalResult verifyLogicalStateSourceBinding(SourceStateOp state) {
@@ -264,7 +279,8 @@ LogicalResult verifyLogicalStateSourceBinding(SourceStateOp state) {
                                     owned, ownedBindings)))
     return failure();
   return detail::verifyClosedStateInitializer(owned, state.getInitial(),
-                                               ownedBindings, operation);
+                                               ownedBindings, operation,
+                                               /*budget=*/nullptr);
 }
 
 LogicalResult verifyLogicalStateUpdateBinding(

@@ -80,13 +80,16 @@ LogicalResult detail::verifyHardwarePackageStage(
             SourceObserveOp>(operation) ||
         isCombinationalHardwareOperation(operation))
       return WalkResult::advance();
-    // The routed stage admits exactly the GFIR dialect's registered
-    // operations (its two logical-state classes); the owning dialect's
-    // registration is the whitelist, so no interface, callback or third
-    // party can extend it. The op-name namespace is compared directly: raw
-    // unverified IR with an unloaded dialect rejects cleanly here instead
-    // of dereferencing an absent dialect pointer.
-    if (operation->getName().getDialectNamespace() == "gfir")
+    // Closed routed admission: exactly the two concrete operations the GFIR
+    // dialect registers (see GFIROps.td). Generic construction can build
+    // unregistered raw IR with a forged gfir.* name, so the registered
+    // status and the full name are both required; no interface, callback,
+    // namespace or third-party dialect can extend this list, and no
+    // dialect pointer is dereferenced before native verification.
+    mlir::OperationName name = operation->getName();
+    if (name.isRegistered() &&
+        (name.getStringRef() == "gfir.state" ||
+         name.getStringRef() == "gfir.state.update"))
       return WalkResult::advance();
     operation->emitOpError() << "operation outside closed routed hardware package";
     return WalkResult::interrupt();

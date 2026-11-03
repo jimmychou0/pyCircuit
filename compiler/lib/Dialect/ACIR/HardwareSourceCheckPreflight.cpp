@@ -1414,7 +1414,7 @@ private:
       for (auto &op : definition.getBody().front())
         if (auto logical = dyn_cast<acir::LogicalStateOpInterface>(&op))
           if (failed(verifyLogicalStateDeclarationBinding(logical, &analysis,
-                                                           &local)))
+                                                           &local, &budget)))
             return failure();
       auto sampling = catalogSampling(definition, local, bindings);
       if (failed(sampling))
@@ -1561,8 +1561,11 @@ private:
         // resolved bindings (B1-boundary's once-per-required-binding rule).
         // The catalog pass separately covers every declaration under its
         // lexical owner scope, including retained unreachable definitions.
+        // Both charge the pairing scan and initializer traversal to the
+        // plan budget; visit reuses results for repeated identical
+        // definition bindings, so each unique scope pays once.
         if (failed(verifyLogicalStateDeclarationBinding(logical, &analysis,
-                                                         &scope)))
+                                                         &scope, &budget)))
           return failure();
       } else if (auto queue = dyn_cast<InstanceOp>(allocation);
           queue && isQueueInstance(queue)) {
