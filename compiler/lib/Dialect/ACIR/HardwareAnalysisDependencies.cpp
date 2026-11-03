@@ -1,5 +1,5 @@
 #include "ACIRSourceContracts.h"
-#include "HardwareSourceCheckPreflight.h"
+#include "SourceCheckBudget.h"
 #include "HardwareSourceChecks.h"
 #include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
 #include "pycircuit/Dialect/ACIR/SourceUnitValidation.h"

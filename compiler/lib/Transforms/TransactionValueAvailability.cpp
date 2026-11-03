@@ -1,5 +1,5 @@
 #include "TransactionValueAvailability.h"
-#include "Dialect/ACIR/HardwareSourceCheckPreflight.h"
+#include "Dialect/ACIR/SourceCheckBudget.h"
 #include "Dialect/ACIR/HardwareValueAvailability.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/IRMapping.h"

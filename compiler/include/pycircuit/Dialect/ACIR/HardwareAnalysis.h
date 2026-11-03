@@ -2,6 +2,7 @@
 #define PYCIRCUIT_DIALECT_ACIR_HARDWAREANALYSIS_H
 
 #include "mlir/IR/BuiltinOps.h"
+#include "pycircuit/Dialect/ACIR/HardwareAnalysisContext.h"
 #include "pycircuit/Dialect/ACIR/ACIROps.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
@@ -93,13 +94,6 @@ struct ResolvedQueueConfig {
   uint64_t timingStorageBitCount;
 };
 
-/// Bindings describe an occurrence of an existing definition, not cloned IR.
-struct HardwareBindings {
-  mlir::Operation *owner = nullptr;
-  llvm::StringMap<mlir::Attribute> integers;
-  llvm::StringMap<mlir::Type> types;
-};
-
 /// Checked pin roles for the existing canonical Memory primitive. Payloads
 /// precede committed live outputs; no runtime state or source alias is stored.
 struct MemoryPrimitiveLayout {
@@ -174,9 +168,6 @@ struct HardwareCheckCommitEndpoint {
   llvm::SmallVector<uint64_t> coordinates;
   mlir::StringAttr primitiveKind;
   HardwareCheckCommitEndpointForm form = HardwareCheckCommitEndpointForm::Physical;
-};
-struct HardwareSourceCheckLimits {
-  uint64_t maxWorkUnits = 4 * 1024 * 1024;
 };
 struct HardwareSourceCheckPlan {
   HardwareResetSemantics resetSemantics = HardwareResetSemantics::Strict;

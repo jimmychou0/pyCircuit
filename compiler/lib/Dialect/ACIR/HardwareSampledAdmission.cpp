@@ -1,9 +1,10 @@
 #include "HardwareSampledAdmission.h"
+#include "HardwarePhysicalState.h"
 #include "HardwareQueueResources.h"
 #include "HardwareValueAvailability.h"
 #include "HardwareGrantProof.h"
 #include "ACIRSourceContracts.h"
-#include "HardwareSourceCheckPreflight.h"
+#include "SourceCheckBudget.h"
 #include "HardwareSourceChecks.h"
 #include "mlir/IR/Verifier.h"
 #include "llvm/ADT/APSInt.h"
@@ -273,21 +274,6 @@ LogicalResult wholeStateID(DictionaryAttr state, Operation *site) {
            << "sampled transaction state requires whole finite ownership";
   return success();
 }
-// A Collection has scalar DFFE elements and replicated control columns.
-// Authenticate that replication before recovering the shared sampled control.
-FailureOr<Value> stateControl(Operation *storage, unsigned ordinal) {
-  Value value = storage->getOperand(ordinal);
-  auto collection = dyn_cast<CollectionOp>(storage);
-  if (!collection) return value;
-  auto splat = value.getDefiningOp<TableSplatOp>();
-  if (!splat || splat.getShape() != collection.getShape() ||
-      !isa<BitsType>(splat.getInput().getType()) || !areEquivalentHardwareTypes(
-          value.getType(), TableType::get(storage->getContext(), collection.getShape(),
-                                          splat.getInput().getType())))
-    return storage->emitOpError()
-           << "transaction Collection requires replicated scalar controls";
-  return splat.getInput();
-}
 FailureOr<Operation *> directState(ModuleOp module, DictionaryAttr declaration,
                                   const HardwareAnalysis &analysis,
                                   SourceCheckBudget &budget) {
@@ -319,20 +305,8 @@ FailureOr<Operation *> directState(ModuleOp module, DictionaryAttr declaration,
       found = instance;
       continue;
     }
-    StringRef kind =
-        analysis.getPrimitiveKind(
-            isa<InstanceOp>(instance)
-                ? analysis.resolveCallee(cast<InstanceOp>(instance))
-                : analysis.resolveCallee(cast<CollectionOp>(instance)));
-    bool dff = kind == "dff";
-    if ((!dff && kind != "dffe") ||
-        instance->getNumOperands() != (dff ? 4u : 5u) ||
-        instance->getNumResults() != 1)
-      return instance->emitOpError()
-             << "transaction inventory requires a direct verified DFF/DFFE";
-    unsigned controls = dff ? 2 : 3;
-    for (unsigned ordinal = 0; ordinal < controls; ++ordinal)
-      if (failed(stateControl(instance, ordinal))) return failure();
+    if (failed(verifyPhysicalStateAllocation(instance, analysis)))
+      return failure();
     found = instance;
   }
   if (!found)
@@ -385,30 +359,7 @@ LogicalResult bindStateEndpoint(StateEndpoint &result, Operation *storage,
       return result.update.emitOpError() << "bound candidate and intent must match logical state payload and one bit";
     return success();
   }
-  auto leaf = isa<InstanceOp>(storage)
-                  ? analysis.bindInstance(cast<InstanceOp>(storage), bound)
-                  : analysis.bindInstance(cast<CollectionOp>(storage), bound);
-  if (failed(leaf)) return failure();
-  result.storageBindings = std::move(*leaf);
-  auto clock = stateControl(storage, 0), reset = stateControl(storage, 1);
-  if (failed(clock) || failed(reset)) return failure();
-  result.clock = *clock;
-  result.reset = *reset;
-  bool dff = analysis.getPrimitiveKind(result.storageBindings.owner) == "dff";
-  result.form = dff ? StateEndpointForm::DFF
-                   : isa<CollectionOp>(storage) ? StateEndpointForm::DFFECollection
-                                                : StateEndpointForm::DFFE;
-  if (dff) {
-    result.data = storage->getOperand(2);
-    result.initial = storage->getOperand(3);
-  } else {
-    auto enable = stateControl(storage, 2);
-    if (failed(enable)) return failure();
-    result.enable = *enable;
-    result.data = storage->getOperand(3);
-    result.initial = storage->getOperand(4);
-  }
-  return success();
+  return bindPhysicalStateEndpoint(result, storage, bound, analysis);
 }
 } // namespace
 
@@ -4594,7 +4545,7 @@ private:
               stateTerminal(endpoint.scope, collection, route.state))
             continue;
           if (route.kind == PrivateRoute::Enable && operand == 2) {
-            auto control = stateControl(collection, 2);
+            auto control = getPhysicalStateControl(collection, 2);
             auto found = stateIndex.find({currentOccurrence, collection});
             if (failed(control)) return failure();
             if (found != stateIndex.end() &&

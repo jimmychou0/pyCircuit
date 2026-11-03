@@ -1,7 +1,7 @@
 #include "pycircuit/Dialect/ACIR/ACIROps.h"
 #include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
 #include "ACIRSourceContracts.h"
-#include "HardwareSourceCheckPreflight.h"
+#include "SourceCheckBudget.h"
 
 #include "llvm/ADT/PointerUnion.h"
 #include "llvm/ADT/STLExtras.h"

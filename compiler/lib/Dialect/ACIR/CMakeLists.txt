@@ -40,10 +40,13 @@ add_acir_library(ACIRDialect SOURCES
   HardwareAnalysis.cpp
   HardwareAnalysisDependencies.cpp
   HardwareAnalysisValidation.cpp
+  PackageVerification.cpp
   HardwareValueAvailability.cpp
   HardwareQueueResources.cpp
   HardwareGrantProof.cpp
   HardwareSourceChecks.cpp
+  HardwarePhysicalProjection.cpp
+  HardwarePhysicalState.cpp
   HardwareSampledAdmission.cpp
   HardwareSourceCheckPreflight.cpp
   HardwareDependencySerialization.cpp
