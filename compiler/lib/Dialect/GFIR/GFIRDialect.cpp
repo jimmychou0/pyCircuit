@@ -2,6 +2,9 @@
 #include "pycircuit/Dialect/ACIR/RoutedStageAdmission.h"
 #include "pycircuit/Dialect/GFIR/GFIROps.h"
 
+#define GET_OP_CLASSES
+#include "pycircuit/Dialect/GFIR/GFIROps.cpp.inc"
+
 #include "pycircuit/Dialect/GFIR/GFIRDialect.cpp.inc"
 
 using namespace mlir;
