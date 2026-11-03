@@ -5693,9 +5693,10 @@ private:
         return reject("original module-body operation owner differs");
       if (auto state = dyn_cast<ac::SourceStateOp>(op)) {
         // Source authentication across different operation names: the
-        // candidate is the gfir replacement, never a renamed clone. Compare
-        // parent/block, location, the complete admitted attribute and
-        // property dictionaries, exact one-result arity and Q type first,
+        // candidate is the gfir replacement, never a renamed clone. The
+        // locator checks above already place the target in the staged
+        // module body; compare location, the complete admitted attribute
+        // and property dictionaries, exact one-result arity and Q type,
         // then the authenticated clock/reset/initial operand mapping. The
         // source declaration class cannot remain in the candidate.
         if (!charge(budget, &op,
@@ -5704,8 +5705,6 @@ private:
                         SourceCheckBudget::bytes(op.getPropertiesStorageSize())))
           return failure();
         if (!isa<gfir::StateOp>(target) ||
-            target->getParentOp() != op.getParentOp() ||
-            target->getBlock() != op.getBlock() ||
             target->getLoc() != op.getLoc() ||
             target->getNumResults() != 1 ||
             target->getResultTypes() != op.getResultTypes() ||
