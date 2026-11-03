@@ -5711,8 +5711,18 @@ private:
             target->getNumOperands() != 3 ||
             target->getAttrDictionary() != op.getAttrDictionary() ||
             target->getPropertiesAsAttribute() !=
-                op.getPropertiesAsAttribute())
+                op.getPropertiesAsAttribute()) {
+          llvm::errs() << "DBG-state-auth-fail kind=" << isa<gfir::StateOp>(target)
+                       << " loc=" << (target->getLoc() != op.getLoc())
+                       << " res=" << (target->getNumResults() != 1)
+                       << " types=" << (target->getResultTypes() != op.getResultTypes())
+                       << " ops=" << (target->getNumOperands() != 3)
+                       << " attrs=" << (target->getAttrDictionary() != op.getAttrDictionary())
+                       << " props=" << (target->getPropertiesAsAttribute() != op.getPropertiesAsAttribute()) << "\n";
+          op.print(llvm::errs()); llvm::errs() << "\n--- target:\n";
+          target->print(llvm::errs()); llvm::errs() << "\n";
           return reject("original logical state owner/Q/type/domain/initial differs");
+        }
         for (auto [original, actual] :
              llvm::zip(op.getOperands(), target->getOperands())) {
           auto expected = authenticated.lookupOrNull(original);
