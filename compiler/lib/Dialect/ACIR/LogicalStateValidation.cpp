@@ -34,6 +34,8 @@ LogicalResult stateControlPredicate(const HardwareAnalysis &analysis,
 FailureOr<acir::LogicalStateUpdateOpInterface>
 admissionPairLogicalStateUpdate(acir::LogicalStateOpInterface state,
                                 detail::SourceCheckBudget &budget) {
+  if (failed(acir::verifyLogicalStateStructure(state.getOperation())))
+    return failure();
   acir::LogicalStateUpdateOpInterface result;
   for (auto *user : state.getStateQ().getUsers()) {
     // Same single-unit admission charge as the previous admission helper.
@@ -86,6 +88,10 @@ LogicalResult verifyLogicalStateUpdateBinding(
   if (!state || state->getBlock() != operation->getBlock())
     return operation->emitOpError()
            << "state must be the direct result of a same-module ac.state";
+  if (auto stateContract = dyn_cast<acir::LogicalStateOpInterface>(*state);
+      stateContract &&
+      failed(acir::verifyLogicalStateStructure(stateContract.getOperation())))
+    return failure();
   if (!areEquivalentHardwareTypes(update.getUpdatedStateQ().getType(),
                                   update.getStateCandidate().getType()))
     return operation->emitOpError()

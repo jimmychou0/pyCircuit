@@ -28,6 +28,8 @@ endfunction()
 
 add_acir_api_test(ACIRSourceValueSemanticsTests SourceValueSemanticsTest.cpp)
 add_acir_api_test(ACIRRoutedAnchorTests RoutedAnchorTest.cpp)
+add_acir_api_test(LogicalStateInterfacesTests LogicalStateInterfacesTest.cpp)
+target_link_libraries(LogicalStateInterfacesTests PRIVATE PycircuitStateInterfaces)
 target_link_libraries(ACIRRoutedAnchorTests PRIVATE ACIRSourceCompiler)
 add_acir_api_test(ACIRAnchorArtifactTests AnchorArtifactTest.cpp)
 target_link_libraries(ACIRAnchorArtifactTests PRIVATE ACIRSourceCompiler ACIRTransforms MLIRPass)
