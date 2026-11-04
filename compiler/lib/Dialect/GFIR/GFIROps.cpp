@@ -27,11 +27,11 @@ void StateOp::getEffects(
 }
 
 LogicalResult StateOp::verify() {
-  if (failed(acir::verifyRoutedLogicalStatePlacement(getOperation())))
+  if (failed(ac::verifyRoutedLogicalStatePlacement(getOperation())))
     return failure();
   if ((*this)->hasAttr("sym_name"))
     return emitOpError() << "state uses instance_name; sym_name is unsupported";
-  if (failed(acir::verifyNamedLogicalDeclaration(getOperation(),
+  if (failed(ac::verifyNamedLogicalDeclaration(getOperation(),
                                                  getInstanceNameAttr())))
     return failure();
   auto owner = cast<ac::ModuleOp>((*this)->getParentOp());
@@ -54,9 +54,9 @@ LogicalResult StateOp::verify() {
       return emitOpError() << "state declarations require distinct occurrence "
                               "identities within their module";
   }
-  if (failed(acir::verifyLiteralControlWidth(getOperation(), getClk(),
+  if (failed(ac::verifyLiteralControlWidth(getOperation(), getClk(),
                                              "state clock")) ||
-      failed(acir::verifyLiteralControlWidth(getOperation(), getRst(),
+      failed(ac::verifyLiteralControlWidth(getOperation(), getRst(),
                                              "state reset")))
     return failure();
   if (!ac::areEquivalentHardwareTypes(getInitial().getType(), getQ().getType()))
@@ -67,7 +67,7 @@ LogicalResult StateOp::verify() {
   // non-Dictionary attribute. The semantic SymbolicFixedBits and scope
   // checks stay with the bound stage verifier.
   if (Attribute constraint = (*this)->getAttr("ac.payload_constraint"))
-    if (failed(acir::verifyPayloadConstraintShape(getOperation(), constraint,
+    if (failed(ac::verifyPayloadConstraintShape(getOperation(), constraint,
                                                   getQ().getType())))
       return failure();
   // Local same-block pairing: exactly one update binds this Q, deduplicating
@@ -98,7 +98,7 @@ void StateUpdateOp::getEffects(
 }
 
 LogicalResult StateUpdateOp::verify() {
-  if (failed(acir::verifyRoutedLogicalStatePlacement(getOperation())))
+  if (failed(ac::verifyRoutedLogicalStatePlacement(getOperation())))
     return failure();
   if (!(*this)->getAttrs().empty())
     return emitOpError() << "state update does not accept attributes";
@@ -108,12 +108,12 @@ LogicalResult StateUpdateOp::verify() {
   if (!state || state->getBlock() != (*this)->getBlock())
     return emitOpError()
            << "state must be the direct result of a same-module gfir.state";
-  if (failed(acir::verifyLogicalStateStructure(state.getOperation())))
+  if (failed(ac::verifyLogicalStateStructure(state.getOperation())))
     return failure();
   if (!ac::areEquivalentHardwareTypes(getState().getType(),
                                       getCandidate().getType()))
     return emitOpError() << "candidate must exactly match the state payload type";
-  return acir::verifyLiteralControlWidth(getOperation(), getIntent(),
+  return ac::verifyLiteralControlWidth(getOperation(), getIntent(),
                                          "state update intent");
 }
 
