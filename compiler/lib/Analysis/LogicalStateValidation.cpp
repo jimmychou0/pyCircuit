@@ -158,17 +158,17 @@ LogicalResult stateControlPredicate(const HardwareAnalysis &analysis,
   return success();
 }
 
-FailureOr<acir::LogicalStateUpdateOpInterface>
-admissionPairLogicalStateUpdate(acir::LogicalStateOpInterface state,
+FailureOr<LogicalStateUpdateOpInterface>
+admissionPairLogicalStateUpdate(LogicalStateOpInterface state,
                                 detail::SourceCheckBudget &budget) {
-  if (failed(acir::verifyLogicalStateStructure(state.getOperation())))
+  if (failed(verifyLogicalStateStructure(state.getOperation())))
     return failure();
-  acir::LogicalStateUpdateOpInterface result;
+  LogicalStateUpdateOpInterface result;
   for (auto *user : state.getStateQ().getUsers()) {
     // Same single-unit admission charge as the previous admission helper.
     if (failed(budget.debit(1, state.getOperation())))
       return failure();
-    auto update = dyn_cast<acir::LogicalStateUpdateOpInterface>(user);
+    auto update = dyn_cast<LogicalStateUpdateOpInterface>(user);
     if (!update || update.getUpdatedStateQ() != state.getStateQ())
       continue;
     // One operation may use Q in both the state and candidate positions.
@@ -183,16 +183,16 @@ admissionPairLogicalStateUpdate(acir::LogicalStateOpInterface state,
   return result;
 }
 
-FailureOr<acir::LogicalStateUpdateOpInterface>
-verifySameBlockStateUpdatePairing(acir::LogicalStateOpInterface state,
+FailureOr<LogicalStateUpdateOpInterface>
+verifySameBlockStateUpdatePairing(LogicalStateOpInterface state,
                                   detail::SourceCheckBudget *budget) {
   Operation *operation = state.getOperation();
-  acir::LogicalStateUpdateOpInterface pairedUpdate;
+  LogicalStateUpdateOpInterface pairedUpdate;
   for (Operation *user : state.getStateQ().getUsers()) {
     // One unit per examined user, matching the admission helper's charge.
     if (budget && failed(budget->debit(1, operation)))
       return failure();
-    auto update = dyn_cast<acir::LogicalStateUpdateOpInterface>(user);
+    auto update = dyn_cast<LogicalStateUpdateOpInterface>(user);
     if (!update || update->getBlock() != operation->getBlock() ||
         update->getNumOperands() != 3 ||
         update.getUpdatedStateQ() != state.getStateQ())
@@ -243,11 +243,11 @@ LogicalResult declarationBoundChecks(Operation *operation, Value clock,
 } // namespace
 
 LogicalResult verifyLogicalStateDeclarationBinding(
-    acir::LogicalStateOpInterface state, const HardwareAnalysis *shared,
+    LogicalStateOpInterface state, const HardwareAnalysis *shared,
     const HardwareBindings *sharedBindings,
     detail::SourceCheckBudget *budget) {
   Operation *operation = state.getOperation();
-  if (failed(acir::verifyLogicalStateStructure(operation)))
+  if (failed(verifyLogicalStateStructure(operation)))
     return failure();
   auto owner = cast<ModuleOp>(operation->getParentOp());
   HardwareAnalysis owned(operation->getParentOfType<mlir::ModuleOp>());
@@ -297,10 +297,10 @@ LogicalResult verifyLogicalStateSourceBinding(SourceStateOp state) {
 }
 
 LogicalResult verifyLogicalStateUpdateBinding(
-    acir::LogicalStateUpdateOpInterface update, const HardwareAnalysis *shared,
+    LogicalStateUpdateOpInterface update, const HardwareAnalysis *shared,
     const HardwareBindings *sharedBindings) {
   Operation *operation = update.getOperation();
-  if (failed(acir::verifyLogicalStateUpdateStructure(operation)))
+  if (failed(verifyLogicalStateUpdateStructure(operation)))
     return failure();
   auto package = operation->getParentOfType<mlir::ModuleOp>();
   if (failed(acir::verifyRoutedLogicalStatePlacement(operation)))
@@ -314,9 +314,9 @@ LogicalResult verifyLogicalStateUpdateBinding(
   auto state =
       update.getUpdatedStateQ().getDefiningOp();
   auto stateContract =
-      state ? dyn_cast<acir::LogicalStateOpInterface>(state) : nullptr;
+      state ? dyn_cast<LogicalStateOpInterface>(state) : nullptr;
   if (!stateContract || state->getBlock() != operation->getBlock() ||
-      failed(acir::verifyLogicalStateStructure(state)))
+      failed(verifyLogicalStateStructure(state)))
     return operation->emitOpError()
            << "state must be the direct result of a same-module routed "
               "logical state declaration";
