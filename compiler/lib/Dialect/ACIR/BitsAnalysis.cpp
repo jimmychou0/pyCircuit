@@ -113,16 +113,16 @@ FailureOr<bool> bitsWidthsEquivalent(Operation *site, BitsType lhs, BitsType rhs
   if (!leftInteger || !rightInteger) return false;
   llvm::APSInt leftWidth(leftInteger.getCanonicalValue());
   llvm::APSInt rightWidth(rightInteger.getCanonicalValue());
-  return isPositive(leftWidth) && isPositive(rightWidth) &&
+  return bitsLiteralPositive(leftWidth) && bitsLiteralPositive(rightWidth) &&
          leftWidth.getActiveBits() <= 64 && rightWidth.getActiveBits() <= 64 &&
          leftWidth.getZExtValue() == rightWidth.getZExtValue();
 }
 
 LogicalResult bitsRequireSameWidth(Operation *operation, BitsType lhs, BitsType rhs,
                                BitsType result) {
-  auto operands = equivalentWidths(operation, lhs, rhs);
+  auto operands = bitsWidthsEquivalent(operation, lhs, rhs);
   if (failed(operands)) return failure();
-  auto output = equivalentWidths(operation, lhs, result);
+  auto output = bitsWidthsEquivalent(operation, lhs, result);
   if (failed(output)) return failure();
   if (!*operands || !*output)
     return operation->emitOpError()
@@ -135,7 +135,7 @@ bool bitsOpcodeClosed(StringRef value, ArrayRef<StringRef> choices) {
 }
 LogicalResult bitsRequireOneBit(BitsType type, Operation *operation,
                             StringRef description) {
-  auto width = literalInteger(type.getWidth());
+  auto width = bitsLiteralInteger(type.getWidth());
   if (!width || *width != 1)
     return operation->emitOpError()
            << description << " requires canonical literal width one";
