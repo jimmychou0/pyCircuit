@@ -1,4 +1,5 @@
 #include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
+#include "ACIRSourceContracts.h"
 
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringSet.h"
@@ -79,7 +80,7 @@ HardwareBindings scope(Operation *operation) {
   bindings.owner = operation->getParentOfType<ModuleOp>();
   return bindings;
 }
-
+} // namespace
 
 LogicalResult EnumOp::verify() {
   return success(succeeded(validateEnum(*this, *this)));
