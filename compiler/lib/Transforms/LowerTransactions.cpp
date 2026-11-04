@@ -8,7 +8,9 @@
 #include "Dialect/ACIR/SourceCheckBudget.h"
 #include "Dialect/ACIR/HardwareSourceChecks.h"
 #include "Dialect/ACIR/SourceTransactionSummary.h"
+#include "pycircuit/Dialect/ACIR/ACIRDialect.h"
 #include "pycircuit/Dialect/ACIR/SourceMethodAnalysis.h"
+#include "pycircuit/Dialect/GFIR/GFIRDialect.h"
 #include "pycircuit/Dialect/GFIR/GFIROps.h"
 #include "pycircuit/Interfaces/LogicalStateInterfaces.h"
 #include "pycircuit/Dialect/ACIR/LogicalStateValidation.h"
@@ -8551,7 +8553,7 @@ public:
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(RouteTransactionsPass)
   void getDependentDialects(DialectRegistry &registry) const override {
     // Routing constructs the GFIR replacement of every source state.
-    registry.insert<ac::ACIRDialect, gfir::GFIRDialect>();
+    registry.insert<ac::ACIRDialect, acir::gfir::GFIRDialect>();
   }
   StringRef getArgument() const final { return "ac-route-transactions"; }
   StringRef getDescription() const final {
@@ -8613,7 +8615,7 @@ public:
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LowerTransactionsPass)
   void getDependentDialects(DialectRegistry &registry) const override {
     // Refinement consumes the routed GFIR state classes concretely.
-    registry.insert<ac::ACIRDialect, gfir::GFIRDialect>();
+    registry.insert<ac::ACIRDialect, acir::gfir::GFIRDialect>();
   }
   StringRef getArgument() const final { return "ac-lower-transactions"; }
   StringRef getDescription() const final {
