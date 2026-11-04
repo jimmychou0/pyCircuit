@@ -29,12 +29,27 @@ endfunction()
 add_acir_api_test(ACIRSourceValueSemanticsTests SourceValueSemanticsTest.cpp)
 add_acir_api_test(ACIRRoutedAnchorTests RoutedAnchorTest.cpp)
 add_acir_api_test(ACIRLogicalStateInterfacesTests LogicalStateInterfacesTest.cpp)
-# Containment probe: GFIR alone, no ACIR/analysis archives in the link line.
+# Containment probes: each links exactly one layer target; no archives
+# above that layer may appear on the resolved link line (verify-layering).
 add_executable(ACIRGFIRStandaloneTests GFIRStandaloneTest.cpp)
 target_link_libraries(ACIRGFIRStandaloneTests PRIVATE
   GFIRDialect GTest::gtest_main)
 add_test(NAME ACIRGFIRStandaloneTests COMMAND ACIRGFIRStandaloneTests)
 set_tests_properties(ACIRGFIRStandaloneTests PROPERTIES LABELS "api;gate;nightly")
+
+add_executable(ACIROpsStandaloneTests LayerProbesTest.cpp)
+target_link_libraries(ACIROpsStandaloneTests PRIVATE
+  ACIRDialect GTest::gtest_main)
+add_test(NAME ACIROpsStandaloneTests COMMAND ACIROpsStandaloneTests)
+set_tests_properties(ACIROpsStandaloneTests PROPERTIES LABELS "api;gate;nightly")
+
+add_executable(ACIRCoreStandaloneTests LayerProbesTest.cpp)
+target_compile_definitions(ACIRCoreStandaloneTests PRIVATE
+  PYCIRCUIT_CORE_PROBE=1)
+target_link_libraries(ACIRCoreStandaloneTests PRIVATE
+  ACIRCore GTest::gtest_main)
+add_test(NAME ACIRCoreStandaloneTests COMMAND ACIRCoreStandaloneTests)
+set_tests_properties(ACIRCoreStandaloneTests PROPERTIES LABELS "api;gate;nightly")
 target_link_libraries(ACIRLogicalStateInterfacesTests PRIVATE PycircuitStateInterfaces GFIRDialect)
 target_link_libraries(ACIRRoutedAnchorTests PRIVATE ACIRSourceCompiler)
 add_acir_api_test(ACIRAnchorArtifactTests AnchorArtifactTest.cpp)

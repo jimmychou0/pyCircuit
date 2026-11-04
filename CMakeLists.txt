@@ -124,6 +124,10 @@ if(PYC_INSTALL_CMAKE_PACKAGE)
     cmake/PycircuitExamples.cmake cmake/prepare_output.py cmake/verify_example.py
     DESTINATION "${PYCIRCUIT_INSTALL_CONFIGDIR}")
 endif()
+if(PYC_BUILD_COMPILER_DEV)
+  pycircuit_verify_layering()
+endif()
+
 if(PYC_PACKAGE_BUNDLE_RUNTIME_DEPS AND PYC_BUILD_COMPILER_DEV)
   configure_file(cmake/install_runtime_deps.cmake.in install_runtime_deps.cmake @ONLY)
   install(SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/install_runtime_deps.cmake")

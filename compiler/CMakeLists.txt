@@ -58,3 +58,62 @@ if(PYCIRCUIT_BUILD_TESTING)
     "${PYCIRCUIT_BINARY_DIR}/tests/source-unit"
   )
 endif()
+
+
+# ---------------------------------------------------------------------------
+# Layer-direction enforcement (B2 step-2 design r9 §4): resolve each layer
+# target's transitive INTERFACE_LINK_LIBRARIES at configure time and fail
+# on forbidden edges. Generator-expression values are stripped; ALIAS
+# targets resolve; a visited set guards cycles.
+function(_pyc_link_closure target out)
+  set(acc "")
+  set(pending "${target}")
+  set(seen "")
+  while(pending)
+    list(POP_FRONT pending head)
+    if(head IN_LIST seen)
+      continue()
+    endif()
+    list(APPEND seen "${head}")
+    if(NOT TARGET "${head}")
+      list(APPEND acc "${head}")
+      continue()
+    endif()
+    get_target_property(iface "${head}" INTERFACE_LINK_LIBRARIES)
+    if(iface)
+      foreach(entry IN LISTS iface)
+        string(REGEX REPLACE "\\$<[^>]*>" "" plain "${entry}")
+        string(STRIP "${plain}" plain)
+        if(plain)
+          list(APPEND pending "${plain}")
+        endif()
+      endforeach()
+    endif()
+  endwhile()
+  set("${out}" "${acc}" PARENT_SCOPE)
+endfunction()
+
+function(pycircuit_verify_layering)
+  set(forbidden
+    "GFIRDialect:ACIRDialect"
+    "GFIRDialect:ACIRAnalysis"
+    "ACIRCore:ACIRDialect"
+    "ACIRCore:ACIRAnalysis"
+    "ACIRDialect:ACIRAnalysis"
+    "ACIRAnalysis:ACIRTransforms"
+    "ACIRAnalysis:ACIRCodegen")
+  foreach(pair IN LISTS forbidden)
+    string(REPLACE ":" ";" ends "${pair}")
+    list(GET ends 0 lower)
+    list(GET ends 1 upper)
+    if(NOT TARGET "${lower}")
+      continue()
+    endif()
+    _pyc_link_closure("${lower}" closure)
+    if("${upper}" IN_LIST closure)
+      message(FATAL_ERROR
+        "layering violation: ${lower} transitively links ${upper}")
+    endif()
+  endforeach()
+  message(STATUS "verify-layering: layer directions OK")
+endfunction()
