@@ -156,8 +156,8 @@ FailureOr<uint64_t> closedPayloadWidth(Type payload, Operation *site) {
       return failure();
     auto literal = tree.getAs<DictionaryAttr>("value");
     auto width = literal ? literal.getAs<ac::MathIntAttr>("value") : MathIntAttr();
-    if (!width || llvm::APSInt(width.getCanonicalValue()).isNegative() ||
-        !width.getCanonicalValue().isIntN(63))
+    llvm::APSInt widthValue(width.getCanonicalValue());
+    if (!width || widthValue.isNegative() || !widthValue.isIntN(63))
       return site->emitOpError()
              << "closed payload width must be a nonnegative finite integer";
     return uint64_t(llvm::APSInt(width.getCanonicalValue()).getZExtValue());
@@ -184,7 +184,7 @@ FailureOr<uint64_t> closedPayloadWidth(Type payload, Operation *site) {
   if (auto enumeration = dyn_cast<ac::EnumType>(payload)) {
     auto *declaration = SymbolTable::lookupSymbolIn(
         site->getParentOfType<mlir::ModuleOp>(),
-        enumeration.getName().getLeafReference());
+        FlatSymbolRefAttr::get(enumeration.getName()));
     if (!declaration || declaration->getName().getStringRef() != "ac.enum")
       return failure();
     auto width = declaration->getAttrOfType<ac::MathIntAttr>("width");
@@ -195,7 +195,7 @@ FailureOr<uint64_t> closedPayloadWidth(Type payload, Operation *site) {
   if (auto structure = dyn_cast<ac::StructType>(payload)) {
     auto *declaration = SymbolTable::lookupSymbolIn(
         site->getParentOfType<mlir::ModuleOp>(),
-        structure.getName().getLeafReference());
+        FlatSymbolRefAttr::get(structure.getName()));
     if (!declaration || declaration->getName().getStringRef() != "ac.struct")
       return failure();
     uint64_t total = 0;
@@ -224,8 +224,8 @@ LogicalResult verifyLiteralWidthResolves(Operation *site, Value carrier,
   if (kind && kind.getValue() == "literal") {
     auto literal = tree.getAs<DictionaryAttr>("value");
     auto width = literal ? literal.getAs<ac::MathIntAttr>("value") : MathIntAttr();
-    if (!width || llvm::APSInt(width.getCanonicalValue()).isNegative() ||
-        !width.getCanonicalValue().isIntN(63))
+    llvm::APSInt widthValue(width.getCanonicalValue());
+    if (!width || widthValue.isNegative() || !widthValue.isIntN(63))
       return site->emitOpError()
              << description << " requires a definite nonnegative width";
   }
