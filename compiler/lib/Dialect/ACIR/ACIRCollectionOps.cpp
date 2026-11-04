@@ -32,30 +32,6 @@ bool equivalentTypes(TypeRange lhs, TypeRange rhs) {
       return false;
   return true;
 }
-LogicalResult shapeSchema(ArrayAttr shape,
-                          function_ref<InFlightDiagnostic()> error) {
-  if (!shape || shape.empty())
-    return error() << "table shape requires positive rank";
-  uint64_t product = 1;
-  for (auto raw : shape) {
-    auto expr = dyn_cast<StaticExprAttr>(raw);
-    if (!expr || failed(StaticExprAttr::verify(error, expr.getTree())))
-      return error() << "table extent requires valid StaticExpr";
-    auto tree = expr.getTree();
-    auto value = tree.getAs<DictionaryAttr>("value");
-    auto literal = value ? value.getAs<MathIntAttr>("value") : MathIntAttr();
-    if (!literal)
-      continue;
-    llvm::APSInt n(literal.getCanonicalValue());
-    if (n.isNegative() || n.isZero() || n.getActiveBits() > 63)
-      return error() << "table extent must be positive and fit signed 64 bits";
-    if (product >
-        uint64_t(std::numeric_limits<int64_t>::max()) / n.getZExtValue())
-      return error() << "table element count exceeds signed 64 bits";
-    product *= n.getZExtValue();
-  }
-  return success();
-}
 uint64_t product(ArrayRef<uint64_t> shape) {
   uint64_t n = 1;
   for (auto x : shape)
@@ -305,17 +281,9 @@ viewShape(const HardwareAnalysis &a, StringRef kind, DictionaryAttr p,
   return out;
 }
 } // namespace
-LogicalResult TableType::verify(function_ref<InFlightDiagnostic()> error,
-                                ArrayAttr shape, Type elementType) {
-  if (failed(shapeSchema(shape, error)))
-    return failure();
-  if (!isa<BitsType, StructType, EnumType, TypeParamType, TableType>(elementType))
-    return error() << "table element must be bits, struct, enum or type parameter";
-  return success();
-}
 FailureOr<SmallVector<uint64_t>> HardwareAnalysis::resolveShape(
     ArrayAttr shape, const HardwareBindings &bindings, Operation *site) const {
-  if (failed(shapeSchema(shape, [&] { return site->emitOpError(); })))
+  if (failed(detail::shapeSchema(shape, [&] { return site->emitOpError(); })))
     return failure();
   SmallVector<uint64_t> result;
   uint64_t n = 1;
@@ -468,7 +436,7 @@ HardwareAnalysis::verifyCollectionOperation(Operation *op,
                : LogicalResult(error() << "table payload type mismatch");
   };
   auto shape = [&](ArrayAttr s) -> LogicalResult {
-    if (failed(shapeSchema(s, error)))
+    if (failed(detail::shapeSchema(s, error)))
       return failure();
     if (requireResolved || isStaticEvaluable(s, bindings))
       return success(succeeded(resolveShape(s, bindings, op)));

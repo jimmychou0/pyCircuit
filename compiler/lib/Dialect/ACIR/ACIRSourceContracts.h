@@ -20,6 +20,10 @@ class ModuleImportOp;
 } // namespace acir::ac
 
 namespace acir::ac::detail {
+// Table shape grammar shared by the type verifier (core) and the
+// collection operation verifiers (ops layer).
+mlir::LogicalResult shapeSchema(mlir::ArrayAttr shape,
+                                llvm::function_ref<mlir::InFlightDiagnostic()> error);
 
 using EmitError = llvm::function_ref<mlir::InFlightDiagnostic()>;
 

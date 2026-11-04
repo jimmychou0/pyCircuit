@@ -90,12 +90,6 @@ LogicalResult verifyValue(Operation *operation) {
 
 } // namespace
 
-LogicalResult EnumType::verify(llvm::function_ref<InFlightDiagnostic()> error,
-                               StringAttr name) {
-  if (!name || name.getValue().empty() || name.getValue().contains('\0'))
-    return error() << "enum type requires a nonempty nominal name";
-  return success();
-}
 
 LogicalResult EnumOp::verify() {
   return success(succeeded(validateEnum(*this, *this)));

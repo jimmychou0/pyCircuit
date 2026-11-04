@@ -149,16 +149,6 @@ LogicalResult requireOneBit(BitsType type, Operation *operation,
 
 } // namespace
 
-LogicalResult
-BitsType::verify(llvm::function_ref<InFlightDiagnostic()> emitError,
-                 StaticExprAttr width) {
-  if (!width || failed(StaticExprAttr::verify(emitError, width.getTree())))
-    return emitError() << "bits width requires one valid StaticExpr";
-  if (auto value = literalInteger(width); value && !isPositive(*value))
-    return emitError() << "bits width must be positive";
-  return success();
-}
-
 LogicalResult BitsConstantOp::verify() {
   if (failed(StaticExprAttr::verify([&] { return emitOpError(); },
                                     getValue().getTree())))
