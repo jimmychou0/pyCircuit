@@ -1,4 +1,5 @@
 #include "ACIRSourceContracts.h"
+#include "pycircuit/Dialect/ACIR/ACIROps.h"
 
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringSet.h"

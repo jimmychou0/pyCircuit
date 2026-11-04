@@ -53,6 +53,4 @@ mlir::LogicalResult verifyPayloadConstraintShape(mlir::Operation *site,
 
 } // namespace acir::ac
 
-} // namespace acir
-
 #endif // PYCIRCUIT_LIB_IR_STATEDECLARATIONCONTRACTS_H
