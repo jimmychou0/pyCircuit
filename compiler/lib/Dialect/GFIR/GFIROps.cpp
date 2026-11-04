@@ -37,7 +37,7 @@ LogicalResult StateOp::verify() {
   auto owner = (*this)->getParentOp();
   for (Operation &other : owner->getRegion(0).front())
     if (&other != getOperation() &&
-        (isa<acir::ModuleChildOpInterface, LogicalStateOpInterface>(other)) &&
+        (isa<ModuleChildOpInterface, LogicalStateOpInterface>(other)) &&
         other.getAttrOfType<StringAttr>("instance_name") ==
             getInstanceNameAttr())
       return emitOpError() << "state instance_name must be unique across state "

@@ -240,8 +240,8 @@ namespace acir {
 
 LogicalResult
 verifyNamedLogicalDeclaration(Operation *declaration, StringAttr instanceName) {
-  auto module = dyn_cast_or_null<acir::OwningModuleOpInterface>(
-      declaration->getParentOp());
+  auto module =
+      dyn_cast_or_null<OwningModuleOpInterface>(declaration->getParentOp());
   if (!module || !instanceName)
     return declaration->emitOpError()
            << "requires named direct module placement";
@@ -263,7 +263,7 @@ verifyNamedLogicalDeclaration(Operation *declaration, StringAttr instanceName) {
 }
 
 LogicalResult verifyRoutedLogicalStatePlacement(Operation *operation) {
-  auto owner = dyn_cast_or_null<acir::OwningModuleOpInterface>(
+  auto owner = dyn_cast_or_null<OwningModuleOpInterface>(
       operation->getParentOp());
   auto package = owner ? dyn_cast_or_null<mlir::ModuleOp>(
                              owner->getParentOp())
