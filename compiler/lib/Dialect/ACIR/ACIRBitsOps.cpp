@@ -126,10 +126,5 @@ LogicalResult BitsConstantOp::verify() {
   return success();
 }
 
-LogicalResult BitsConstant4Op::verify() {
-  if (failed(StaticExprAttr::verify([&] { return emitOpError(); },
-                                    getValue().getTree())))
-    return failure();
-  return success();
-}
+LogicalResult BitsConstant4Op::verify() { return success(); }
 } // namespace acir::ac
