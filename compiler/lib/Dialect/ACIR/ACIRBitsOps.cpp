@@ -9,8 +9,6 @@ using namespace mlir;
 
 namespace acir::ac {
 
-namespace acir::ac {
-
 LogicalResult BitsUnaryOp::verify() {
   if (getOpcode() != "not")
     return emitOpError() << "opcode must be 'not'";
