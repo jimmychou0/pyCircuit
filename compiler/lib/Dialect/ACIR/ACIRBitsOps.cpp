@@ -118,4 +118,18 @@ LogicalResult BitsResizeOp::verify() {
     return emitOpError() << "trunc must narrow and extension modes must widen";
   return success();
 }
+
+LogicalResult BitsConstantOp::verify() {
+  if (failed(StaticExprAttr::verify([&] { return emitOpError(); },
+                                    getValue().getTree())))
+    return failure();
+  return success();
+}
+
+LogicalResult BitsConstant4Op::verify() {
+  if (failed(StaticExprAttr::verify([&] { return emitOpError(); },
+                                    getValue().getTree())))
+    return failure();
+  return success();
+}
 } // namespace acir::ac
