@@ -1393,7 +1393,7 @@ LogicalResult HardwareAnalysis::verifySourceCheckPlan(
   return success();
 }
 
-LogicalResult detail::verifyDefinitionSourceChecksStandalone(
+LogicalResult verifyDefinitionSourceChecksStandalone(
     ModuleOp definition) {
   return HardwareAnalysis(definition->getParentOfType<mlir::ModuleOp>())
       .verifyDefinitionSourceChecks(definition);

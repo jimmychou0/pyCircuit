@@ -180,7 +180,7 @@ LogicalResult ModuleOp::verifyRegions() {
   // Per-definition source checks run through the shared entry defined with
   // the staged analysis (r9 §5); the preflight catalog and the standalone
   // scope both consult the same synchronous definitions map.
-  return detail::verifyDefinitionSourceChecksStandalone(*this);
+  return verifyDefinitionSourceChecksStandalone(*this);
 }
 LogicalResult RuleOp::verify() {
   if (!isa<ModuleOp>((*this)->getParentOp()) || getName().empty())
