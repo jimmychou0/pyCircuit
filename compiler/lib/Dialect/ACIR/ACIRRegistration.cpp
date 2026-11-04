@@ -7,12 +7,6 @@
 
 #include "pycircuit/Dialect/ACIR/ACIREnums.cpp.inc"
 
-#define GET_ATTRDEF_CLASSES
-#include "pycircuit/Dialect/ACIR/ACIRAttributes.cpp.inc"
-
-#define GET_TYPEDEF_CLASSES
-#include "pycircuit/Dialect/ACIR/ACIRTypes.cpp.inc"
-
 #define GET_OP_CLASSES
 #include "pycircuit/Dialect/ACIR/ACIROps.cpp.inc"
 
@@ -28,14 +22,6 @@ struct ACIRGrammarCacheHost final : acir::ac::GrammarCacheHost {
 
 void acir::ac::ACIRDialect::initialize() {
   addInterfaces<ACIRGrammarCacheHost>();
-  addAttributes<
-#define GET_ATTRDEF_LIST
-#include "pycircuit/Dialect/ACIR/ACIRAttributes.cpp.inc"
-      >();
-  addTypes<
-#define GET_TYPEDEF_LIST
-#include "pycircuit/Dialect/ACIR/ACIRTypes.cpp.inc"
-      >();
   addOperations<
 #define GET_OP_LIST
 #include "pycircuit/Dialect/ACIR/ACIROps.cpp.inc"

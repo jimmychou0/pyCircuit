@@ -1,3 +1,32 @@
+# ACIRCore: generated type/attribute definitions plus the analysis-free
+# grammar and contract TUs below the operations layer (B2 step-2 design
+# r9 §1). GFIRDialect links exactly this plus the shared interfaces.
+add_acir_library(ACIRCore SOURCES
+  ACIRCoreDefs.cpp
+  ACIRPacketTypes.cpp
+  ACIRIdentityContracts.cpp
+  ACIRStaticContracts.cpp
+  SourceAttributeContracts.cpp
+  SourceSyntaxSiteContracts.cpp
+  SourceValueSemantics.cpp
+  ACIRStaticEvaluation.cpp
+  SourceStaticRecordConstructors.cpp
+  SourceStaticDomains.cpp
+  SourceStaticValueContracts.cpp
+  ACIRSourceContracts.cpp
+  "${PYCIRCUIT_SOURCE_DIR}/lib/Compiler/SourceIdentifier.cpp"
+  "${PYCIRCUIT_SOURCE_DIR}/lib/IR/StateDeclarationContracts.cpp"
+)
+add_dependencies(ACIRCore
+  ACIRDialectIncGen
+  ACIRAttributesIncGen
+  ACIRTypesIncGen
+  ACIREnumsIncGen
+)
+target_include_directories(ACIRCore PRIVATE
+  "${PYCIRCUIT_SOURCE_DIR}/lib"
+)
+
 add_acir_library(ACIRDialect SOURCES
   ACIRBitsOps.cpp
   ACIRCollectionOps.cpp
@@ -31,22 +60,11 @@ add_acir_library(ACIRDialect SOURCES
   TransactionalContracts.cpp
   ACIRConstantOps.cpp
   ACIRDialect.cpp
-  ACIRIdentityContracts.cpp
   ACIRMathOps.cpp
   ACIRNumericProofOps.cpp
-  ACIRPacketTypes.cpp
   ACIRRegistration.cpp
-  ACIRSourceContracts.cpp
-  ACIRStaticContracts.cpp
-  ACIRStaticEvaluation.cpp
-  SourceStaticRecordConstructors.cpp
-  SourceStaticDomains.cpp
-  SourceStaticValueContracts.cpp
-  SourceAttributeContracts.cpp
-  SourceValueSemantics.cpp
   SourceEffects.cpp
   SourceRegistrationEntry.cpp
-  SourceSyntaxSiteContracts.cpp
   SourceUnitValidation.cpp
   FinalSourceUnitValidation.cpp
   SourceNamespaceValidation.cpp
@@ -62,6 +80,7 @@ add_dependencies(ACIRDialect
   ACIROpsIncGen
 )
 target_link_libraries(ACIRDialect PUBLIC
+  ACIRCore
   PycircuitStateInterfaces
   LLVMCore
   MLIRArithDialect
