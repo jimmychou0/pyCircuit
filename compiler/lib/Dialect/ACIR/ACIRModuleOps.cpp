@@ -177,8 +177,10 @@ LogicalResult ModuleOp::verifyRegions() {
   });
   if (result.wasInterrupted())
     return failure();
-  return HardwareAnalysis((*this)->getParentOfType<mlir::ModuleOp>())
-      .verifyDefinitionSourceChecks(*this);
+  // Per-definition source checks move to the staged tiers (r9 §5): the
+  // preflight catalog/visit (routed/final) and the routing preparation
+  // (source) both run verifyDefinitionSourceChecks.
+  return success();
 }
 LogicalResult RuleOp::verify() {
   if (!isa<ModuleOp>((*this)->getParentOp()) || getName().empty())
@@ -210,10 +212,10 @@ LogicalResult InstanceOp::verify() {
 }
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &) {
   if (isTransactionalPackage(*this)) return verifyTransactionalOperation(*this);
-  HardwareAnalysis a((*this)->getParentOfType<mlir::ModuleOp>());
-  HardwareBindings b;
-  b.owner = (*this)->getParentOp();
-  return a.verifyInstance(*this, b);
+  // Signature/width verification of the resolved callee moves to the
+  // staged tiers (r9 §5): the preflight visit (routed/final) and the
+  // routing preparation (source).
+  return success();
 }
 LogicalResult YieldOp::verify() {
   if (isTransactionalPackage(*this)) return verifyTransactionalOperation(*this);
