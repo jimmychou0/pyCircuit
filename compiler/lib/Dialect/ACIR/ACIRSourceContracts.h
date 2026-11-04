@@ -32,8 +32,8 @@ mlir::LogicalResult verifyCollectionLocally(mlir::Operation *operation);
 // resolveEnum (analysis); EnumDefinitionView is declared in
 // HardwareAnalysis.h.
 class EnumOp;
-mlir::FailureOr<::acir::ac::EnumDefinitionView>
-validateEnumDeclaration(::acir::ac::EnumOp declaration);
+struct EnumDefinitionView;
+mlir::FailureOr<EnumDefinitionView> validateEnumDeclaration(EnumOp declaration);
 mlir::LogicalResult verifyCollectionLocally(mlir::Operation *operation);
 
 using EmitError = llvm::function_ref<mlir::InFlightDiagnostic()>;
