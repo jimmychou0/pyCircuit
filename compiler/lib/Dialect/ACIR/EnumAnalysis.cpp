@@ -75,6 +75,10 @@ FailureOr<EnumDefinitionView> validateEnumDeclaration(EnumOp declaration,
   return view;
 }
 
+} // namespace acir::ac
+
+namespace acir::ac {
+namespace detail {
 
 LogicalResult verifyEnumValueLocally(Operation *operation) {
   auto package = operation->getParentOfType<mlir::ModuleOp>();
