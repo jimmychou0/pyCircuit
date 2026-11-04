@@ -18,4 +18,8 @@ LogicalResult EnumFromBitsOp::verify() {
   return detail::verifyEnumValueLocally(*this);
 }
 
+
+LogicalResult EnumOp::verify() {
+  return success(succeeded(validateEnumDeclaration(*this, *this)));
+}
 } // namespace acir::ac
