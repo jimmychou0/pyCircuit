@@ -41,34 +41,6 @@ LogicalResult requireOneBit(BitsType type, Operation *operation,
   return success();
 }
 
-FailureOr<bool> equivalentWidths(Operation *site, BitsType lhs, BitsType rhs) {
-  if (areEquivalentHardwareTypes(lhs, rhs)) return true;
-  // Baseline semantics restored (B2 review F2): the staged analysis's
-  // evaluator resolves type_width over closed types, and a structurally
-  // different but numerically equal width stays NON-equivalent (soft)
-  // rather than a verifier failure. The operations target contains the
-  // analysis after the slice-IV revert, so this is a same-target call.
-  detail::SourceCheckBudget budget(HardwareSourceCheckLimits{});
-  budget.setPhase("closed Bits width comparison");
-  detail::SourceCheckBudget::RawDiagnosticScope rawDiagnostics(budget);
-  if (failed(bitsPrepayClosedWidth(Type(lhs), site, budget)) ||
-      failed(bitsPrepayClosedWidth(Type(rhs), site, budget)))
-    return failure();
-  HardwareAnalysis hardware(site->getParentOfType<mlir::ModuleOp>());
-  auto left = hardware.evaluateStatic(lhs.getWidth(), {}, site);
-  if (failed(left)) return false;
-  auto right = hardware.evaluateStatic(rhs.getWidth(), {}, site);
-  if (failed(right)) return false;
-  auto leftInteger = dyn_cast<MathIntAttr>(*left);
-  auto rightInteger = dyn_cast<MathIntAttr>(*right);
-  if (!leftInteger || !rightInteger) return false;
-  llvm::APSInt leftWidth(leftInteger.getCanonicalValue());
-  llvm::APSInt rightWidth(rightInteger.getCanonicalValue());
-  return isPositive(leftWidth) && isPositive(rightWidth) &&
-         leftWidth.getActiveBits() <= 64 && rightWidth.getActiveBits() <= 64 &&
-         leftWidth.getZExtValue() == rightWidth.getZExtValue();
-}
-
 LogicalResult bitsPrepayClosedWidth(
     Type type, Operation *site, detail::SourceCheckBudget &budget) {
   // Width graph prepay from the pre-split implementation: pay the closed
@@ -101,6 +73,34 @@ LogicalResult bitsPrepayClosedWidth(
   if (auto bits = dyn_cast<BitsType>(type))
     return Walk{budget, site}.visit(bits.getWidth(), 0);
   return success();
+}
+
+FailureOr<bool> equivalentWidths(Operation *site, BitsType lhs, BitsType rhs) {
+  if (areEquivalentHardwareTypes(lhs, rhs)) return true;
+  // Baseline semantics restored (B2 review F2): the staged analysis's
+  // evaluator resolves type_width over closed types, and a structurally
+  // different but numerically equal width stays NON-equivalent (soft)
+  // rather than a verifier failure. The operations target contains the
+  // analysis after the slice-IV revert, so this is a same-target call.
+  detail::SourceCheckBudget budget(HardwareSourceCheckLimits{});
+  budget.setPhase("closed Bits width comparison");
+  detail::SourceCheckBudget::RawDiagnosticScope rawDiagnostics(budget);
+  if (failed(bitsPrepayClosedWidth(Type(lhs), site, budget)) ||
+      failed(bitsPrepayClosedWidth(Type(rhs), site, budget)))
+    return failure();
+  HardwareAnalysis hardware(site->getParentOfType<mlir::ModuleOp>());
+  auto left = hardware.evaluateStatic(lhs.getWidth(), {}, site);
+  if (failed(left)) return false;
+  auto right = hardware.evaluateStatic(rhs.getWidth(), {}, site);
+  if (failed(right)) return false;
+  auto leftInteger = dyn_cast<MathIntAttr>(*left);
+  auto rightInteger = dyn_cast<MathIntAttr>(*right);
+  if (!leftInteger || !rightInteger) return false;
+  llvm::APSInt leftWidth(leftInteger.getCanonicalValue());
+  llvm::APSInt rightWidth(rightInteger.getCanonicalValue());
+  return isPositive(leftWidth) && isPositive(rightWidth) &&
+         leftWidth.getActiveBits() <= 64 && rightWidth.getActiveBits() <= 64 &&
+         leftWidth.getZExtValue() == rightWidth.getZExtValue();
 }
 
 LogicalResult requireSameWidth(Operation *operation, BitsType lhs, BitsType rhs,

@@ -7,8 +7,6 @@
 using namespace mlir;
 
 namespace acir::ac {
-namespace {
-
 
 LogicalResult EnumCreateOp::verify() {
   return detail::verifyEnumValueLocally(*this);
