@@ -73,7 +73,7 @@ FailureOr<EnumDefinitionView> validateEnumDeclaration(EnumOp declaration,
     view.members.push_back({name, code});
   }
   return view;
-
+}
 
 namespace detail {
 LogicalResult verifyEnumValueLocally(Operation *operation) {
