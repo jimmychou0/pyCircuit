@@ -65,7 +65,6 @@ add_acir_library(ACIRAnalysis SOURCES
   ACIRSourceControlFlowOps.cpp
   ACIRSystemOps.cpp
   ACIRPacketOps.cpp
-  ACIRBitsOps.cpp
   CollectionAnalysis.cpp
   EnumAnalysis.cpp
   BitsAnalysis.cpp
@@ -89,6 +88,7 @@ target_include_directories(ACIRAnalysis PRIVATE
 )
 
 add_acir_library(ACIRDialect SOURCES
+  ACIRBitsOps.cpp
   CollectionLocalVerifies.cpp
   ACIREnumOps.cpp
   ACIRConstantOps.cpp
