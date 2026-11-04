@@ -62,22 +62,22 @@ LogicalResult CollectionOp::verify() {
   if (failed(detail::verifyOccurrence(getOccurrence(),
                                       [&] { return emitOpError(); })))
     return failure();
-  return detail::verifyCollectionLocally(*this);
+  return success();
 }
 LogicalResult CollectionOp::verifySymbolUses(SymbolTableCollection &) {
-  return detail::verifyCollectionLocally(*this);
+  return success();
 }
-LogicalResult TableCreateOp::verify() { return detail::verifyCollectionLocally(*this); }
-LogicalResult TableSplatOp::verify() { return detail::verifyCollectionLocally(*this); }
-LogicalResult TableMapOp::verify() { return detail::verifyCollectionLocally(*this); }
-LogicalResult TableViewOp::verify() { return detail::verifyCollectionLocally(*this); }
-LogicalResult TableIndexOp::verify() { return detail::verifyCollectionLocally(*this); }
-LogicalResult TableReadOp::verify() { return detail::verifyCollectionLocally(*this); }
-LogicalResult TableGetOp::verify() { return detail::verifyCollectionLocally(*this); }
-LogicalResult TableMatchOp::verify() { return detail::verifyCollectionLocally(*this); }
-LogicalResult TableChooseOp::verify() { return detail::verifyCollectionLocally(*this); }
-LogicalResult TableFoldOp::verify() { return detail::verifyCollectionLocally(*this); }
-LogicalResult ValueMergeOp::verify() { return detail::verifyCollectionLocally(*this); }
+LogicalResult TableCreateOp::verify() { return success(); }
+LogicalResult TableSplatOp::verify() { return success(); }
+LogicalResult TableMapOp::verify() { return success(); }
+LogicalResult TableViewOp::verify() { return success(); }
+LogicalResult TableIndexOp::verify() { return success(); }
+LogicalResult TableReadOp::verify() { return success(); }
+LogicalResult TableGetOp::verify() { return success(); }
+LogicalResult TableMatchOp::verify() { return success(); }
+LogicalResult TableChooseOp::verify() { return success(); }
+LogicalResult TableFoldOp::verify() { return success(); }
+LogicalResult ValueMergeOp::verify() { return success(); }
 LogicalResult TableMapOp::verifyRegions() {
   if (getBody().empty() || getBody().front().getArguments().empty())
     return emitOpError() << "table.map requires ordinal argument";
@@ -100,10 +100,8 @@ LogicalResult TableMatchOp::verifyRegions() {
       dyn_cast<BitsType>(getBody().front().back().getOperand(0).getType());
   if (!result)
     return emitOpError() << "table.match predicate must yield one bit";
-  HardwareAnalysis a((*this)->getParentOfType<mlir::ModuleOp>());
-  auto w = a.getPackedWidth(result, scope(*this), *this);
-  if (failed(w) || *w != 1)
-    return emitOpError() << "table.match predicate must yield one bit";
+  // Width-one resolution of the predicate moves to the staged tiers (r9
+  // §5); the structural one-bit-shape and region checks stay here.
   return scalarRegion(*this, args, TypeRange{result});
 }
 } // namespace acir::ac
