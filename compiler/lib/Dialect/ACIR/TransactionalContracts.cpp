@@ -521,4 +521,8 @@ LogicalResult verifyTransactionalPackage(mlir::ModuleOp package) {
     if (isa<ModuleOp, ModuleImportOp>(declaration) && failed(summarize(&declaration))) return failure();
   return success();
 }
+LogicalResult detail::verifyTransactionalPackageAttribute(
+    mlir::ModuleOp package) {
+  return verifyTransactionalPackage(package);
+}
 } // namespace acir::ac

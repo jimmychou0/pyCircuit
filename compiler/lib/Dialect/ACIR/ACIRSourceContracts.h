@@ -240,6 +240,13 @@ mlir::LogicalResult verifyStateRef(mlir::DictionaryAttr value,
 // schemas. Callers must verify the enclosing Occurrence or StateRef first.
 int compareClosedSourceStructure(mlir::Attribute left, mlir::Attribute right);
 
+// Bound attribute-hook halves invoked by the ops-layer dialect hook
+// (B2 step-2 design r9): the semantic walks live analysis-side.
+mlir::LogicalResult
+verifyTransactionalPackageAttribute(mlir::ModuleOp package);
+mlir::LogicalResult
+verifyEntryBoundaryAttributeBound(mlir::Operation *operation,
+                                  mlir::Attribute attribute);
 } // namespace acir::ac::detail
 
 #endif // ACIR_LIB_DIALECT_ACIR_ACIRSOURCECONTRACTS_H
