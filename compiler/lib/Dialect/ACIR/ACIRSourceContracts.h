@@ -247,6 +247,22 @@ verifyTransactionalPackageAttribute(mlir::ModuleOp package);
 mlir::LogicalResult
 verifyEntryBoundaryAttributeBound(mlir::Operation *operation,
                                   mlir::Attribute attribute);
+// Shared bits width/grammar entries (r9 §5): analysis-hosted, called by
+// the operations-layer bits verifiers.
+class BitsType;
+std::optional<llvm::APSInt> bitsLiteralInteger(struct StaticExprAttr expression);
+bool bitsLiteralPositive(const llvm::APSInt &value);
+mlir::FailureOr<bool> bitsWidthsEquivalent(mlir::Operation *site,
+                                           ::acir::ac::BitsType lhs,
+                                           ::acir::ac::BitsType rhs);
+mlir::LogicalResult
+bitsRequireSameWidth(mlir::Operation *operation, ::acir::ac::BitsType lhs,
+                     ::acir::ac::BitsType rhs, ::acir::ac::BitsType result);
+mlir::LogicalResult
+bitsRequireOneBit(::acir::ac::BitsType type, mlir::Operation *operation,
+                  llvm::StringRef description);
+bool bitsOpcodeClosed(llvm::StringRef value,
+                      llvm::ArrayRef<llvm::StringRef> choices);
 } // namespace acir::ac::detail
 
 #endif // ACIR_LIB_DIALECT_ACIR_ACIRSOURCECONTRACTS_H
