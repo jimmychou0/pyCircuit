@@ -18,7 +18,6 @@ namespace acir::ac {
 /// The empty array means no authored sequence; present sequences are nonempty.
 mlir::FailureOr<mlir::ArrayAttr> getSystemSamples(mlir::Operation *declaration);
 
-enum class HardwareResetSemantics { Strict, IfOne };
 /// Read the closed policy on the single root selection and reject overrides.
 /// A saved package without the attribute means strict; this never mutates IR.
 mlir::FailureOr<HardwareResetSemantics>
