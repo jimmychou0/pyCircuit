@@ -19,6 +19,14 @@ struct HardwareBindings;
 class ModuleImportOp;
 } // namespace acir::ac
 
+namespace acir::ac {
+class EnumOp;
+struct EnumDefinitionView;
+/// Enum declaration grammar validation shared by EnumOp::verify (ops) and
+/// resolveEnum (analysis).
+mlir::FailureOr<EnumDefinitionView> validateEnumDeclaration(EnumOp declaration);
+} // namespace acir::ac
+
 namespace acir::ac::detail {
 // Table shape grammar shared by the type verifier (core) and the
 // collection operation verifiers (ops layer).
@@ -31,9 +39,7 @@ mlir::LogicalResult verifyCollectionLocally(mlir::Operation *operation);
 // Enum declaration grammar validation shared by EnumOp::verify (ops) and
 // resolveEnum (analysis); EnumDefinitionView is declared in
 // HardwareAnalysis.h.
-class EnumOp;
-struct EnumDefinitionView;
-mlir::FailureOr<EnumDefinitionView> validateEnumDeclaration(EnumOp declaration);
+
 mlir::LogicalResult verifyCollectionLocally(mlir::Operation *operation);
 
 using EmitError = llvm::function_ref<mlir::InFlightDiagnostic()>;

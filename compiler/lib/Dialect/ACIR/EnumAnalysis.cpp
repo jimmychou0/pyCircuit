@@ -8,7 +8,7 @@
 using namespace mlir;
 
 namespace acir::ac {
-namespace detail {
+
 FailureOr<EnumDefinitionView> validateEnumDeclaration(EnumOp declaration,
                                            Operation *site) {
   auto error = [&] { return site->emitOpError(); };
