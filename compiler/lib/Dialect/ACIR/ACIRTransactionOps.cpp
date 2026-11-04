@@ -51,7 +51,7 @@ LogicalResult occurrence(Operation *operation) {
 
 LogicalResult namedDeclaration(Operation *operation, StringAttr name) {
   // Single shared leaf implementation for source and routed declarations.
-  return acir::verifyNamedLogicalDeclaration(operation, name);
+  return verifyNamedLogicalDeclaration(operation, name);
 }
 
 LogicalResult predicate(const HardwareAnalysis &analysis, Value value,

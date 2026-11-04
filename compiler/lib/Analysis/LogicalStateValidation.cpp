@@ -303,7 +303,7 @@ LogicalResult verifyLogicalStateUpdateBinding(
   if (failed(verifyLogicalStateUpdateStructure(operation)))
     return failure();
   auto package = operation->getParentOfType<mlir::ModuleOp>();
-  if (failed(acir::verifyRoutedLogicalStatePlacement(operation)))
+  if (failed(verifyRoutedLogicalStatePlacement(operation)))
     return failure();
   if (!operation->getAttrs().empty())
     return operation->emitOpError()
