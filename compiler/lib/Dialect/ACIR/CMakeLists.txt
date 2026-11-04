@@ -1,35 +1,4 @@
 add_acir_library(ACIRDialect SOURCES
-  ACIRConstantOps.cpp
-  ACIRDialect.cpp
-  ACIRIdentityContracts.cpp
-  ACIRMathOps.cpp
-  ACIRNumericProofOps.cpp
-  ACIRPacketTypes.cpp
-  ACIRRegistration.cpp
-  ACIRSourceContracts.cpp
-  ACIRStaticContracts.cpp
-  ACIRStaticEvaluation.cpp
-  SourceStaticRecordConstructors.cpp
-  SourceStaticDomains.cpp
-  SourceStaticValueContracts.cpp
-  SourceAttributeContracts.cpp
-  SourceValueSemantics.cpp
-  SourceEffects.cpp
-  SourceRegistrationEntry.cpp
-  SourceSyntaxSiteContracts.cpp
-  SourceUnitValidation.cpp
-  FinalSourceUnitValidation.cpp
-  SourceNamespaceValidation.cpp
-  HardwareGrantProof.cpp
-  "${PYCIRCUIT_SOURCE_DIR}/lib/Compiler/SourceIdentifier.cpp"
-  "${PYCIRCUIT_SOURCE_DIR}/lib/IR/StateDeclarationContracts.cpp"
-)
-# The staged common analysis layer: every HardwareAnalysis-based verifier,
-# plan builder and source analysis consumes the operation/registration layer
-# below and the shared state interfaces. GFIR links only ACIRDialect, so a
-# reverse dependency from GFIR onto this analysis/HWIR layer is impossible
-# at the build level (B1-boundary.md step 4).
-add_acir_library(ACIRAnalysis SOURCES
   ACIRBitsOps.cpp
   ACIRCollectionOps.cpp
   ACIREnumOps.cpp
@@ -60,22 +29,32 @@ add_acir_library(ACIRAnalysis SOURCES
   SourceTransactionStateAnalysis.cpp
   SourceTransactionSummary.cpp
   TransactionalContracts.cpp
+  ACIRConstantOps.cpp
+  ACIRDialect.cpp
+  ACIRIdentityContracts.cpp
+  ACIRMathOps.cpp
+  ACIRNumericProofOps.cpp
+  ACIRPacketTypes.cpp
+  ACIRRegistration.cpp
+  ACIRSourceContracts.cpp
+  ACIRStaticContracts.cpp
+  ACIRStaticEvaluation.cpp
+  SourceStaticRecordConstructors.cpp
+  SourceStaticDomains.cpp
+  SourceStaticValueContracts.cpp
+  SourceAttributeContracts.cpp
+  SourceValueSemantics.cpp
+  SourceEffects.cpp
+  SourceRegistrationEntry.cpp
+  SourceSyntaxSiteContracts.cpp
+  SourceUnitValidation.cpp
+  FinalSourceUnitValidation.cpp
+  SourceNamespaceValidation.cpp
+  HardwareGrantProof.cpp
+  "${PYCIRCUIT_SOURCE_DIR}/lib/Compiler/SourceIdentifier.cpp"
   "${PYCIRCUIT_SOURCE_DIR}/lib/Analysis/LogicalStateValidation.cpp"
+  "${PYCIRCUIT_SOURCE_DIR}/lib/IR/StateDeclarationContracts.cpp"
 )
-add_dependencies(ACIRAnalysis
-  ACIRDialectIncGen
-  ACIRAttributesIncGen
-  ACIRTypesIncGen
-  ACIROpsIncGen
-)
-target_link_libraries(ACIRAnalysis PUBLIC
-  ACIRDialect
-  PycircuitStateInterfaces
-)
-target_include_directories(ACIRAnalysis PRIVATE
-  "${PYCIRCUIT_SOURCE_DIR}/lib"
-)
-
 add_dependencies(ACIRDialect
   ACIRDialectIncGen
   ACIRAttributesIncGen
