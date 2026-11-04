@@ -19,7 +19,8 @@
 namespace {
 // Model owning the grammar-memo storage; lifetime = dialect = context.
 struct ACIRGrammarCacheHost final : acir::ac::GrammarCacheHost {
-  using acir::ac::GrammarCacheHost::GrammarCacheHost;
+  explicit ACIRGrammarCacheHost(mlir::Dialect *dialect)
+      : acir::ac::GrammarCacheHost(dialect) {}
   acir::ac::GrammarMemoCache &cache() final { return storage; }
   acir::ac::GrammarMemoCache storage;
 };
