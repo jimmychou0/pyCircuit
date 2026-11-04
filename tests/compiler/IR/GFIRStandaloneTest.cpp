@@ -10,10 +10,10 @@
 // target (plus gtest). It detects UNDECLARED link dependencies — any GFIR
 // object whose symbols live in an archive this executable does not link
 // fails here at link time. It cannot bound closure GROWTH: an explicitly
-// added upper-layer dependency on GFIRDialect would still link. Today
-// GFIRDialect transitively links the ACIR monolith by design; step 2 of
-// the layering plan narrows that closure, and this probe's expectations
-// tighten with it (B1/B2 boundary record).
+// added upper-layer dependency on GFIRDialect would still link. GFIRDialect
+// links ACIRCore + the shared interfaces; the configure-time
+// pycircuit_verify_layering walk (now accumulating every visited target)
+// guards the transitive direction (B1/B2 boundary record).
 namespace {
 
 TEST(GFIRStandalone, LoadsAndResolvesItsOperations) {

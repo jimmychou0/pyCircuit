@@ -1,7 +1,9 @@
 // Collection/table member resolution and verification (B2 step-2 design
 // r9): the HardwareAnalysis members, their helper cluster and the common
-// verification entry live here on the analysis side; the op-local verify
-// bodies stay in CollectionLocalVerifies.cpp.
+// verification entry; the op-local verify bodies in
+// CollectionLocalVerifies.cpp call them through the contracts header.
+// Compiled in the operations target until the r9 §5 reroutes sever the
+// registration knot (slice-IV record).
 #include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
 #include "ACIRSourceContracts.h"
 #include "pycircuit/Dialect/ACIR/ACIROps.h"

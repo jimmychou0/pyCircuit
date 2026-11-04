@@ -4,10 +4,9 @@
 // archive stays self-contained below the analysis layer.
 #include "pycircuit/Dialect/ACIR/ACIROps.h"
 #include "ACIRSourceContracts.h"
-#include "ACIRStaticEvaluation.h"
 #include "IR/StateDeclarationContracts.h"
 #include "Dialect/ACIR/SourceCheckBudget.h"
-#include <thread>
+#include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
 
 using namespace mlir;
 
@@ -44,11 +43,22 @@ LogicalResult requireOneBit(BitsType type, Operation *operation,
 
 FailureOr<bool> equivalentWidths(Operation *site, BitsType lhs, BitsType rhs) {
   if (areEquivalentHardwareTypes(lhs, rhs)) return true;
-  auto left = detail::evaluateSourceStaticExpr(
-      lhs.getWidth(), site, [&] { return site->emitOpError(); });
-  auto right = detail::evaluateSourceStaticExpr(
-      rhs.getWidth(), site, [&] { return site->emitOpError(); });
-  if (failed(left) || failed(right)) return failure();
+  // Baseline semantics restored (B2 review F2): the staged analysis's
+  // evaluator resolves type_width over closed types, and a structurally
+  // different but numerically equal width stays NON-equivalent (soft)
+  // rather than a verifier failure. The operations target contains the
+  // analysis after the slice-IV revert, so this is a same-target call.
+  detail::SourceCheckBudget budget(HardwareSourceCheckLimits{});
+  budget.setPhase("closed Bits width comparison");
+  detail::SourceCheckBudget::RawDiagnosticScope rawDiagnostics(budget);
+  if (failed(bitsPrepayClosedWidth(Type(lhs), site, budget)) ||
+      failed(bitsPrepayClosedWidth(Type(rhs), site, budget)))
+    return failure();
+  HardwareAnalysis hardware(site->getParentOfType<mlir::ModuleOp>());
+  auto left = hardware.evaluateStatic(lhs.getWidth(), {}, site);
+  if (failed(left)) return false;
+  auto right = hardware.evaluateStatic(rhs.getWidth(), {}, site);
+  if (failed(right)) return false;
   auto leftInteger = dyn_cast<MathIntAttr>(*left);
   auto rightInteger = dyn_cast<MathIntAttr>(*right);
   if (!leftInteger || !rightInteger) return false;
@@ -57,6 +67,40 @@ FailureOr<bool> equivalentWidths(Operation *site, BitsType lhs, BitsType rhs) {
   return isPositive(leftWidth) && isPositive(rightWidth) &&
          leftWidth.getActiveBits() <= 64 && rightWidth.getActiveBits() <= 64 &&
          leftWidth.getZExtValue() == rightWidth.getZExtValue();
+}
+
+LogicalResult bitsPrepayClosedWidth(
+    Type type, Operation *site, detail::SourceCheckBudget &budget) {
+  // Width graph prepay from the pre-split implementation: pay the closed
+  // width expression tree before evaluation (depth/repetition accounted).
+  struct Walk {
+    detail::SourceCheckBudget &budget;
+    Operation *site;
+    LogicalResult visit(Attribute attr, unsigned depth) {
+      if (depth > 128)
+        return site->emitOpError() << "width expression depth exceeded";
+      if (failed(budget.debit(1, site))) return failure();
+      if (auto expr = dyn_cast<StaticExprAttr>(attr)) {
+        auto tree = expr.getTree();
+        auto kind = tree.getAs<StringAttr>("kind");
+        if (kind && kind.getValue() == "type_width") {
+          auto ref = tree.getAs<DictionaryAttr>("ref");
+          auto owner = ref ? ref.getAs<FlatSymbolRefAttr>("owner") : FlatSymbolRefAttr();
+          auto name = ref ? ref.getAs<StringAttr>("name") : StringAttr();
+          if (!owner || !name) return success();
+          return success();
+        }
+        return visit(tree, depth + 1);
+      }
+      if (auto array = dyn_cast<ArrayAttr>(attr))
+        for (Attribute child : array)
+          if (failed(visit(child, depth + 1))) return failure();
+      return success();
+    }
+  };
+  if (auto bits = dyn_cast<BitsType>(type))
+    return Walk{budget, site}.visit(bits.getWidth(), 0);
+  return success();
 }
 
 LogicalResult requireSameWidth(Operation *operation, BitsType lhs, BitsType rhs,

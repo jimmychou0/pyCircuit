@@ -22,6 +22,7 @@ add_dependencies(ACIRCore
   ACIRDialectIncGen
   ACIRAttributesIncGen
   ACIRTypesIncGen
+  ACIROpsIncGen
 )
 target_link_libraries(ACIRCore PUBLIC MLIRFuncDialect)
 target_include_directories(ACIRCore PUBLIC
@@ -77,10 +78,6 @@ add_acir_library(ACIRDialect SOURCES
   SourceEffects.cpp
   SourceRegistrationEntry.cpp
   HardwareGrantProof.cpp
-  "${PYCIRCUIT_SOURCE_DIR}/lib/Compiler/SourceIdentifier.cpp"
-  "${PYCIRCUIT_SOURCE_DIR}/lib/Analysis/LogicalStateValidation.cpp"
-  "${PYCIRCUIT_SOURCE_DIR}/lib/Analysis/LogicalStateValidation.cpp"
-  "${PYCIRCUIT_SOURCE_DIR}/lib/IR/StateDeclarationContracts.cpp"
 )
 add_dependencies(ACIRDialect
   ACIRDialectIncGen

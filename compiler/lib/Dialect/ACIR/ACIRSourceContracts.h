@@ -34,13 +34,10 @@ namespace acir::ac::detail {
 // collection operation verifiers (ops layer).
 mlir::LogicalResult shapeSchema(mlir::ArrayAttr shape,
                                 llvm::function_ref<mlir::InFlightDiagnostic()> error);
-// Local verification entries shared across the ops/analysis split (B2
-// step-2 design r9): analysis-hosted, called by the ops-side verifiers.
+// Shared local verification entries (B2 step-2 design r9): hosted with
+// the analysis implementations, called by the operation verifiers.
 mlir::LogicalResult verifyEnumValueLocally(mlir::Operation *operation);
 mlir::LogicalResult verifyCollectionLocally(mlir::Operation *operation);
-// Enum declaration grammar validation shared by EnumOp::verify (ops) and
-// resolveEnum (analysis); EnumDefinitionView is declared in
-// HardwareAnalysis.h.
 
 mlir::LogicalResult verifyCollectionLocally(mlir::Operation *operation);
 
@@ -241,13 +238,6 @@ mlir::LogicalResult verifyStateRef(mlir::DictionaryAttr value,
 // schemas. Callers must verify the enclosing Occurrence or StateRef first.
 int compareClosedSourceStructure(mlir::Attribute left, mlir::Attribute right);
 
-// Bound attribute-hook halves invoked by the ops-layer dialect hook
-// (B2 step-2 design r9): the semantic walks live analysis-side.
-mlir::LogicalResult
-verifyTransactionalPackageAttribute(mlir::ModuleOp package);
-mlir::LogicalResult
-verifyEntryBoundaryAttributeBound(mlir::Operation *operation,
-                                  mlir::Attribute attribute);
 
 } // namespace acir::ac::detail
 

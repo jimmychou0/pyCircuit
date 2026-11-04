@@ -27,9 +27,9 @@ TEST(ACIRCoreStandalone, CoreTargetLinks) { SUCCEED(); }
 #else
 // Ops-layer containment probe: this executable links ONLY the ACIRDialect
 // target. Loading the dialect and resolving registered operations must
-// pull no symbol from a layer above the operations archive (B2 step-2
-// design r9 §4); the configure-time verify-layering walk additionally
-// asserts the resolved interface closure carries no analysis/HWIR target.
+// pull no symbol from a target above the operations layer that is not on
+// its link line (B2 step-2 design r9 §4); the configure-time
+// pycircuit_verify_layering walk asserts the transitive closure.
 namespace {
 TEST(ACIROpsStandalone, LoadsAndResolvesItsOperations) {
   mlir::DialectRegistry registry;

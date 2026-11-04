@@ -1,6 +1,6 @@
 // Collection operation local verifiers (B2 step-2 design r9): these stay
-// in the operations layer; the shared member implementations live in
-// CollectionAnalysis.cpp on the analysis side.
+// with the operations layer; the shared member implementations live in
+// CollectionAnalysis.cpp.
 #include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
 #include "ACIRSourceContracts.h"
 #include "pycircuit/Dialect/ACIR/ACIROps.h"

@@ -1,6 +1,8 @@
 // Enum value resolution and verification (B2 step-2 design r9): the
-// HardwareAnalysis members and the value-verification entry live on the
-// analysis side; the op-local verifiers stay in ACIREnumOps.cpp.
+// HardwareAnalysis members and the shared value-verification entry; the
+// op-local verifiers in ACIREnumOps.cpp call them through the contracts
+// header. Compiled in the operations target until the r9 §5 reroutes
+// sever the registration knot (slice-IV record).
 #include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
 #include "llvm/ADT/StringSet.h"
 #include "pycircuit/Dialect/ACIR/ACIROps.h"

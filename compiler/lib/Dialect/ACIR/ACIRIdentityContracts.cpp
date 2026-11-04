@@ -1,6 +1,5 @@
 #include "ACIRSourceContracts.h"
 #include "mlir/IR/MLIRContext.h"
-#include "pycircuit/Dialect/ACIR/ACIRDialect.h"
 #include "pycircuit/Dialect/ACIR/GrammarCacheHost.h"
 
 #include "llvm/ADT/APSInt.h"
