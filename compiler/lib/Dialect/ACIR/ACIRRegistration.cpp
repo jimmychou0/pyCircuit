@@ -7,6 +7,12 @@
 
 #include "pycircuit/Dialect/ACIR/ACIREnums.cpp.inc"
 
+#define GET_ATTRDEF_CLASSES
+#include "pycircuit/Dialect/ACIR/ACIRAttributes.cpp.inc"
+
+#define GET_TYPEDEF_CLASSES
+#include "pycircuit/Dialect/ACIR/ACIRTypes.cpp.inc"
+
 #define GET_OP_CLASSES
 #include "pycircuit/Dialect/ACIR/ACIROps.cpp.inc"
 
