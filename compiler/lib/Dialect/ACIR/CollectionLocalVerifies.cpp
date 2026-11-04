@@ -10,6 +10,15 @@ using namespace mlir;
 namespace acir::ac {
 namespace {
 
+bool equivalentTypes(TypeRange lhs, TypeRange rhs) {
+  if (lhs.size() != rhs.size())
+    return false;
+  for (auto [left, right] : llvm::zip(lhs, rhs))
+    if (!areEquivalentHardwareTypes(left, right))
+      return false;
+  return true;
+}
+
 HardwareBindings scope(Operation *op) {
   HardwareBindings b;
   b.owner = op->getParentOfType<ModuleOp>();
