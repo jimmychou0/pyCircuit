@@ -4,13 +4,30 @@
 // type verifier, relocated to the core TU) stay below.
 #include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
 #include "Dialect/ACIR/SourceCheckBudget.h"
-#include <thread>
 #include "pycircuit/Dialect/ACIR/ACIROps.h"
+#include <thread>
 
 using namespace mlir;
 
 namespace acir::ac {
 namespace {
+
+std::optional<llvm::APSInt> literalInteger(StaticExprAttr expression) {
+  if (!expression)
+    return std::nullopt;
+  DictionaryAttr tree = expression.getTree();
+  auto kind = tree ? tree.getAs<StringAttr>("kind") : StringAttr();
+  auto value = tree ? tree.getAs<DictionaryAttr>("value") : DictionaryAttr();
+  auto valueKind = value ? value.getAs<StringAttr>("kind") : StringAttr();
+  auto integer = value ? value.getAs<MathIntAttr>("value") : MathIntAttr();
+  if (!kind || kind.getValue() != "literal" || !valueKind ||
+      valueKind.getValue() != "integer" || !integer)
+    return std::nullopt;
+  return llvm::APSInt(integer.getCanonicalValue());
+}
+bool isPositive(const llvm::APSInt &value) {
+  return !value.isNegative() && !value.isZero();
+}
 
 LogicalResult prepayClosedWidth(
     llvm::PointerUnion<Attribute, Type> node, Operation *site,
@@ -111,6 +128,7 @@ LogicalResult requireSameWidth(Operation *operation, BitsType lhs, BitsType rhs,
   return success();
 }
 
+} // namespace
 
 LogicalResult BitsUnaryOp::verify() {
   if (getOpcode() != "not")
@@ -221,6 +239,4 @@ LogicalResult BitsResizeOp::verify() {
     return emitOpError() << "trunc must narrow and extension modes must widen";
   return success();
 }
-
-} // namespace
 } // namespace acir::ac
