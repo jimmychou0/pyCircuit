@@ -3,6 +3,7 @@
 
 #include "pycircuit/Dialect/ACIR/ACIRTypes.h"
 #include "pycircuit/Interfaces/LogicalStateInterfaces.h"
+#include "pycircuit/Interfaces/ModuleChildInterfaces.h"
 #include "mlir/Bytecode/BytecodeOpInterface.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/OpDefinition.h"
