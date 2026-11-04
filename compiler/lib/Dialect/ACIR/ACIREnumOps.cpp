@@ -18,7 +18,7 @@ HardwareBindings scope(Operation *operation) {
 } // namespace
 
 LogicalResult EnumOp::verify() {
-  return success(succeeded(validateEnumDeclaration(*this)));
+  return success(succeeded(validateEnumDeclaration(*this, *this)));
 }
 
 LogicalResult EnumCreateOp::verify() {

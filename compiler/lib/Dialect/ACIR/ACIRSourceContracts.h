@@ -24,7 +24,8 @@ class EnumOp;
 struct EnumDefinitionView;
 /// Enum declaration grammar validation shared by EnumOp::verify (ops) and
 /// resolveEnum (analysis).
-mlir::FailureOr<EnumDefinitionView> validateEnumDeclaration(EnumOp declaration);
+mlir::FailureOr<EnumDefinitionView>
+validateEnumDeclaration(EnumOp declaration, mlir::Operation *site);
 } // namespace acir::ac
 
 namespace acir::ac::detail {
