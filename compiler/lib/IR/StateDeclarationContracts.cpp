@@ -231,4 +231,4 @@ LogicalResult verifyPayloadConstraintShape(Operation *site, Attribute raw,
   return success();
 }
 
-} // namespace acir
+} // namespace acir::ac
