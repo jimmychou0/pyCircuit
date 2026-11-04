@@ -1,6 +1,7 @@
 #include "mlir/IR/Diagnostics.h"
 #include "pycircuit/Dialect/ACIR/ACIRTypes.h"
 using namespace mlir;
+namespace acir::ac {
 namespace {
 std::optional<llvm::APSInt> literalInteger(StaticExprAttr expression) {
   if (!expression)
@@ -19,6 +20,7 @@ bool isPositive(const llvm::APSInt &value) {
   return !value.isNegative() && !value.isZero();
 }
 } // namespace
+} // namespace acir::ac
 
 namespace acir::ac {
 
@@ -47,6 +49,8 @@ LogicalResult shapeSchema(ArrayAttr shape,
   }
   return success();
 }
+} // namespace detail
+
 LogicalResult StructType::verify(llvm::function_ref<InFlightDiagnostic()> error,
                                  StringAttr name) {
   if (!name || name.getValue().empty() || name.getValue().contains('\0'))
@@ -101,8 +105,6 @@ LogicalResult EnumType::verify(llvm::function_ref<InFlightDiagnostic()> error,
     return error() << "enum type requires a nonempty nominal name";
   return success();
 }
-
-} // namespace detail
 
 LogicalResult TableType::verify(function_ref<InFlightDiagnostic()> error,
                                 ArrayAttr shape, Type elementType) {
