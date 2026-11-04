@@ -66,7 +66,7 @@ add_dependencies(ACIRAnalysis
   ACIRDialectIncGen
   ACIRAttributesIncGen
   ACIRTypesIncGen
-  ACOpsIncGen
+  ACIROpsIncGen
 )
 target_link_libraries(ACIRAnalysis PUBLIC
   ACIRDialect
