@@ -5,6 +5,7 @@
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/IR/Verifier.h"
 #include "pycircuit/Dialect/ACIR/ACIROps.h"
+#include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
 
@@ -168,6 +169,34 @@ FailureOr<SourceUnitStructure> verifyStructure(mlir::ModuleOp unit, bool body,
     return failure();
   if (failed(mlir::verify(unit)))
     return failure();
+  // Source-tier semantic entry (B2 step-2 design r9 §4): after native
+  // structure verification, re-run the enum/collection value checks in
+  // their symbolic-tolerant mode (requireResolved=false — exactly what the
+  // native verifiers passed). Definite facts are checked here; obligations
+  // that need actual integer bindings are DEFERRED to the binding tiers
+  // (routing preparation / routed package verification). This keeps every
+  // rejection for source packages while the native verifiers' reroute (§5)
+  // moves their analysis-dependent calls out of the operations archive.
+  {
+    HardwareAnalysis analysis(unit);
+    HardwareBindings bindings;
+    auto semanticWalk = unit.walk([&](Operation *operation) {
+      bool enumFamily = isa<EnumCreateOp, EnumToBitsOp, EnumFromBitsOp>(operation);
+      bool collectionFamily = isa<CollectionOp, TableCreateOp, TableSplatOp,
+          TableMapOp, TableViewOp, TableIndexOp, TableReadOp, TableGetOp,
+          TableMatchOp, TableChooseOp, TableFoldOp, ValueMergeOp>(operation);
+      LogicalResult result = success();
+      if (enumFamily)
+        result = analysis.verifyEnumValueOperation(operation, bindings);
+      else if (collectionFamily)
+        result = analysis.verifyCollectionOperation(operation, bindings);
+      if (failed(result))
+        return WalkResult::interrupt();
+      return WalkResult::advance();
+    });
+    if (semanticWalk.wasInterrupted())
+      return failure();
+  }
   auto kind = unit->getAttrOfType<StringAttr>("ac.unit_kind");
   if (body && (!kind || (kind.getValue() != "implementation" &&
                          kind.getValue() != "declarations")))
