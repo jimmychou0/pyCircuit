@@ -12,6 +12,18 @@ using namespace mlir;
 namespace acir::ac {
 namespace {
 
+LogicalResult requireSameWidth(Operation *operation, BitsType lhs, BitsType rhs,
+                               BitsType result) {
+  auto operands = equivalentWidths(operation, lhs, rhs);
+  if (failed(operands)) return failure();
+  auto output = equivalentWidths(operation, lhs, result);
+  if (failed(output)) return failure();
+  if (!*operands || !*output)
+    return operation->emitOpError()
+           << "operands and result must have the same symbolic width";
+  return success();
+}
+
 LogicalResult prepayClosedWidth(
     llvm::PointerUnion<Attribute, Type> node, Operation *site,
     detail::SourceCheckBudget &budget, unsigned depth = 0,

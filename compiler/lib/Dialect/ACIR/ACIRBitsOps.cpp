@@ -36,17 +36,6 @@ bool isPositive(const llvm::APSInt &value) {
 // Invocation results can have canonical widths while their callers retain a
 // closed authored expression. Prepay the graph before using the shared evaluator.
 
-LogicalResult requireSameWidth(Operation *operation, BitsType lhs, BitsType rhs,
-                               BitsType result) {
-  auto operands = equivalentWidths(operation, lhs, rhs);
-  if (failed(operands)) return failure();
-  auto output = equivalentWidths(operation, lhs, result);
-  if (failed(output)) return failure();
-  if (!*operands || !*output)
-    return operation->emitOpError()
-           << "operands and result must have the same symbolic width";
-  return success();
-}
 
 bool isClosed(StringRef value, ArrayRef<StringRef> choices) {
   return llvm::is_contained(choices, value);
