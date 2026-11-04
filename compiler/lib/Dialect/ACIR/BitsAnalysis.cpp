@@ -47,12 +47,12 @@ LogicalResult bitsPrepayClosedWidth(
   if (failed(pay(1))) return failure();
   bool valid = true;
   auto attribute = [&](Attribute value) {
-    if (valid && value && failed(prepayClosedWidth(
+    if (valid && value && failed(bitsPrepayClosedWidth(
                              value, site, budget, depth + 1, repetitions)))
       valid = false;
   };
   auto type = [&](Type value) {
-    if (valid && value && failed(prepayClosedWidth(
+    if (valid && value && failed(bitsPrepayClosedWidth(
                              value, site, budget, depth + 1, repetitions)))
       valid = false;
   };
@@ -94,8 +94,8 @@ FailureOr<bool> bitsWidthsEquivalent(Operation *site, BitsType lhs, BitsType rhs
   detail::SourceCheckBudget budget(HardwareSourceCheckLimits{});
   budget.setPhase("closed Bits width comparison");
   detail::SourceCheckBudget::RawDiagnosticScope rawDiagnostics(budget);
-  if (failed(prepayClosedWidth(Type(lhs), site, budget)) ||
-      failed(prepayClosedWidth(Type(rhs), site, budget)))
+  if (failed(bitsPrepayClosedWidth(Type(lhs), site, budget)) ||
+      failed(bitsPrepayClosedWidth(Type(rhs), site, budget)))
     return failure();
   // No package scan, defaults or instance facts belong in this fallback.
   // Unresolved/nominal-dependent widths retain the symbolic comparison above.
