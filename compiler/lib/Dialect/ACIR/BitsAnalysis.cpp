@@ -174,6 +174,8 @@ LogicalResult BitsConstant4Op::verify() {
 
 } // namespace
 
+namespace acir::ac {
+
 LogicalResult BitsUnaryOp::verify() {
   if (getOpcode() != "not")
     return emitOpError() << "opcode must be 'not'";
