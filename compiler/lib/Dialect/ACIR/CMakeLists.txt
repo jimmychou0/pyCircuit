@@ -32,20 +32,12 @@ target_include_directories(ACIRCore PRIVATE
   "${PYCIRCUIT_SOURCE_DIR}/lib"
 )
 
-add_acir_library(ACIRDialect SOURCES
-  ACIRBitsOps.cpp
-  CollectionAnalysis.cpp
-  CollectionLocalVerifies.cpp
-  ACIREnumOps.cpp
-  EnumAnalysis.cpp
-  ACIRModuleContracts.cpp
-  ACIRModuleOps.cpp
-  ACIRPacketOps.cpp
-  ACIRQueueOps.cpp
-  ACIRSourceControlFlowOps.cpp
-  ACIRSystemOps.cpp
-  ACIRTransactionOps.cpp
-  EntryBoundary.cpp
+# The staged common analysis layer (B2 step-2 design r9 §5): every
+# HardwareAnalysis-based TU. ACIRDialect (operations) links ACIRCore and
+# stays BELOW this target; nothing in ACIRAnalysis may be referenced from
+# ACIRDialect or ACIRCore (enforced by pycircuit_verify_layering and the
+# ops/core probes).
+add_acir_library(ACIRAnalysis SOURCES
   HardwareAnalysis.cpp
   HardwareAnalysisDependencies.cpp
   HardwareAnalysisValidation.cpp
@@ -65,6 +57,39 @@ add_acir_library(ACIRDialect SOURCES
   SourceTransactionStateAnalysis.cpp
   SourceTransactionSummary.cpp
   TransactionalContracts.cpp
+  EntryBoundary.cpp
+  ACIRTransactionOps.cpp
+  ACIRModuleOps.cpp
+  ACIRModuleContracts.cpp
+  ACIRQueueOps.cpp
+  ACIRSourceControlFlowOps.cpp
+  ACIRSystemOps.cpp
+  ACIRPacketOps.cpp
+  ACIRBitsOps.cpp
+  CollectionAnalysis.cpp
+  EnumAnalysis.cpp
+  SourceUnitValidation.cpp
+  FinalSourceUnitValidation.cpp
+  SourceNamespaceValidation.cpp
+  "${PYCIRCUIT_SOURCE_DIR}/lib/Analysis/LogicalStateValidation.cpp"
+)
+add_dependencies(ACIRAnalysis
+  ACIRDialectIncGen
+  ACIRAttributesIncGen
+  ACIRTypesIncGen
+  ACOpsIncGen
+)
+target_link_libraries(ACIRAnalysis PUBLIC
+  ACIRDialect
+  PycircuitStateInterfaces
+)
+target_include_directories(ACIRAnalysis PRIVATE
+  "${PYCIRCUIT_SOURCE_DIR}/lib"
+)
+
+add_acir_library(ACIRDialect SOURCES
+  CollectionLocalVerifies.cpp
+  ACIREnumOps.cpp
   ACIRConstantOps.cpp
   ACIRDialect.cpp
   ACIRMathOps.cpp
@@ -72,9 +97,6 @@ add_acir_library(ACIRDialect SOURCES
   ACIRRegistration.cpp
   SourceEffects.cpp
   SourceRegistrationEntry.cpp
-  SourceUnitValidation.cpp
-  FinalSourceUnitValidation.cpp
-  SourceNamespaceValidation.cpp
   HardwareGrantProof.cpp
   "${PYCIRCUIT_SOURCE_DIR}/lib/Compiler/SourceIdentifier.cpp"
   "${PYCIRCUIT_SOURCE_DIR}/lib/Analysis/LogicalStateValidation.cpp"
