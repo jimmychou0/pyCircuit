@@ -65,7 +65,6 @@ add_acir_library(ACIRAnalysis SOURCES
   ACIRSourceControlFlowOps.cpp
   ACIRSystemOps.cpp
   ACIRPacketOps.cpp
-  ACIRBitsOps.cpp
   CollectionAnalysis.cpp
   EnumAnalysis.cpp
   BitsAnalysis.cpp

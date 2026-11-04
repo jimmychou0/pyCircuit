@@ -143,6 +143,37 @@ LogicalResult requireOneBit(BitsType type, Operation *operation,
 
 } // namespace
 
+LogicalResult BitsConstantOp::verify() {
+  if (failed(StaticExprAttr::verify([&] { return emitOpError(); },
+                                    getValue().getTree())))
+    return failure();
+  auto value = literalInteger(getValue());
+  auto width = literalInteger(getResult().getType().getWidth());
+  if (value && value->isNegative())
+    return emitOpError() << "bits constant must be nonnegative";
+  if (value && width && width->getActiveBits() <= 64 &&
+      value->getActiveBits() > width->getZExtValue())
+    return emitOpError() << "bits constant does not fit its result width";
+  return success();
+}
+
+LogicalResult BitsConstant4Op::verify() {
+  StringRef pattern = getPattern();
+  if (pattern.empty() || !llvm::all_of(pattern, [](char bit) {
+        return bit == '0' || bit == '1' || bit == 'x' || bit == 'z';
+      }))
+    return emitOpError()
+           << "pattern requires nonempty canonical lowercase 0/1/x/z";
+  auto width = literalInteger(getResult().getType().getWidth());
+  if (!width || width->isNegative() || width->getActiveBits() > 64 ||
+      width->getZExtValue() != pattern.size())
+    return emitOpError()
+           << "pattern length must equal the positive literal result width";
+  return success();
+}
+
+} // namespace
+
 LogicalResult BitsUnaryOp::verify() {
   if (getOpcode() != "not")
     return emitOpError() << "opcode must be 'not'";
