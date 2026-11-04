@@ -75,11 +75,8 @@ FailureOr<EnumDefinitionView> validateEnumDeclaration(EnumOp declaration,
   return view;
 }
 
-} // namespace acir::ac
 
-namespace acir::ac {
 namespace detail {
-
 LogicalResult verifyEnumValueLocally(Operation *operation) {
   auto package = operation->getParentOfType<mlir::ModuleOp>();
   if (!package)
@@ -92,7 +89,6 @@ LogicalResult verifyEnumValueLocally(Operation *operation) {
 } // namespace detail
 
 namespace acir::ac {
-
 EnumOp HardwareAnalysis::lookupEnum(EnumType type) const {
   return dyn_cast_or_null<EnumOp>(lookupDefinition(type.getName().getValue()));
 }
