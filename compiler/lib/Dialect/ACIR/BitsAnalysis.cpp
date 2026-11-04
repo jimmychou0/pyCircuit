@@ -3,6 +3,7 @@
 // live analysis-side; the analysis-free bits verifiers (constants and the
 // type verifier, relocated to the core TU) stay below.
 #include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
+#include "ACIRSourceContracts.h"
 #include "Dialect/ACIR/SourceCheckBudget.h"
 #include "pycircuit/Dialect/ACIR/ACIROps.h"
 #include <thread>
