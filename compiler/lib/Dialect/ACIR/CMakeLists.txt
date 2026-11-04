@@ -1,22 +1,10 @@
 add_acir_library(ACIRDialect SOURCES
-  LogicalStateValidation.cpp
   ACIRConstantOps.cpp
-  ACIRSourceControlFlowOps.cpp
   ACIRDialect.cpp
-  ACIREnumOps.cpp
   ACIRIdentityContracts.cpp
   ACIRMathOps.cpp
   ACIRNumericProofOps.cpp
-  ACIRModuleContracts.cpp
-  ACIRModuleOps.cpp
-  TransactionalContracts.cpp
-  ACIRBitsOps.cpp
-  ACIRCollectionOps.cpp
-  ACIRQueueOps.cpp
-  ACIRPacketOps.cpp
   ACIRPacketTypes.cpp
-  ACIRSystemOps.cpp
-  ACIRTransactionOps.cpp
   ACIRRegistration.cpp
   ACIRSourceContracts.cpp
   ACIRStaticContracts.cpp
@@ -27,34 +15,67 @@ add_acir_library(ACIRDialect SOURCES
   SourceAttributeContracts.cpp
   SourceValueSemantics.cpp
   SourceEffects.cpp
-  SourceMethodAnalysis.cpp
   SourceRegistrationEntry.cpp
-  SourceTransactionStateAnalysis.cpp
-  SourceMethodResolution.cpp
-  SourceHelperAnalysis.cpp
-  SourceTransactionSummary.cpp
   SourceSyntaxSiteContracts.cpp
   SourceUnitValidation.cpp
   FinalSourceUnitValidation.cpp
-  EntryBoundary.cpp
   SourceNamespaceValidation.cpp
-  HardwareAnalysis.cpp
-  HardwareAnalysisDependencies.cpp
-  HardwareAnalysisValidation.cpp
-  PackageVerification.cpp
-  HardwareValueAvailability.cpp
-  HardwareQueueResources.cpp
   HardwareGrantProof.cpp
-  HardwareSourceChecks.cpp
-  HardwarePhysicalProjection.cpp
-  HardwarePhysicalState.cpp
-  HardwareSampledAdmission.cpp
-  HardwareSourceCheckPreflight.cpp
-  HardwareDependencySerialization.cpp
-  HardwareWorkPartition.cpp
   "${PYCIRCUIT_SOURCE_DIR}/lib/Compiler/SourceIdentifier.cpp"
   "${PYCIRCUIT_SOURCE_DIR}/lib/IR/StateDeclarationContracts.cpp"
 )
+# The staged common analysis layer: every HardwareAnalysis-based verifier,
+# plan builder and source analysis consumes the operation/registration layer
+# below and the shared state interfaces. GFIR links only ACIRDialect, so a
+# reverse dependency from GFIR onto this analysis/HWIR layer is impossible
+# at the build level (B1-boundary.md step 4).
+add_acir_library(ACIRAnalysis SOURCES
+  ACIRBitsOps.cpp
+  ACIRCollectionOps.cpp
+  ACIREnumOps.cpp
+  ACIRModuleContracts.cpp
+  ACIRModuleOps.cpp
+  ACIRPacketOps.cpp
+  ACIRQueueOps.cpp
+  ACIRSourceControlFlowOps.cpp
+  ACIRSystemOps.cpp
+  ACIRTransactionOps.cpp
+  EntryBoundary.cpp
+  HardwareAnalysis.cpp
+  HardwareAnalysisDependencies.cpp
+  HardwareAnalysisValidation.cpp
+  HardwareDependencySerialization.cpp
+  HardwarePhysicalProjection.cpp
+  HardwarePhysicalState.cpp
+  HardwareQueueResources.cpp
+  HardwareSampledAdmission.cpp
+  HardwareSourceCheckPreflight.cpp
+  HardwareSourceChecks.cpp
+  HardwareValueAvailability.cpp
+  HardwareWorkPartition.cpp
+  PackageVerification.cpp
+  SourceHelperAnalysis.cpp
+  SourceMethodAnalysis.cpp
+  SourceMethodResolution.cpp
+  SourceTransactionStateAnalysis.cpp
+  SourceTransactionSummary.cpp
+  TransactionalContracts.cpp
+  "${PYCIRCUIT_SOURCE_DIR}/lib/Analysis/LogicalStateValidation.cpp"
+)
+add_dependencies(ACIRAnalysis
+  ACIRDialectIncGen
+  ACIRAttributesIncGen
+  ACIRTypesIncGen
+  ACOpsIncGen
+)
+target_link_libraries(ACIRAnalysis PUBLIC
+  ACIRDialect
+  PycircuitStateInterfaces
+)
+target_include_directories(ACIRAnalysis PRIVATE
+  "${PYCIRCUIT_SOURCE_DIR}/lib"
+)
+
 add_dependencies(ACIRDialect
   ACIRDialectIncGen
   ACIRAttributesIncGen

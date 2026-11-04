@@ -4,6 +4,19 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Operation.h"
 
+namespace acir::ac::detail {
+// Strip origin/location provenance recursively; the single semantic
+// equivalence implementation behind areEquivalentHardwareTypes.
+mlir::Attribute semanticAttr(mlir::Attribute attribute);
+} // namespace acir::ac::detail
+
+namespace acir::ac {
+/// Provenance-aware hardware payload equivalence (declaration moved here from
+/// HardwareAnalysis.h so common-IR and GFIR checks can use it without the
+/// staged analysis layer; HardwareAnalysis.h keeps a matching declaration).
+bool areEquivalentHardwareTypes(mlir::Type lhs, mlir::Type rhs);
+} // namespace acir::ac
+
 namespace acir {
 
 // Data-only logical-state declaration contracts shared by the source

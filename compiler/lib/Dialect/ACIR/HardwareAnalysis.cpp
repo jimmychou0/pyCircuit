@@ -3,6 +3,7 @@
 #include "SourceValueSemantics.h"
 #include "pycircuit/Dialect/ACIR/SourceMethodAnalysis.h"
 #include "ACIRSourceContracts.h"
+#include "IR/StateDeclarationContracts.h"
 #include "mlir/IR/Verifier.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/StringSet.h"
@@ -193,24 +194,6 @@ bool evaluable(Attribute attr, const HardwareBindings &bindings,
   SmallVector<Attribute> active;
   return evaluable(attr, bindings, active, analysis);
 }
-Attribute semantic(Attribute attr) {
-  if (auto expr = dyn_cast_or_null<StaticExprAttr>(attr))
-    return semantic(expr.getTree());
-  if (auto dict = dyn_cast_or_null<DictionaryAttr>(attr)) {
-    NamedAttrList fields;
-    for (NamedAttribute field : dict)
-      if (field.getName() != "origin" && field.getName() != "location")
-        fields.append(field.getName(), semantic(field.getValue()));
-    return fields.getDictionary(attr.getContext());
-  }
-  if (auto array = dyn_cast_or_null<ArrayAttr>(attr)) {
-    SmallVector<Attribute> fields;
-    for (auto value : array)
-      fields.push_back(semantic(value));
-    return ArrayAttr::get(attr.getContext(), fields);
-  }
-  return attr;
-}
 FailureOr<uint64_t> natural(Attribute attr, Operation *site, bool positive) {
   auto integer = dyn_cast_or_null<MathIntAttr>(attr);
   if (!integer)
@@ -296,16 +279,6 @@ LogicalResult visitPackedLayout(const HardwareAnalysis &analysis, Type type,
 }
 } // namespace
 
-bool areEquivalentHardwareTypes(Type lhs, Type rhs) {
-  if (lhs == rhs)
-    return true;
-  auto lt = dyn_cast<TableType>(lhs), rt = dyn_cast<TableType>(rhs);
-  if (lt && rt)
-    return semantic(lt.getShape()) == semantic(rt.getShape()) &&
-           areEquivalentHardwareTypes(lt.getElementType(), rt.getElementType());
-  auto l = dyn_cast<BitsType>(lhs), r = dyn_cast<BitsType>(rhs);
-  return l && r && semantic(l.getWidth()) == semantic(r.getWidth());
-}
 HardwareAnalysis::HardwareAnalysis(mlir::ModuleOp package) : package(package) {
   if (!package || package->getNumRegions() != 1 ||
       !package->getRegion(0).hasOneBlock())

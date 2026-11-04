@@ -7,8 +7,45 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Operation.h"
 #include "llvm/ADT/APSInt.h"
+#include "llvm/ADT/STLExtras.h"
 
 using namespace mlir;
+
+namespace acir::ac::detail {
+Attribute semanticAttr(Attribute attr) {
+  if (auto expr = dyn_cast_or_null<StaticExprAttr>(attr))
+    return semanticAttr(expr.getTree());
+  if (auto dict = dyn_cast_or_null<DictionaryAttr>(attr)) {
+    NamedAttrList fields;
+    for (NamedAttribute field : dict)
+      if (field.getName() != "origin" && field.getName() != "location")
+        fields.append(field.getName(), semanticAttr(field.getValue()));
+    return fields.getDictionary(attr.getContext());
+  }
+  if (auto array = dyn_cast_or_null<ArrayAttr>(attr)) {
+    SmallVector<Attribute> fields;
+    for (auto value : array)
+      fields.push_back(semanticAttr(value));
+    return ArrayAttr::get(attr.getContext(), fields);
+  }
+  return attr;
+}
+} // namespace acir::ac::detail
+
+namespace acir::ac {
+bool areEquivalentHardwareTypes(Type lhs, Type rhs) {
+  if (lhs == rhs)
+    return true;
+  auto lt = dyn_cast<ac::TableType>(lhs), rt = dyn_cast<ac::TableType>(rhs);
+  if (lt && rt)
+    return detail::semanticAttr(lt.getShape()) ==
+               detail::semanticAttr(rt.getShape()) &&
+           areEquivalentHardwareTypes(lt.getElementType(), rt.getElementType());
+  auto l = dyn_cast<ac::BitsType>(lhs), r = dyn_cast<ac::BitsType>(rhs);
+  return l && r && detail::semanticAttr(l.getWidth()) ==
+                      detail::semanticAttr(r.getWidth());
+}
+} // namespace acir::ac
 
 namespace acir {
 

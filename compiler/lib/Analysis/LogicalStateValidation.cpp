@@ -1,4 +1,4 @@
-#include "pycircuit/Dialect/ACIR/LogicalStateValidation.h"
+#include "pycircuit/Analysis/LogicalStateValidation.h"
 
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinOps.h"

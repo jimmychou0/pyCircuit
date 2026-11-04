@@ -1,5 +1,5 @@
 #include "ACIRSourceContracts.h"
-#include "pycircuit/Dialect/ACIR/LogicalStateValidation.h"
+#include "pycircuit/Analysis/LogicalStateValidation.h"
 #include "IR/StateDeclarationContracts.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/IR/Verifier.h"

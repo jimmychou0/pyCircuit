@@ -1,6 +1,6 @@
 #include "pycircuit/Dialect/ACIR/ACIRDialect.h"
 #include "pycircuit/Dialect/ACIR/ACIROps.h"
-#include "pycircuit/Dialect/ACIR/LogicalStateValidation.h"
+#include "pycircuit/Analysis/LogicalStateValidation.h"
 #include "pycircuit/Dialect/GFIR/GFIRDialect.h"
 #include "pycircuit/Dialect/GFIR/GFIROps.h"
 #include "Dialect/ACIR/SourceCheckBudget.h"

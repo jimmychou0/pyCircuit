@@ -10,7 +10,7 @@
 #include "pycircuit/Dialect/GFIR/GFIRDialect.h"
 #include "pycircuit/Dialect/GFIR/GFIROps.h"
 #include "Dialect/ACIR/SourceCheckBudget.h"
-#include "pycircuit/Dialect/ACIR/LogicalStateValidation.h"
+#include "pycircuit/Analysis/LogicalStateValidation.h"
 #include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
 #include "pycircuit/Dialect/ACIR/SourceEffects.h"
 #include "llvm/ADT/STLExtras.h"

@@ -2,7 +2,7 @@
 #include "HardwareSourceCheckPreflight.h"
 #include "ACIRSourceContracts.h"
 #include "HardwareSampledAdmission.h"
-#include "pycircuit/Dialect/ACIR/LogicalStateValidation.h"
+#include "pycircuit/Analysis/LogicalStateValidation.h"
 #include "mlir/IR/Verifier.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/ScopeExit.h"

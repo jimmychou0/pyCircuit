@@ -2,8 +2,6 @@
 #include "pycircuit/Dialect/GFIR/GFIRDialect.h"
 #include "Dialect/ACIR/ACIRSourceContracts.h"
 #include "pycircuit/Dialect/ACIR/ACIROps.h"
-#include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
-#include "pycircuit/Dialect/ACIR/LogicalStateValidation.h"
 #include "pycircuit/Dialect/ACIR/SourceEffects.h"
 #include "IR/StateDeclarationContracts.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -72,10 +70,25 @@ LogicalResult StateOp::verify() {
     if (failed(acir::verifyPayloadConstraintShape(getOperation(), constraint,
                                                   getQ().getType())))
       return failure();
-  // Same-block pairing is local: exactly one update binds this Q. The
-  // package declaration binding re-establishes the complete inventory.
-  return success(succeeded(
-      acir::ac::verifySameBlockStateUpdatePairing(*this)));
+  // Local same-block pairing: exactly one update binds this Q, deduplicating
+  // a Q that also appears as the update's candidate. The package declaration
+  // binding independently re-establishes the complete inventory.
+  acir::LogicalStateUpdateOpInterface paired;
+  for (Operation *user : getQ().getUsers()) {
+    auto update = dyn_cast<acir::LogicalStateUpdateOpInterface>(user);
+    if (!update || update->getBlock() != (*this)->getBlock() ||
+        update->getNumOperands() != 3 ||
+        update.getUpdatedStateQ() != getQ())
+      continue;
+    if (paired && paired != update)
+      return emitOpError()
+             << "routed logical state requires exactly one same-block update";
+    paired = update;
+  }
+  if (!paired)
+    return emitOpError()
+           << "routed logical state requires exactly one same-block update";
+  return success();
 }
 
 void StateUpdateOp::getEffects(
