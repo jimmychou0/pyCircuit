@@ -21,7 +21,6 @@ add_dependencies(ACIRCore
   ACIRDialectIncGen
   ACIRAttributesIncGen
   ACIRTypesIncGen
-  ACIREnumsIncGen
 )
 target_include_directories(ACIRCore PRIVATE
   "${PYCIRCUIT_SOURCE_DIR}/lib"
