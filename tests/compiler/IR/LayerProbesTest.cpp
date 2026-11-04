@@ -2,11 +2,11 @@
 #include "pycircuit/Dialect/ACIR/ACIRDialect.h"
 #include "pycircuit/Dialect/GFIR/GFIRDialect.h"
 #else
-// Core probe: link-only self-containment; referencing any symbol from
-// every enumerated core TU happens through the archive's whole-members
-// extraction by the registration the ops TU performs — the core probe's
-// own guarantee is that its link line contains exactly ACIRCore.
-#include "pycircuit/Dialect/ACIR/ACIRTypes.h"
+// Core probe: the generated core definitions (ACIRCoreDefs) include the
+// dialect class declaration; the probe constructs core types without any
+// operations-layer symbol. Its guarantee is that the link line carries
+// exactly ACIRCore.
+#include "pycircuit/Dialect/ACIR/ACIRDialect.h"
 #endif
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/Dialect.h"
@@ -37,7 +37,8 @@ TEST(ACIROpsStandalone, LoadsAndResolvesItsOperations) {
 
 } // namespace
 
-#else
+#endif
+#ifdef PYCIRCUIT_CORE_PROBE
 // Core probe body: type construction exercises the generated core
 // definitions (ACIRCoreDefs) without any operations-layer symbol.
 TEST(ACIRCoreStandalone, ConstructsCoreTypes) {
