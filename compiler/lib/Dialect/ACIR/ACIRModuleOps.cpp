@@ -177,10 +177,10 @@ LogicalResult ModuleOp::verifyRegions() {
   });
   if (result.wasInterrupted())
     return failure();
-  // Per-definition source checks move to the staged tiers (r9 §5): the
-  // preflight catalog/visit (routed/final) and the routing preparation
-  // (source) both run verifyDefinitionSourceChecks.
-  return success();
+  // Per-definition source checks run through the shared entry defined with
+  // the staged analysis (r9 §5); the preflight catalog and the standalone
+  // scope both consult the same synchronous definitions map.
+  return detail::verifyDefinitionSourceChecksStandalone(*this);
 }
 LogicalResult RuleOp::verify() {
   if (!isa<ModuleOp>((*this)->getParentOp()) || getName().empty())
