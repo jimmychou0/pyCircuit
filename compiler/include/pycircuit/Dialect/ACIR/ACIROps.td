@@ -3,6 +3,7 @@
 
 include "pycircuit/Dialect/ACIR/ACIRTypes.td"
 include "pycircuit/Interfaces/LogicalStateInterfaces.td"
+include "pycircuit/Interfaces/ModuleChildInterfaces.td"
 include "mlir/IR/CommonAttrConstraints.td"
 include "mlir/IR/OpBase.td"
 include "mlir/IR/RegionKindInterface.td"
@@ -277,7 +278,8 @@ def ACIR_ModuleImportOp : ACIR_Op<"module.import", [Symbol]> {
   let hasVerifier = 1;
 }
 
-def ACIR_ModuleOp : ACIR_Op<"module", [Symbol, SymbolTable,
+def ACIR_ModuleOp : ACIR_Op<"module", [
+    OwningModuleOpInterface,Symbol, SymbolTable,
     IsolatedFromAbove, SingleBlock, RegionKindInterface,
     HasOnlyGraphRegion]> {
   let summary = "Define reusable hardware structure and its Work rules";
@@ -331,6 +333,10 @@ def ACIR_ModuleOp : ACIR_Op<"module", [Symbol, SymbolTable,
   let regions = (region AnyRegion:$body);
   let hasVerifier = 1;
   let hasRegionVerifier = 1;
+  let extraClassDeclaration = [{
+    ::mlir::StringAttr getOwnerSymName() { return getSymNameAttr(); }
+  }];
+
 }
 
 def ACIR_RuleOp : ACIR_Op<"rule", [IsolatedFromAbove, SingleBlock, Pure]> {
@@ -575,6 +581,7 @@ def ACIR_SourceExpectOp : ACIR_Op<"expect", [
 }
 
 def ACIR_InstanceOp : ACIR_Op<"instance", [
+    ModuleChildOpInterface,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "Instantiate one module with typed SSA input and output wires";
   let description = [{
@@ -612,6 +619,11 @@ def ACIR_InstanceOp : ACIR_Op<"instance", [
   let results = (outs Variadic<ACIR_StructuralValueType>:$outputs);
   let hasVerifier = 1;
   let hasCustomAssemblyFormat = 1;
+  let extraClassDeclaration = [{
+    ::mlir::StringAttr getDeclaredInstanceName() { return getInstanceNameAttr(); }
+    ::mlir::DictionaryAttr getDeclaredOccurrence() { return getOccurrence(); }
+  }];
+
 }
 
 def ACIR_YieldOp : ACIR_Op<"yield", [Terminator, MemoryEffects<[]>]> {
@@ -643,6 +655,7 @@ def ACIR_InstanceRefOp : ACIR_Op<"instance.ref", [Pure]> {
 }
 
 def ACIR_CollectionOp : ACIR_Op<"collection", [
+    ModuleChildOpInterface,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "Compact family of independent instances with table wires";
   let arguments = (ins Variadic<ACIR_HardwareType>:$inputs,
@@ -653,6 +666,11 @@ def ACIR_CollectionOp : ACIR_Op<"collection", [
       DictionaryAttr:$occurrence);
   let results = (outs Variadic<ACIR_HardwareType>:$outputs);
   let hasVerifier = 1;
+  let extraClassDeclaration = [{
+    ::mlir::StringAttr getDeclaredInstanceName() { return getInstanceNameAttr(); }
+    ::mlir::DictionaryAttr getDeclaredOccurrence() { return getOccurrence(); }
+  }];
+
 }
 
 def ACIR_QueueOp : ACIR_Op<"queue"> {
