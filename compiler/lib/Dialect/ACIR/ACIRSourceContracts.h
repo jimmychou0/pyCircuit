@@ -17,6 +17,11 @@ namespace acir::ac {
 class HardwareAnalysis;
 struct HardwareBindings;
 class ModuleImportOp;
+class ModuleOp;
+/// Per-definition source checks (r9 §5): implementation hosted with the
+/// staged analysis; the operations-layer ModuleOp verifier calls this.
+mlir::LogicalResult
+verifyDefinitionSourceChecksStandalone(ModuleOp definition);
 } // namespace acir::ac
 
 namespace acir::ac {
@@ -239,11 +244,7 @@ mlir::LogicalResult verifyStateRef(mlir::DictionaryAttr value,
 int compareClosedSourceStructure(mlir::Attribute left, mlir::Attribute right);
 
 
-// Per-definition source checks (r9 §5): implementation hosted with the
-// staged analysis; the operations-layer ModuleOp verifier calls this entry.
-// ModuleOp resolves in the enclosing acir::ac namespace.
-mlir::LogicalResult
-verifyDefinitionSourceChecksStandalone(::acir::ac::ModuleOp definition);
+
 } // namespace acir::ac::detail
 
 #endif // ACIR_LIB_DIALECT_ACIR_ACIRSOURCECONTRACTS_H
