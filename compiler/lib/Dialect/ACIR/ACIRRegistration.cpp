@@ -22,6 +22,14 @@ struct ACIRGrammarCacheHost final : acir::ac::GrammarCacheHost {
 
 void acir::ac::ACIRDialect::initialize() {
   addInterfaces<ACIRGrammarCacheHost>();
+  addAttributes<
+#define GET_ATTRDEF_LIST
+#include "pycircuit/Dialect/ACIR/ACIRAttributes.cpp.inc"
+      >();
+  addTypes<
+#define GET_TYPEDEF_LIST
+#include "pycircuit/Dialect/ACIR/ACIRTypes.cpp.inc"
+      >();
   addOperations<
 #define GET_OP_LIST
 #include "pycircuit/Dialect/ACIR/ACIROps.cpp.inc"
