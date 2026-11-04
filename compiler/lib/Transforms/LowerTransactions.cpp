@@ -8549,6 +8549,10 @@ class RouteTransactionsPass
     : public PassWrapper<RouteTransactionsPass, OperationPass<mlir::ModuleOp>> {
 public:
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(RouteTransactionsPass)
+  void getDependentDialects(DialectRegistry &registry) const override {
+    // Routing constructs the GFIR replacement of every source state.
+    registry.insert<ac::ACIRDialect, gfir::GFIRDialect>();
+  }
   StringRef getArgument() const final { return "ac-route-transactions"; }
   StringRef getDescription() const final {
     return "Route sampled transactions to independently verified logical-state ACIR";
@@ -8607,6 +8611,10 @@ class LowerTransactionsPass
     : public PassWrapper<LowerTransactionsPass, OperationPass<mlir::ModuleOp>> {
 public:
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LowerTransactionsPass)
+  void getDependentDialects(DialectRegistry &registry) const override {
+    // Refinement consumes the routed GFIR state classes concretely.
+    registry.insert<ac::ACIRDialect, gfir::GFIRDialect>();
+  }
   StringRef getArgument() const final { return "ac-lower-transactions"; }
   StringRef getDescription() const final {
     return "Refine verified routed logical state to final hardware storage";
