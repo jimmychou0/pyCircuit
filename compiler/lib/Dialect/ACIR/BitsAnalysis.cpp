@@ -10,7 +10,8 @@
 
 using namespace mlir;
 
-namespace acir::ac::detail {
+namespace acir::ac {
+namespace detail {
 
 
 std::optional<llvm::APSInt> bitsLiteralInteger(StaticExprAttr expression) {
@@ -142,4 +143,5 @@ LogicalResult bitsRequireOneBit(BitsType type, Operation *operation,
 }
 
 
-} // namespace acir::ac::detail
+} // namespace detail
+} // namespace acir::ac

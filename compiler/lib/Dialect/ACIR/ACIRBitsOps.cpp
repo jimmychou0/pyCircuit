@@ -14,7 +14,7 @@ namespace acir::ac {
 LogicalResult BitsUnaryOp::verify() {
   if (getOpcode() != "not")
     return emitOpError() << "opcode must be 'not'";
-  auto sameWidth = detail::bitsWidthsEquivalent(*this, getInput().getType(), getResult().getType());
+  auto sameWidth = bitsWidthsEquivalent(*this, getInput().getType(), getResult().getType());
   if (failed(sameWidth)) return failure();
   if (!*sameWidth)
     return emitOpError()
@@ -23,29 +23,29 @@ LogicalResult BitsUnaryOp::verify() {
 }
 
 LogicalResult BitsBinaryOp::verify() {
-  if (!detail::bitsOpcodeClosed(getOpcode(), {"add", "sub", "mul", "udiv", "urem", "and", "or",
+  if (!bitsOpcodeClosed(getOpcode(), {"add", "sub", "mul", "udiv", "urem", "and", "or",
                               "xor", "shl", "lshr", "ashr"}))
     return emitOpError() << "unknown closed bit-vector binary opcode";
-  return detail::bitsRequireSameWidth(*this, getLhs().getType(), getRhs().getType(),
+  return bitsRequireSameWidth(*this, getLhs().getType(), getRhs().getType(),
                           getResult().getType());
 }
 
 LogicalResult BitsCompareOp::verify() {
-  if (!detail::bitsOpcodeClosed(getPredicate(), {"eq", "ne", "case_eq", "ult", "ule", "ugt",
+  if (!bitsOpcodeClosed(getPredicate(), {"eq", "ne", "case_eq", "ult", "ule", "ugt",
                                  "uge", "slt", "sle", "sgt", "sge"}))
     return emitOpError() << "unknown closed bit-vector comparison predicate";
-  auto sameWidth = detail::bitsWidthsEquivalent(*this, getLhs().getType(), getRhs().getType());
+  auto sameWidth = bitsWidthsEquivalent(*this, getLhs().getType(), getRhs().getType());
   if (failed(sameWidth)) return failure();
   if (!*sameWidth)
     return emitOpError() << "comparison operands must have the same width";
-  return detail::bitsRequireOneBit(getResult().getType(), *this, "comparison result");
+  return bitsRequireOneBit(getResult().getType(), *this, "comparison result");
 }
 
 LogicalResult BitsSelectOp::verify() {
   if (failed(
-          detail::bitsRequireOneBit(getCondition().getType(), *this, "select condition")))
+          bitsRequireOneBit(getCondition().getType(), *this, "select condition")))
     return failure();
-  return detail::bitsRequireSameWidth(*this, getTrueValue().getType(),
+  return bitsRequireSameWidth(*this, getTrueValue().getType(),
                           getFalseValue().getType(), getResult().getType());
 }
 
@@ -57,10 +57,10 @@ LogicalResult ValueRequireOp::verify() {
     return emitOpError() << "is compiler-owned final availability evidence";
   if (!isa<RuleOp, ModuleOp>((*this)->getParentOp()))
     return emitOpError() << "requires an immediate hardware Module or Rule";
-  if (failed(detail::bitsRequireOneBit(getAvailability().getType(), *this,
+  if (failed(bitsRequireOneBit(getAvailability().getType(), *this,
                            "required availability")) ||
-      failed(detail::bitsRequireOneBit(getPath().getType(), *this, "required use path")) ||
-      failed(detail::bitsRequireOneBit(getResult().getType(), *this, "required use result")) ||
+      failed(bitsRequireOneBit(getPath().getType(), *this, "required use path")) ||
+      failed(bitsRequireOneBit(getResult().getType(), *this, "required use result")) ||
       failed(detail::verifyOccurrence(getOccurrence(), error)) ||
       failed(detail::verifySourceSpan(getSourceLocation(), error)))
     return failure();
@@ -73,7 +73,7 @@ LogicalResult BitsConcatOp::verify() {
   uint64_t total = 0;
   bool allLiteral = true;
   for (Value input : getInputs()) {
-    auto width = detail::bitsLiteralInteger(cast<BitsType>(input.getType()).getWidth());
+    auto width = bitsLiteralInteger(cast<BitsType>(input.getType()).getWidth());
     if (!width || width->isNegative() || width->getActiveBits() > 64 ||
         total > std::numeric_limits<uint64_t>::max() - width->getZExtValue()) {
       allLiteral = false;
@@ -81,7 +81,7 @@ LogicalResult BitsConcatOp::verify() {
     }
     total += width->getZExtValue();
   }
-  auto resultWidth = detail::bitsLiteralInteger(getResult().getType().getWidth());
+  auto resultWidth = bitsLiteralInteger(getResult().getType().getWidth());
   if (allLiteral && resultWidth &&
       (resultWidth->isNegative() || resultWidth->getActiveBits() > 64 ||
        resultWidth->getZExtValue() != total))
@@ -93,9 +93,9 @@ LogicalResult BitsExtractOp::verify() {
   if (failed(StaticExprAttr::verify([&] { return emitOpError(); },
                                     getLow().getTree())))
     return failure();
-  auto low = detail::bitsLiteralInteger(getLow());
-  auto inputWidth = detail::bitsLiteralInteger(getInput().getType().getWidth());
-  auto resultWidth = detail::bitsLiteralInteger(getResult().getType().getWidth());
+  auto low = bitsLiteralInteger(getLow());
+  auto inputWidth = bitsLiteralInteger(getInput().getType().getWidth());
+  auto resultWidth = bitsLiteralInteger(getResult().getType().getWidth());
   if (low && low->isNegative())
     return emitOpError() << "extract low bound must be nonnegative";
   if (low && inputWidth && resultWidth && low->getActiveBits() <= 64 &&
@@ -109,10 +109,10 @@ LogicalResult BitsExtractOp::verify() {
 }
 
 LogicalResult BitsResizeOp::verify() {
-  if (!detail::bitsOpcodeClosed(getMode(), {"trunc", "zext", "sext"}))
+  if (!bitsOpcodeClosed(getMode(), {"trunc", "zext", "sext"}))
     return emitOpError() << "resize mode must be trunc, zext, or sext";
-  auto inputWidth = detail::bitsLiteralInteger(getInput().getType().getWidth());
-  auto resultWidth = detail::bitsLiteralInteger(getResult().getType().getWidth());
+  auto inputWidth = bitsLiteralInteger(getInput().getType().getWidth());
+  auto resultWidth = bitsLiteralInteger(getResult().getType().getWidth());
   if (!inputWidth || !resultWidth)
     return success();
   if ((getMode() == "trunc" && *resultWidth >= *inputWidth) ||
