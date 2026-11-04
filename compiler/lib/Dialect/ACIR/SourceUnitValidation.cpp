@@ -269,19 +269,6 @@ bool hasQualifiedDeclarationIdentityForOwner(Operation *operation,
   return false;
 }
 
-LogicalResult verifyOriginDefinition(DictionaryAttr origin,
-                                     FlatSymbolRefAttr expected,
-                                     StringRef description,
-                                     EmitError emitError) {
-  auto site = origin ? origin.getAs<DictionaryAttr>("site") : DictionaryAttr();
-  auto definition =
-      site ? site.getAs<FlatSymbolRefAttr>("definition") : FlatSymbolRefAttr();
-  if (!expected || !definition || definition != expected)
-    return emitError()
-           << description
-           << " occurrence definition does not match its canonical symbol";
-  return success();
-}
 } // namespace detail
 
 FailureOr<SourceUnitStructure>
