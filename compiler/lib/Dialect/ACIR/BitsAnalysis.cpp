@@ -128,6 +128,18 @@ LogicalResult requireSameWidth(Operation *operation, BitsType lhs, BitsType rhs,
   return success();
 }
 
+bool isClosed(StringRef value, ArrayRef<StringRef> choices) {
+  return llvm::is_contained(choices, value);
+}
+LogicalResult requireOneBit(BitsType type, Operation *operation,
+                            StringRef description) {
+  auto width = literalInteger(type.getWidth());
+  if (!width || *width != 1)
+    return operation->emitOpError()
+           << description << " requires canonical literal width one";
+  return success();
+}
+
 } // namespace
 
 LogicalResult BitsUnaryOp::verify() {
