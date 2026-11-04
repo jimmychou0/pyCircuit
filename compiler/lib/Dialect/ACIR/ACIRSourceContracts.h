@@ -29,6 +29,8 @@ validateEnumDeclaration(EnumOp declaration, mlir::Operation *site);
 } // namespace acir::ac
 
 namespace acir::ac {
+class BitsType;
+class StaticExprAttr;
 // Shared bits width/grammar entries (r9 §5): analysis-hosted, called by
 // the operations-layer bits verifiers.
 std::optional<llvm::APSInt> bitsLiteralInteger(StaticExprAttr expression);
