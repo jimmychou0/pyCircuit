@@ -51,6 +51,42 @@ mlir::LogicalResult verifyPayloadConstraintShape(mlir::Operation *site,
                                                  mlir::Attribute raw,
                                                  mlir::Type payload);
 
+namespace acir::ac {
+
+// Attribute-based declaration queries (B2 step-2 design r9): nominal
+// struct/enum/table facts read from declaration-operation ATTRIBUTES via
+// symbol lookup, without concrete op classes or staged analysis. These
+// keep native verifiers' rejections for definite facts; binding-dependent
+// facts remain the staged tiers' obligation.
+class StructOp;
+
+/// Every declared field of the package-level struct named by `symbol`,
+/// or failure when the declaration is absent. Fields are the declaration
+/// attribute rows verbatim.
+mlir::FailureOr<llvm::ArrayRef<mlir::Attribute>>
+structFieldList(mlir::Operation *scope, mlir::SymbolRefAttr symbol);
+
+/// The declared member code list of the enum named by `symbol`, or
+/// failure when absent.
+mlir::FailureOr<mlir::ArrayAttr>
+enumMemberList(mlir::Operation *scope, mlir::SymbolRefAttr symbol);
+
+/// Closed payload width of a hardware payload type from declaration
+/// attributes and the shared static evaluation: bits/enum/struct/table
+/// only, positive and finite, no formal references (callers defer
+/// symbolic widths to the staged tiers).
+mlir::FailureOr<uint64_t> closedPayloadWidth(mlir::Type payload,
+                                             mlir::Operation *site);
+
+/// A literal-Bits width resolves to a definite integer (any value, unlike
+/// verifyLiteralControlWidth's width-one rule); non-literal widths
+/// succeed vacuously so symbolic carriers defer to the staged tiers.
+mlir::LogicalResult verifyLiteralWidthResolves(mlir::Operation *site,
+                                               mlir::Value carrier,
+                                               llvm::StringRef description);
+
+} // namespace acir::ac
+
 } // namespace acir
 
 #endif // PYCIRCUIT_LIB_IR_STATEDECLARATIONCONTRACTS_H

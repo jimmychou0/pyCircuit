@@ -125,6 +125,116 @@ LogicalResult verifyHardwareTypeScope(Type type, Operation *owner) {
 
 } // namespace acir::ac::detail
 
+namespace acir::ac {
+
+FailureOr<ArrayRef<Attribute>> structFieldList(Operation *scope,
+                                               SymbolRefAttr symbol) {
+  // Declaration rows read from the attribute; no concrete op class.
+  auto *declaration = SymbolTable::lookupSymbolIn(scope, symbol);
+  if (!declaration ||
+      declaration->getName().getStringRef() != "ac.struct")
+    return failure();
+  auto fields = declaration->getAttrOfType<ArrayAttr>("fields");
+  if (!fields)
+    return failure();
+  return fields.getValue();
+}
+
+FailureOr<ArrayAttr> enumMemberList(Operation *scope, SymbolRefAttr symbol) {
+  auto *declaration = SymbolTable::lookupSymbolIn(scope, symbol);
+  if (!declaration || declaration->getName().getStringRef() != "ac.enum")
+    return failure();
+  return declaration->getAttrOfType<ArrayAttr>("members");
+}
+
+FailureOr<uint64_t> closedPayloadWidth(Type payload, Operation *site) {
+  auto plain = [&](StaticExprAttr expression) -> FailureOr<uint64_t> {
+    // Closed literal only: symbolic formals defer to the staged tiers.
+    auto tree = expression.getTree();
+    auto kind = tree.getAs<StringAttr>("kind");
+    if (!kind || kind.getValue() != "literal")
+      return failure();
+    auto literal = tree.getAs<DictionaryAttr>("value");
+    auto width = literal ? literal.getAs<ac::MathIntAttr>("value") : MathIntAttr();
+    if (!width || llvm::APSInt(width.getCanonicalValue()).isNegative() ||
+        !width.getCanonicalValue().isIntN(63))
+      return site->emitOpError()
+             << "closed payload width must be a nonnegative finite integer";
+    return uint64_t(llvm::APSInt(width.getCanonicalValue()).getZExtValue());
+  };
+  if (auto bits = dyn_cast<ac::BitsType>(payload))
+    return plain(bits.getWidth());
+  if (auto table = dyn_cast<ac::TableType>(payload)) {
+    // One-dimensional tables of closed payloads carry width*extent.
+    uint64_t extent = 1;
+    for (Attribute raw : table.getShape()) {
+      auto dimension = dyn_cast<StaticExprAttr>(raw);
+      if (!dimension)
+        return failure();
+      auto size = plain(dimension);
+      if (failed(size))
+        return failure();
+      extent *= *size;
+    }
+    auto element = closedPayloadWidth(table.getElementType(), site);
+    if (failed(element))
+      return failure();
+    return *element * extent;
+  }
+  if (auto enumeration = dyn_cast<ac::EnumType>(payload)) {
+    auto *declaration = SymbolTable::lookupSymbolIn(
+        site->getParentOfType<mlir::ModuleOp>(),
+        enumeration.getName().getLeafReference());
+    if (!declaration || declaration->getName().getStringRef() != "ac.enum")
+      return failure();
+    auto width = declaration->getAttrOfType<ac::MathIntAttr>("width");
+    if (!width)
+      return failure();
+    return uint64_t(llvm::APSInt(width.getCanonicalValue()).getZExtValue());
+  }
+  if (auto structure = dyn_cast<ac::StructType>(payload)) {
+    auto *declaration = SymbolTable::lookupSymbolIn(
+        site->getParentOfType<mlir::ModuleOp>(),
+        structure.getName().getLeafReference());
+    if (!declaration || declaration->getName().getStringRef() != "ac.struct")
+      return failure();
+    uint64_t total = 0;
+    for (Attribute raw : declaration->getAttrOfType<ArrayAttr>("fields")) {
+      auto field = dyn_cast<DictionaryAttr>(raw);
+      auto type = field ? field.getAs<TypeAttr>("type") : TypeAttr();
+      if (!type)
+        return failure();
+      auto width = closedPayloadWidth(type.getValue(), site);
+      if (failed(width))
+        return failure();
+      total += *width;
+    }
+    return total;
+  }
+  return failure();
+}
+
+LogicalResult verifyLiteralWidthResolves(Operation *site, Value carrier,
+                                         StringRef description) {
+  auto bits = dyn_cast<ac::BitsType>(carrier.getType());
+  if (!bits)
+    return site->emitOpError() << description << " requires a Bits carrier";
+  auto tree = bits.getWidth().getTree();
+  auto kind = tree.getAs<StringAttr>("kind");
+  if (kind && kind.getValue() == "literal") {
+    auto literal = tree.getAs<DictionaryAttr>("value");
+    auto width = literal ? literal.getAs<ac::MathIntAttr>("value") : MathIntAttr();
+    if (!width || llvm::APSInt(width.getCanonicalValue()).isNegative() ||
+        !width.getCanonicalValue().isIntN(63))
+      return site->emitOpError()
+             << description << " requires a definite nonnegative width";
+  }
+  // Non-literal (symbolic) widths defer to the staged tiers.
+  return success();
+}
+
+} // namespace acir::ac
+
 namespace acir {
 
 LogicalResult
