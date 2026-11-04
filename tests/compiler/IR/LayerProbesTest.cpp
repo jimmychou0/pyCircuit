@@ -34,10 +34,11 @@ TEST(ACIROpsStandalone, LoadsAndResolvesItsOperations) {
   EXPECT_TRUE(mlir::RegisteredOperationName::lookup("ac.instance", &context));
   EXPECT_TRUE(mlir::RegisteredOperationName::lookup("ac.state.read", &context));
 }
+#endif
 
 } // namespace
 
-#endif
+#ifdef PYCIRCUIT_CORE_PROBE
 #ifdef PYCIRCUIT_CORE_PROBE
 // Core probe body: type construction exercises the generated core
 // definitions (ACIRCoreDefs) without any operations-layer symbol.
