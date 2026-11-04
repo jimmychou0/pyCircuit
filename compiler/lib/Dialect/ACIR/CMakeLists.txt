@@ -23,6 +23,11 @@ add_dependencies(ACIRCore
   ACIRTypesIncGen
 )
 target_link_libraries(ACIRCore PUBLIC MLIRFuncDialect)
+target_include_directories(ACIRCore PUBLIC
+  "$<BUILD_INTERFACE:${PYCIRCUIT_SOURCE_DIR}/include>"
+  "$<BUILD_INTERFACE:${PYCIRCUIT_BINARY_DIR}/include>"
+  "$<INSTALL_INTERFACE:include>"
+)
 target_include_directories(ACIRCore PRIVATE
   "${PYCIRCUIT_SOURCE_DIR}/lib"
 )

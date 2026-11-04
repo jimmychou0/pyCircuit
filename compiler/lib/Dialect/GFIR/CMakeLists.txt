@@ -21,3 +21,8 @@ target_link_libraries(GFIRDialect PUBLIC
 target_include_directories(GFIRDialect PRIVATE
   "${PYCIRCUIT_SOURCE_DIR}/lib"
 )
+target_include_directories(GFIRDialect PUBLIC
+  "$<BUILD_INTERFACE:${PYCIRCUIT_SOURCE_DIR}/include>"
+  "$<BUILD_INTERFACE:${PYCIRCUIT_BINARY_DIR}/include>"
+  "$<INSTALL_INTERFACE:include>"
+)
