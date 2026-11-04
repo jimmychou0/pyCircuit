@@ -15,15 +15,6 @@ namespace acir::ac {
 /// HardwareAnalysis.h so common-IR and GFIR checks can use it without the
 /// staged analysis layer; HardwareAnalysis.h keeps a matching declaration).
 bool areEquivalentHardwareTypes(mlir::Type lhs, mlir::Type rhs);
-} // namespace acir::ac
-
-namespace acir {
-
-// Data-only logical-state declaration contracts shared by the source
-// ac.state declaration and the routed gfir.state replacement
-// (B1-boundary.md). Every check here inspects operations, values and
-// attributes only; none constructs an analysis, evaluates bindings or
-// admits a package for publication, refinement or execution.
 
 // Named direct module placement with a valid instance identifier and a
 // well-formed occurrence whose origin names the owning module.
@@ -50,7 +41,7 @@ mlir::LogicalResult verifyLiteralControlWidth(mlir::Operation *site,
 mlir::LogicalResult verifyPayloadConstraintShape(mlir::Operation *site,
                                                  mlir::Attribute raw,
                                                  mlir::Type payload);
-
 } // namespace acir::ac
+
 
 #endif // PYCIRCUIT_LIB_IR_STATEDECLARATIONCONTRACTS_H
