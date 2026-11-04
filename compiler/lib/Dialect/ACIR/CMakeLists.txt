@@ -30,7 +30,10 @@ target_include_directories(ACIRCore PRIVATE
 add_acir_library(ACIRDialect SOURCES
   ACIRBitsOps.cpp
   ACIRCollectionOps.cpp
+  CollectionAnalysis.cpp
+  CollectionLocalVerifies.cpp
   ACIREnumOps.cpp
+  EnumAnalysis.cpp
   ACIRModuleContracts.cpp
   ACIRModuleOps.cpp
   ACIRPacketOps.cpp

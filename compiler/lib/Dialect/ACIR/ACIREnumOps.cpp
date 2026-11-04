@@ -80,101 +80,19 @@ HardwareBindings scope(Operation *operation) {
   return bindings;
 }
 
-LogicalResult verifyValue(Operation *operation) {
-  auto package = operation->getParentOfType<mlir::ModuleOp>();
-  if (!package)
-    return operation->emitOpError() << "enum value requires package placement";
-  return HardwareAnalysis(package).verifyEnumValueOperation(operation,
-                                                            scope(operation));
-}
-
-} // namespace
-
 
 LogicalResult EnumOp::verify() {
   return success(succeeded(validateEnum(*this, *this)));
 }
 
-LogicalResult EnumCreateOp::verify() { return verifyValue(*this); }
-LogicalResult EnumToBitsOp::verify() { return verifyValue(*this); }
-LogicalResult EnumFromBitsOp::verify() { return verifyValue(*this); }
-
-EnumOp HardwareAnalysis::lookupEnum(EnumType type) const {
-  return dyn_cast_or_null<EnumOp>(lookupDefinition(type.getName().getValue()));
+LogicalResult EnumCreateOp::verify() {
+  return detail::verifyEnumValueLocally(*this);
 }
-
-FailureOr<EnumDefinitionView>
-HardwareAnalysis::resolveEnum(EnumType type, Operation *site) const {
-  auto declaration = lookupEnum(type);
-  if (!declaration)
-    return site->emitOpError() << "cannot resolve nominal enum declaration '"
-                               << type.getName().getValue() << "'";
-  return validateEnum(declaration, site);
+LogicalResult EnumToBitsOp::verify() {
+  return detail::verifyEnumValueLocally(*this);
 }
-
-LogicalResult
-HardwareAnalysis::verifyEnumValueOperation(Operation *operation,
-                                           const HardwareBindings &bindings,
-                                           bool requireResolved) const {
-  auto width = [&](Type type, uint64_t expected,
-                   StringRef description) -> LogicalResult {
-    auto bits = dyn_cast<BitsType>(type);
-    if (!bits)
-      return operation->emitOpError() << description << " requires bits type";
-    auto resolved = resolveType(bits, bindings, operation);
-    if (failed(resolved))
-      return failure();
-    bits = cast<BitsType>(*resolved);
-    if (!isStaticEvaluable(bits.getWidth(), bindings)) {
-      if (requireResolved || !operation->getParentOfType<ModuleOp>())
-        return operation->emitOpError()
-               << description << " requires a resolved finite width";
-      // The owning module's existing scope verifier checks every reference.
-      // Each closed occurrence must call this verifier with requireResolved.
-      return success();
-    }
-    auto actual = getPackedWidth(bits, bindings, operation);
-    if (failed(actual))
-      return failure();
-    if (*actual != expected)
-      return operation->emitOpError()
-             << description << " width must equal " << expected;
-    return success();
-  };
-  auto definition = [&](Type type) -> FailureOr<EnumDefinitionView> {
-    auto nominal = dyn_cast<EnumType>(type);
-    if (!nominal)
-      return operation->emitOpError()
-             << "enum operation requires an explicit nominal enum type";
-    return resolveEnum(nominal, operation);
-  };
-
-  if (auto create = dyn_cast<EnumCreateOp>(operation)) {
-    auto view = definition(create.getResult().getType());
-    if (failed(view))
-      return failure();
-    for (const EnumMember &member : view->members)
-      if (member.name == create.getMemberAttr())
-        return success();
-    return operation->emitOpError()
-           << "unknown enum member '" << create.getMember() << "'";
-  }
-  if (auto toBits = dyn_cast<EnumToBitsOp>(operation)) {
-    auto view = definition(toBits.getInput().getType());
-    if (failed(view))
-      return failure();
-    return width(toBits.getResult().getType(), view->width,
-                 "enum.to_bits result");
-  }
-  if (auto fromBits = dyn_cast<EnumFromBitsOp>(operation)) {
-    auto view = definition(fromBits.getValue().getType());
-    if (failed(view) || failed(width(fromBits.getInput().getType(), view->width,
-                                     "enum.from_bits input")))
-      return failure();
-    return width(fromBits.getMember().getType(), 1,
-                 "enum.from_bits membership result");
-  }
-  return success();
+LogicalResult EnumFromBitsOp::verify() {
+  return detail::verifyEnumValueLocally(*this);
 }
 
 } // namespace acir::ac
