@@ -28,24 +28,6 @@ mlir::FailureOr<EnumDefinitionView>
 validateEnumDeclaration(EnumOp declaration, mlir::Operation *site);
 } // namespace acir::ac
 
-namespace acir::ac {
-class BitsType;
-class StaticExprAttr;
-// Shared bits width/grammar entries (r9 §5): analysis-hosted, called by
-// the operations-layer bits verifiers.
-std::optional<llvm::APSInt> bitsLiteralInteger(StaticExprAttr expression);
-bool bitsLiteralPositive(const llvm::APSInt &value);
-mlir::FailureOr<bool> bitsWidthsEquivalent(mlir::Operation *site,
-                                           BitsType lhs,
-                                           BitsType rhs);
-mlir::LogicalResult
-bitsRequireSameWidth(mlir::Operation *operation, BitsType lhs,
-                     BitsType rhs, BitsType result);
-mlir::LogicalResult bitsRequireOneBit(BitsType type, mlir::Operation *operation,
-                                      llvm::StringRef description);
-bool bitsOpcodeClosed(llvm::StringRef value,
-                      llvm::ArrayRef<llvm::StringRef> choices);
-} // namespace acir::ac
 
 namespace acir::ac::detail {
 // Table shape grammar shared by the type verifier (core) and the

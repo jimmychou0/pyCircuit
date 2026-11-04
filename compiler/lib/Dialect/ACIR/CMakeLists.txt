@@ -67,7 +67,6 @@ add_acir_library(ACIRAnalysis SOURCES
   ACIRPacketOps.cpp
   CollectionAnalysis.cpp
   EnumAnalysis.cpp
-  BitsAnalysis.cpp
   SourceUnitValidation.cpp
   FinalSourceUnitValidation.cpp
   SourceNamespaceValidation.cpp
