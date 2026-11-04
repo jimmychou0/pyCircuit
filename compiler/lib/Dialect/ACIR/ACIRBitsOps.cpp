@@ -5,6 +5,7 @@
 #include "pycircuit/Dialect/ACIR/ACIROps.h"
 #include "ACIRSourceContracts.h"
 #include "ACIRStaticEvaluation.h"
+#include "IR/StateDeclarationContracts.h"
 #include "Dialect/ACIR/SourceCheckBudget.h"
 #include <thread>
 
