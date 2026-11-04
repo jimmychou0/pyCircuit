@@ -28,6 +28,13 @@ mlir::LogicalResult shapeSchema(mlir::ArrayAttr shape,
 // step-2 design r9): analysis-hosted, called by the ops-side verifiers.
 mlir::LogicalResult verifyEnumValueLocally(mlir::Operation *operation);
 mlir::LogicalResult verifyCollectionLocally(mlir::Operation *operation);
+// Enum declaration grammar validation shared by EnumOp::verify (ops) and
+// resolveEnum (analysis); EnumDefinitionView is declared in
+// HardwareAnalysis.h.
+class EnumOp;
+mlir::FailureOr<::acir::ac::EnumDefinitionView>
+validateEnumDeclaration(::acir::ac::EnumOp declaration);
+mlir::LogicalResult verifyCollectionLocally(mlir::Operation *operation);
 
 using EmitError = llvm::function_ref<mlir::InFlightDiagnostic()>;
 

@@ -2,14 +2,14 @@
 // HardwareAnalysis members and the value-verification entry live on the
 // analysis side; the op-local verifiers stay in ACIREnumOps.cpp.
 #include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
+#include "llvm/ADT/StringSet.h"
 #include "pycircuit/Dialect/ACIR/ACIROps.h"
 
 using namespace mlir;
 
 namespace acir::ac {
-namespace {
-
-FailureOr<EnumDefinitionView> validateEnum(EnumOp declaration,
+namespace detail {
+FailureOr<EnumDefinitionView> validateEnumDeclaration(EnumOp declaration,
                                            Operation *site) {
   auto error = [&] { return site->emitOpError(); };
   if (!isa_and_nonnull<mlir::ModuleOp>(declaration->getParentOp()))
@@ -75,9 +75,6 @@ FailureOr<EnumDefinitionView> validateEnum(EnumOp declaration,
   return view;
 }
 
-} // namespace
-
-namespace detail {
 
 LogicalResult verifyEnumValueLocally(Operation *operation) {
   auto package = operation->getParentOfType<mlir::ModuleOp>();
@@ -100,7 +97,7 @@ HardwareAnalysis::resolveEnum(EnumType type, Operation *site) const {
   if (!declaration)
     return site->emitOpError() << "cannot resolve nominal enum declaration '"
                                << type.getName().getValue() << "'";
-  return validateEnum(declaration, site);
+  return validateEnumDeclaration(declaration, site);
 }
 
 LogicalResult
