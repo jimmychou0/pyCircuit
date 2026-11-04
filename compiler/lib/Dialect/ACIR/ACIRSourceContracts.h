@@ -248,16 +248,18 @@ mlir::LogicalResult
 verifyEntryBoundaryAttributeBound(mlir::Operation *operation,
                                   mlir::Attribute attribute);
 // Shared bits width/grammar entries (r9 §5): analysis-hosted, called by
-// the operations-layer bits verifiers. BitsType/StaticExprAttr resolve in
-// the enclosing namespaces.
-std::optional<llvm::APSInt> bitsLiteralInteger(StaticExprAttr expression);
+// the operations-layer bits verifiers.
+class ::acir::ac::BitsType;
+class ::acir::ac::StaticExprAttr;
+std::optional<llvm::APSInt> bitsLiteralInteger(::acir::ac::StaticExprAttr expression);
 bool bitsLiteralPositive(const llvm::APSInt &value);
 mlir::FailureOr<bool> bitsWidthsEquivalent(mlir::Operation *site,
-                                           BitsType lhs, BitsType rhs);
+                                           ::acir::ac::BitsType lhs,
+                                           ::acir::ac::BitsType rhs);
 mlir::LogicalResult
-bitsRequireSameWidth(mlir::Operation *operation, BitsType lhs,
-                     BitsType rhs, BitsType result);
-mlir::LogicalResult bitsRequireOneBit(BitsType type, mlir::Operation *operation,
+bitsRequireSameWidth(mlir::Operation *operation, ::acir::ac::BitsType lhs,
+                     ::acir::ac::BitsType rhs, ::acir::ac::BitsType result);
+mlir::LogicalResult bitsRequireOneBit(::acir::ac::BitsType type, mlir::Operation *operation,
                                       llvm::StringRef description);
 bool bitsOpcodeClosed(llvm::StringRef value,
                       llvm::ArrayRef<llvm::StringRef> choices);
