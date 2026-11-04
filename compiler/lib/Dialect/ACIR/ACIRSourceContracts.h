@@ -24,6 +24,10 @@ namespace acir::ac::detail {
 // collection operation verifiers (ops layer).
 mlir::LogicalResult shapeSchema(mlir::ArrayAttr shape,
                                 llvm::function_ref<mlir::InFlightDiagnostic()> error);
+// Local verification entries shared across the ops/analysis split (B2
+// step-2 design r9): analysis-hosted, called by the ops-side verifiers.
+mlir::LogicalResult verifyEnumValueLocally(mlir::Operation *operation);
+mlir::LogicalResult verifyCollectionLocally(mlir::Operation *operation);
 
 using EmitError = llvm::function_ref<mlir::InFlightDiagnostic()>;
 
