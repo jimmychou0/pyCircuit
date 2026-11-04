@@ -87,6 +87,8 @@ LogicalResult verifyEnumValueLocally(Operation *operation) {
 }
 } // namespace detail
 
+namespace acir::ac {
+
 EnumOp HardwareAnalysis::lookupEnum(EnumType type) const {
   return dyn_cast_or_null<EnumOp>(lookupDefinition(type.getName().getValue()));
 }

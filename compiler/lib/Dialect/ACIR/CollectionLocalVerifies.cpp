@@ -8,6 +8,38 @@
 using namespace mlir;
 
 namespace acir::ac {
+namespace {
+
+HardwareBindings scope(Operation *op) {
+  HardwareBindings b;
+  b.owner = op->getParentOfType<ModuleOp>();
+  return b;
+}
+
+LogicalResult scalarRegion(Operation *op, TypeRange args, TypeRange results) {
+  auto &region = op->getRegion(0);
+  if (!region.hasOneBlock() || region.front().empty() ||
+      !equivalentTypes(region.front().getArgumentTypes(), args) ||
+      !isa<YieldOp>(region.front().back()))
+    return op->emitOpError() << "requires isolated single block with matching "
+                                "scalar arguments and ac.yield";
+  if (!equivalentTypes(region.front().back().getOperandTypes(), results))
+    return op->emitOpError()
+           << "scalar region yield types do not match results";
+  for (auto &nested : region.front().without_terminator())
+    if (!isa<BitsConstantOp, BitsConstant4Op, BitsUnaryOp, BitsBinaryOp,
+             BitsCompareOp, BitsSelectOp, BitsConcatOp, BitsExtractOp,
+             BitsResizeOp, StructCreateOp, StructGetOp, EnumCreateOp,
+             EnumToBitsOp, EnumFromBitsOp, ValueMergeOp>(nested) &&
+        !(isa<TableMapOp>(op) &&
+          isa<TableCreateOp, TableSplatOp, TableReadOp, TableGetOp, TableMapOp>(nested)))
+      return nested.emitOpError()
+             << "table region accepts only closed pure scalar operations";
+  return success();
+}
+
+} // namespace
+
 
 LogicalResult CollectionOp::verify() {
   auto parent = dyn_cast_or_null<ModuleOp>((*this)->getParentOp());
