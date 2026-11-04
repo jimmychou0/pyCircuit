@@ -26,7 +26,6 @@ add_executable(pycircuit-emit emit.cpp)
 target_link_libraries(pycircuit-emit PRIVATE
   pycircuit_project_options
   ACIRDialect
-  ACIRAnalysis
   GFIRDialect
   ACIRCodegen
   MLIRArithDialect

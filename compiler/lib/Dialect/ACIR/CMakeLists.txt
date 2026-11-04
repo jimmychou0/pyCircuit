@@ -15,6 +15,7 @@ add_acir_library(ACIRCore SOURCES
   SourceStaticValueContracts.cpp
   ACIRSourceContracts.cpp
   "${PYCIRCUIT_SOURCE_DIR}/lib/Compiler/SourceIdentifier.cpp"
+  "${PYCIRCUIT_SOURCE_DIR}/lib/Analysis/LogicalStateValidation.cpp"
   "${PYCIRCUIT_SOURCE_DIR}/lib/IR/StateDeclarationContracts.cpp"
 )
 add_dependencies(ACIRCore
@@ -32,12 +33,7 @@ target_include_directories(ACIRCore PRIVATE
   "${PYCIRCUIT_SOURCE_DIR}/lib"
 )
 
-# The staged common analysis layer (B2 step-2 design r9 §5): every
-# HardwareAnalysis-based TU. ACIRDialect (operations) links ACIRCore and
-# stays BELOW this target; nothing in ACIRAnalysis may be referenced from
-# ACIRDialect or ACIRCore (enforced by pycircuit_verify_layering and the
-# ops/core probes).
-add_acir_library(ACIRAnalysis SOURCES
+add_acir_library(ACIRDialect SOURCES
   HardwareAnalysis.cpp
   HardwareAnalysisDependencies.cpp
   HardwareAnalysisValidation.cpp
@@ -70,23 +66,6 @@ add_acir_library(ACIRAnalysis SOURCES
   SourceUnitValidation.cpp
   FinalSourceUnitValidation.cpp
   SourceNamespaceValidation.cpp
-  "${PYCIRCUIT_SOURCE_DIR}/lib/Analysis/LogicalStateValidation.cpp"
-)
-add_dependencies(ACIRAnalysis
-  ACIRDialectIncGen
-  ACIRAttributesIncGen
-  ACIRTypesIncGen
-  ACIROpsIncGen
-)
-target_link_libraries(ACIRAnalysis PUBLIC
-  ACIRDialect
-  PycircuitStateInterfaces
-)
-target_include_directories(ACIRAnalysis PRIVATE
-  "${PYCIRCUIT_SOURCE_DIR}/lib"
-)
-
-add_acir_library(ACIRDialect SOURCES
   ACIRBitsOps.cpp
   CollectionLocalVerifies.cpp
   ACIREnumOps.cpp
@@ -99,6 +78,7 @@ add_acir_library(ACIRDialect SOURCES
   SourceRegistrationEntry.cpp
   HardwareGrantProof.cpp
   "${PYCIRCUIT_SOURCE_DIR}/lib/Compiler/SourceIdentifier.cpp"
+  "${PYCIRCUIT_SOURCE_DIR}/lib/Analysis/LogicalStateValidation.cpp"
   "${PYCIRCUIT_SOURCE_DIR}/lib/Analysis/LogicalStateValidation.cpp"
   "${PYCIRCUIT_SOURCE_DIR}/lib/IR/StateDeclarationContracts.cpp"
 )
