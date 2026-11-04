@@ -1,7 +1,8 @@
 #include "IR/StateDeclarationContracts.h"
 
 #include "Dialect/ACIR/ACIRSourceContracts.h"
-#include "pycircuit/Dialect/ACIR/ACIROps.h"
+#include "pycircuit/Interfaces/ModuleChildInterfaces.h"
+#include "pycircuit/Dialect/ACIR/ACIRTypes.h"
 #include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
 #include "pycircuit/Dialect/ACIR/SourceIdentifier.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -239,7 +240,8 @@ namespace acir {
 
 LogicalResult
 verifyNamedLogicalDeclaration(Operation *declaration, StringAttr instanceName) {
-  auto module = dyn_cast_or_null<ac::ModuleOp>(declaration->getParentOp());
+  auto module = dyn_cast_or_null<acir::OwningModuleOpInterface>(
+      declaration->getParentOp());
   if (!module || !instanceName)
     return declaration->emitOpError()
            << "requires named direct module placement";
@@ -251,7 +253,7 @@ verifyNamedLogicalDeclaration(Operation *declaration, StringAttr instanceName) {
   auto identity = declaration->getAttrOfType<DictionaryAttr>("occurrence");
   if (failed(ac::detail::verifyOccurrence(identity, error)))
     return failure();
-  auto symbol = module->getAttrOfType<StringAttr>("sym_name");
+  auto symbol = module ? module.getOwnerSymName() : StringAttr();
   if (!symbol)
     return error() << "logical state declaration requires a named owning module";
   return ac::detail::verifyOriginDefinition(
@@ -261,10 +263,11 @@ verifyNamedLogicalDeclaration(Operation *declaration, StringAttr instanceName) {
 }
 
 LogicalResult verifyRoutedLogicalStatePlacement(Operation *operation) {
-  auto owner = dyn_cast_or_null<ac::ModuleOp>(operation->getParentOp());
-  auto package =
-      owner ? dyn_cast_or_null<mlir::ModuleOp>(owner->getParentOp())
-            : mlir::ModuleOp();
+  auto owner = dyn_cast_or_null<acir::OwningModuleOpInterface>(
+      operation->getParentOp());
+  auto package = owner ? dyn_cast_or_null<mlir::ModuleOp>(
+                             owner->getParentOp())
+                       : mlir::ModuleOp();
   auto stage = package ? package->getAttrOfType<StringAttr>("ac.stage")
                        : StringAttr();
   auto contract =

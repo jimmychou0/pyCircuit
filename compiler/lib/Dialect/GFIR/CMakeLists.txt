@@ -10,8 +10,10 @@ add_dependencies(GFIRDialect
   GFIRDialectIncGen
   GFIROpsIncGen
 )
+# Link direction (B2 step-2 design r9): GFIR depends on the ACIR core and
+# the shared interfaces only, never the operations or analysis layers.
 target_link_libraries(GFIRDialect PUBLIC
-  ACIRDialect
+  ACIRCore
   PycircuitStateInterfaces
   MLIRIR
   MLIRSideEffectInterfaces

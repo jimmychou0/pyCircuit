@@ -1,7 +1,7 @@
 #include "pycircuit/Dialect/GFIR/GFIROps.h"
 #include "pycircuit/Dialect/GFIR/GFIRDialect.h"
 #include "Dialect/ACIR/ACIRSourceContracts.h"
-#include "pycircuit/Dialect/ACIR/ACIROps.h"
+#include "pycircuit/Interfaces/ModuleChildInterfaces.h"
 #include "pycircuit/Dialect/ACIR/SourceEffects.h"
 #include "IR/StateDeclarationContracts.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -34,16 +34,15 @@ LogicalResult StateOp::verify() {
   if (failed(verifyNamedLogicalDeclaration(getOperation(),
                                                  getInstanceNameAttr())))
     return failure();
-  auto owner = cast<ac::ModuleOp>((*this)->getParentOp());
-  for (Operation &other : owner.getBody().front())
+  auto owner = (*this)->getParentOp();
+  for (Operation &other : owner->getRegion(0).front())
     if (&other != getOperation() &&
-        (isa<ac::InstanceOp, ac::CollectionOp>(other) ||
-         isa<LogicalStateOpInterface>(other)) &&
+        (isa<acir::ModuleChildOpInterface, LogicalStateOpInterface>(other)) &&
         other.getAttrOfType<StringAttr>("instance_name") ==
             getInstanceNameAttr())
       return emitOpError() << "state instance_name must be unique across state "
                               "and child instance declarations";
-  for (Operation &other : owner.getBody().front()) {
+  for (Operation &other : owner->getRegion(0).front()) {
     if (&other == getOperation())
       continue;
     auto peer = dyn_cast<LogicalStateOpInterface>(other);

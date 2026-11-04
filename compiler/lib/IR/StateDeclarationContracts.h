@@ -58,8 +58,6 @@ namespace acir::ac {
 // symbol lookup, without concrete op classes or staged analysis. These
 // keep native verifiers' rejections for definite facts; binding-dependent
 // facts remain the staged tiers' obligation.
-class StructOp;
-
 /// Every declared field of the package-level struct named by `symbol`,
 /// or failure when the declaration is absent. Fields are the declaration
 /// attribute rows verbatim.
