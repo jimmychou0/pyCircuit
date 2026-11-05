@@ -1,6 +1,8 @@
 #include "pycircuit/Dialect/ACIR/ACIRTypes.h"
 #include "Dialect/ACIR/ACIRSourceContracts.h"
 #include "IR/StateDeclarationContracts.h"
+#include "pycircuit/Dialect/ACIR/ACIRDialect.h"
+#include "pycircuit/Dialect/GFIR/GFIRDialect.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/MLIRContext.h"
 
