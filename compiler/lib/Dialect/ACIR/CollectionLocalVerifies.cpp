@@ -1,8 +1,8 @@
 // Collection operation local verifiers (B2 step-2 design r9): these stay
 // with the operations layer; the shared member implementations live in
 // CollectionAnalysis.cpp.
+#include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
 #include "ACIRSourceContracts.h"
-#include "IR/StateDeclarationContracts.h"
 #include "pycircuit/Dialect/ACIR/ACIROps.h"
 
 using namespace mlir;
@@ -17,6 +17,12 @@ bool equivalentTypes(TypeRange lhs, TypeRange rhs) {
     if (!areEquivalentHardwareTypes(left, right))
       return false;
   return true;
+}
+
+HardwareBindings scope(Operation *op) {
+  HardwareBindings b;
+  b.owner = op->getParentOfType<ModuleOp>();
+  return b;
 }
 
 LogicalResult scalarRegion(Operation *op, TypeRange args, TypeRange results) {
@@ -56,23 +62,22 @@ LogicalResult CollectionOp::verify() {
   if (failed(detail::verifyOccurrence(getOccurrence(),
                                       [&] { return emitOpError(); })))
     return failure();
-  // Value verification runs at the staged entries (r9 §5).
-  return success();
+  return detail::verifyCollectionLocally(*this);
 }
 LogicalResult CollectionOp::verifySymbolUses(SymbolTableCollection &) {
-  return success();
+  return detail::verifyCollectionLocally(*this);
 }
-LogicalResult TableCreateOp::verify() { return success(); }
-LogicalResult TableSplatOp::verify() { return success(); }
-LogicalResult TableMapOp::verify() { return success(); }
-LogicalResult TableViewOp::verify() { return success(); }
-LogicalResult TableIndexOp::verify() { return success(); }
-LogicalResult TableReadOp::verify() { return success(); }
-LogicalResult TableGetOp::verify() { return success(); }
-LogicalResult TableMatchOp::verify() { return success(); }
-LogicalResult TableChooseOp::verify() { return success(); }
-LogicalResult TableFoldOp::verify() { return success(); }
-LogicalResult ValueMergeOp::verify() { return success(); }
+LogicalResult TableCreateOp::verify() { return detail::verifyCollectionLocally(*this); }
+LogicalResult TableSplatOp::verify() { return detail::verifyCollectionLocally(*this); }
+LogicalResult TableMapOp::verify() { return detail::verifyCollectionLocally(*this); }
+LogicalResult TableViewOp::verify() { return detail::verifyCollectionLocally(*this); }
+LogicalResult TableIndexOp::verify() { return detail::verifyCollectionLocally(*this); }
+LogicalResult TableReadOp::verify() { return detail::verifyCollectionLocally(*this); }
+LogicalResult TableGetOp::verify() { return detail::verifyCollectionLocally(*this); }
+LogicalResult TableMatchOp::verify() { return detail::verifyCollectionLocally(*this); }
+LogicalResult TableChooseOp::verify() { return detail::verifyCollectionLocally(*this); }
+LogicalResult TableFoldOp::verify() { return detail::verifyCollectionLocally(*this); }
+LogicalResult ValueMergeOp::verify() { return detail::verifyCollectionLocally(*this); }
 LogicalResult TableMapOp::verifyRegions() {
   if (getBody().empty() || getBody().front().getArguments().empty())
     return emitOpError() << "table.map requires ordinal argument";
@@ -95,8 +100,10 @@ LogicalResult TableMatchOp::verifyRegions() {
       dyn_cast<BitsType>(getBody().front().back().getOperand(0).getType());
   if (!result)
     return emitOpError() << "table.match predicate must yield one bit";
-  // Predicate width resolution runs staged (r9 §5); the structural
-  // one-bit-shape and region checks stay native.
+  HardwareAnalysis a((*this)->getParentOfType<mlir::ModuleOp>());
+  auto w = a.getPackedWidth(result, scope(*this), *this);
+  if (failed(w) || *w != 1)
+    return emitOpError() << "table.match predicate must yield one bit";
   return scalarRegion(*this, args, TypeRange{result});
 }
 } // namespace acir::ac

@@ -302,9 +302,4 @@ LogicalResult verifyEntryBoundary(const HardwareAnalysis &analysis, bool normali
   return failure(uses.wasInterrupted());
 }
 
-LogicalResult detail::verifyEntryBoundaryAttributeEntry(
-    Operation *operation, Attribute attribute) {
-  return detail::verifyEntryBoundaryAttribute(operation, attribute);
-}
-
 }

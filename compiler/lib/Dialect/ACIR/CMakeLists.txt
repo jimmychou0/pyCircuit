@@ -34,11 +34,7 @@ target_include_directories(ACIRCore PRIVATE
   "${PYCIRCUIT_SOURCE_DIR}/lib"
 )
 
-# The staged common analysis layer (B2 step-2 design r9 §5): every
-# HardwareAnalysis-based TU. The operations layer below links ACIRCore and
-# calls into this target only through the shared contract entries; the
-# probes and pycircuit_verify_layering enforce the direction.
-add_acir_library(ACIRAnalysis SOURCES
+add_acir_library(ACIRDialect SOURCES
   HardwareAnalysis.cpp
   HardwareAnalysisDependencies.cpp
   HardwareAnalysisValidation.cpp
@@ -62,28 +58,10 @@ add_acir_library(ACIRAnalysis SOURCES
   EntryBoundary.cpp
   CollectionAnalysis.cpp
   EnumAnalysis.cpp
-  QueueAnalysis.cpp
   SourceUnitValidation.cpp
   FinalSourceUnitValidation.cpp
   SourceNamespaceValidation.cpp
   HardwareGrantProof.cpp
-  "${PYCIRCUIT_SOURCE_DIR}/lib/Analysis/LogicalStateValidation.cpp"
-)
-add_dependencies(ACIRAnalysis
-  ACIRDialectIncGen
-  ACIRAttributesIncGen
-  ACIRTypesIncGen
-  ACIROpsIncGen
-)
-target_link_libraries(ACIRAnalysis PUBLIC
-  ACIRDialect
-  PycircuitStateInterfaces
-)
-target_include_directories(ACIRAnalysis PRIVATE
-  "${PYCIRCUIT_SOURCE_DIR}/lib"
-)
-
-add_acir_library(ACIRDialect SOURCES
   ACIRTransactionOps.cpp
   ACIRModuleOps.cpp
   ACIRQueueOps.cpp

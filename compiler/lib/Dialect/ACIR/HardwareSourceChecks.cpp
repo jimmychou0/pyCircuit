@@ -1398,8 +1398,4 @@ LogicalResult verifyDefinitionSourceChecksStandalone(
   return HardwareAnalysis(definition->getParentOfType<mlir::ModuleOp>())
       .verifyDefinitionSourceChecks(definition);
 }
-LogicalResult detail::verifyModuleObservationIdentitiesEntry(
-    Operation *module) {
-  return detail::verifyModuleObservationIdentities(cast<ModuleOp>(module));
-}
 } // namespace acir::ac

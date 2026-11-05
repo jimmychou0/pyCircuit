@@ -151,7 +151,7 @@ LogicalResult ModuleOp::verifyRegions() {
   if (failed(body(*this, getFunctionType().getInputs(),
                   getFunctionType().getResults())))
     return failure();
-  if (failed(detail::verifyModuleObservationIdentitiesEntry(*this)))
+  if (failed(detail::verifyModuleObservationIdentities(*this)))
     return failure();
   // Scope authority is this exact immutable lexical definition. Repeated
   // operands share interned types, so validate each type root once
@@ -212,11 +212,10 @@ LogicalResult InstanceOp::verify() {
 }
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &) {
   if (isTransactionalPackage(*this)) return verifyTransactionalOperation(*this);
-  // Signature verification of the resolved callee runs at the staged
-  // entries (r9 §5): HardwareAnalysis::verify via --ac-verify-hardware
-  // and the routing preparation; the lit fixtures pin the diagnostics
-  // there.
-  return success();
+  HardwareAnalysis a((*this)->getParentOfType<mlir::ModuleOp>());
+  HardwareBindings b;
+  b.owner = (*this)->getParentOp();
+  return a.verifyInstance(*this, b);
 }
 LogicalResult YieldOp::verify() {
   if (isTransactionalPackage(*this)) return verifyTransactionalOperation(*this);
@@ -250,12 +249,16 @@ LogicalResult ModuleImportOp::verify() {
       .verifyImport(*this);
 }
 LogicalResult SourceObserveOp::verify() {
-  // Observation structure checks run during the staged definition walk
-  // (r9 §5).
-  return success();
+  return detail::verifySourceObservationStructure(*this);
 }
 LogicalResult SourceExpectOp::verify() {
-  // Expect checks run during the staged definition walk (r9 §5).
-  return success();
+  HardwareBindings bindings;
+  auto *parent = (*this)->getParentOp();
+  bindings.owner = isa_and_nonnull<SourceMethodOp, SourceTransactionOp>(parent)
+                       ? parent->getParentOp()
+                       : parent;
+  return detail::verifySourceExpectOperation(
+      HardwareAnalysis((*this)->getParentOfType<mlir::ModuleOp>()), *this,
+      bindings);
 }
 } // namespace acir::ac
