@@ -1438,7 +1438,7 @@ private:
           if (failed(verifyLogicalStateDeclarationBinding(logical, &analysis,
                                                            &local, &budget)))
             return failure();
-        } else if (auto source = dyn_cast<acir::SourceStateOp>(&op)) {
+        } else if (auto source = dyn_cast<acir::ac::SourceStateOp>(&op)) {
           // Source ac.state declarations do not implement the routed
           // logical-state interface; their source binding (the identical
           // declarationBoundChecks plus closed-initializer set the native
