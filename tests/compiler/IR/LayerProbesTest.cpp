@@ -1,13 +1,8 @@
-#include "pycircuit/Dialect/ACIR/ACIRDialect.h"
 #include "pycircuit/Dialect/ACIR/ACIRTypes.h"
-#include "pycircuit/Dialect/GFIR/GFIRDialect.h"
 #include "Dialect/ACIR/ACIRSourceContracts.h"
 #include "IR/StateDeclarationContracts.h"
 #include "mlir/IR/Diagnostics.h"
-#include "mlir/IR/Dialect.h"
 #include "mlir/IR/MLIRContext.h"
-#include "mlir/IR/OperationSupport.h"
-#include "mlir/IR/BuiltinAttributes.h"
 
 #include "gtest/gtest.h"
 
@@ -15,10 +10,12 @@
 // Core probe: whole-archive linking pulls EVERY core member, and this TU
 // references one symbol per enumerated core TU, so any reverse dependency
 // inside ACIRCore fails here at link time (r9 §1 per-TU symbol table).
+// Verified core-only references only: generated types, the identity and
+// shape grammar, the placement/equivalence contracts. Ops- or
+// analysis-layer symbols are deliberately not referenced here; the
+// undefined symbols that would appear otherwise are the probe's finding.
 namespace {
 TEST(ACIRCoreStandalone, ReferencesEveryCoreUnit) {
-  auto *context = static_cast<mlir::MLIRContext *>(nullptr);
-  (void)context;
   // ACIRCoreDefs + PacketTypes: generated type accessor and shape grammar.
   (void)&acir::ac::BitsType::get;
   (void)&acir::ac::detail::shapeSchema;
