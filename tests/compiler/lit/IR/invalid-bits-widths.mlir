@@ -1,4 +1,4 @@
-// RUN: %pycircuit_opt %s --ac-verify-hardware --verify-diagnostics
+// RUN: %pycircuit_opt %s --split-input-file --ac-verify-hardware --verify-diagnostics
 // The symbolic-width equivalence rejections moved to the staged tiers (r3
 // ACIRBitsOps row); the pinned messages are the bound-tier texts from the
 // resolved dispatch.
