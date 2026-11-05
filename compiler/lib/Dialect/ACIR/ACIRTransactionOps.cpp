@@ -712,9 +712,6 @@ LogicalResult SourceBranchOp::verifyRegions() {
   return success();
 }
 
-LogicalResult SourceMethodOp::verifyRegions() {
-  return success();
-}
 
 LogicalResult SourceMethodOp::verifyRegions() {
   SmallVector<Type> arguments(getFunctionType().getInputs());

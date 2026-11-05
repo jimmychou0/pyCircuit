@@ -5,6 +5,7 @@
 // the preflight's verifyResolvedOperation walk).
 #include "pycircuit/Dialect/ACIR/ACIROps.h"
 #include "ACIRSourceContracts.h"
+#include "llvm/ADT/StringSet.h"
 
 using namespace mlir;
 
