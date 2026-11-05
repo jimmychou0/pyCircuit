@@ -29,7 +29,7 @@ TEST(ACIRCoreStandalone, ReferencesEveryCoreUnit) {
   // ACIRIdentityContracts: occurrence grammar.
   (void)&acir::ac::detail::verifyOccurrence;
   // ACIRStaticContracts + static cluster: template type leaf.
-  (void)&acir::ac::detail::verifySourceTemplateType;
+  (void)&acir::ac::verifySourceTemplateType;
   // ACIRSourceContracts: shared contracts entry.
   (void)&acir::ac::areEquivalentHardwareTypes;
   // IR/StateDeclarationContracts: declared-category placement.
