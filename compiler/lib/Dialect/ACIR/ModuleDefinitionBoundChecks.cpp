@@ -513,8 +513,13 @@ LogicalResult HardwareAnalysis::verifyModuleDeclaration(
       return failure();
     return verifyImport(imported);
   }
-  if (auto instance = dyn_cast<InstanceOp>(operation))
-    return verifyInstance(instance, bindings);
+  if (auto instance = dyn_cast<InstanceOp>(operation)) {
+    // The native verifySymbolUses bound the parent module as the owner;
+    // keep that shape regardless of the caller's bindings.
+    HardwareBindings parent = bindings;
+    parent.owner = instance->getParentOp();
+    return verifyInstance(instance, parent);
+  }
   if (auto expect = dyn_cast<SourceExpectOp>(operation)) {
     HardwareBindings owner = bindings;
     auto *parent = expect->getParentOp();
