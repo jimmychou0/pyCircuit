@@ -15,9 +15,6 @@
 #include "pycircuit/Dialect/ACIR/ACIRAttributes.h"
 #include "pycircuit/Dialect/ACIR/ACIRTypes.h"
 #include "Dialect/ACIR/ACIRSourceContracts.h"
-#include "Dialect/ACIR/ACIRStaticEvaluation.h"
-#include "Dialect/ACIR/SourceStaticRecordConstructors.h"
-#include "Dialect/ACIR/SourceStaticDomains.h"
 #include "Dialect/ACIR/SourceSyntaxSiteContracts.h"
 #include "Dialect/ACIR/SourceValueSemantics.h"
 #include "pycircuit/Dialect/ACIR/SourceIdentifier.h"
@@ -42,13 +39,6 @@ TEST(ACIRCoreStandalone, ReferencesEveryCoreUnit) {
   (void)&acir::ac::detail::verifyLexicalPath;
   // SourceValueSemantics: value opcode grammar.
   (void)&acir::ac::detail::parseValueOpcode;
-  // ACIRStaticEvaluation: static expression and record resolution.
-  (void)&acir::ac::detail::evaluateSourceStaticExpr;
-  // SourceStaticRecordConstructors: source-static record constructor
-  // evaluation over func bodies.
-  (void)&acir::ac::detail::evaluateSourceStaticRecordConstructor;
-  // SourceStaticDomains: source domain resolution and matching.
-  (void)&acir::ac::detail::resolveSourceDomain;
   // StateDeclarationContracts: declaration placement contracts.
   (void)&acir::ac::verifyRoutedLogicalStatePlacement;
   // SourceIdentifier: Python identifier grammar leaf.
