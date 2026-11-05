@@ -327,6 +327,8 @@ public:
   verifyStructOperation(mlir::Operation *operation,
                         const HardwareBindings &bindings,
                         bool requireResolved = false) const;
+  mlir::LogicalResult
+  verifyBitsSymbolicWidths(mlir::Operation *operation) const;
   /// Normalize the complete writer tuples together before building merge IR.
   mlir::LogicalResult normalizeMergeOperands(
       mlir::Type baseType, llvm::SmallVectorImpl<mlir::ArrayAttr> &paths,

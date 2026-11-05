@@ -100,10 +100,8 @@ LogicalResult TableMatchOp::verifyRegions() {
       dyn_cast<BitsType>(getBody().front().back().getOperand(0).getType());
   if (!result)
     return emitOpError() << "table.match predicate must yield one bit";
-  HardwareAnalysis a((*this)->getParentOfType<mlir::ModuleOp>());
-  auto w = a.getPackedWidth(result, scope(*this), *this);
-  if (failed(w) || *w != 1)
-    return emitOpError() << "table.match predicate must yield one bit";
+  // The yield width resolution runs from the staged collection entry
+  // (r3 CollectionLocalVerifies residual).
   return scalarRegion(*this, args, TypeRange{result});
 }
 } // namespace acir::ac

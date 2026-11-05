@@ -640,8 +640,22 @@ HardwareAnalysis::verifyCollectionOperation(Operation *op,
         failed(width(get.getInRange().getType(), 1)))
       return failure();
   } else if (auto match = dyn_cast<TableMatchOp>(op)) {
-    if (auto n = count(match.getInput().getType()))
-      return width(match.getMask().getType(), *n);
+    if (auto n = count(match.getInput().getType())) {
+      if (failed(width(match.getMask().getType(), *n)))
+        return failure();
+      // Same width-one rejection the native verifyRegions used before the
+      // r3 residual split, evaluated with the current bindings.
+      auto yielded = dyn_cast<BitsType>(
+          match.getBody().front().back().getOperand(0).getType());
+      if (!yielded)
+        return match.emitOpError() << "table.match predicate must yield one bit";
+      auto w = getPackedWidth(yielded, bindings, match);
+      if (failed(w))
+        return failure();
+      if (*w != 1)
+        return match.emitOpError()
+               << "table.match predicate must yield one bit";
+    }
   } else if (auto choose = dyn_cast<TableChooseOp>(op)) {
     if (choose.getPolicy() != "first" ||
         (choose.getOrder() != "low" && choose.getOrder() != "high"))

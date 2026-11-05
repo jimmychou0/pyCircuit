@@ -200,6 +200,8 @@ FailureOr<SourceUnitStructure> verifyStructure(mlir::ModuleOp unit, bool body,
           TableMatchOp, TableChooseOp, TableFoldOp, ValueMergeOp>(operation);
       bool structFamily =
           isa<StructOp, StructCreateOp, StructGetOp>(operation);
+      bool bitsWidthFamily = isa<BitsUnaryOp, BitsBinaryOp, BitsCompareOp,
+                                 BitsSelectOp>(operation);
       LogicalResult result = success();
       if (enumFamily)
         result = analysis.verifyEnumValueOperation(operation, bindings);
@@ -207,6 +209,17 @@ FailureOr<SourceUnitStructure> verifyStructure(mlir::ModuleOp unit, bool body,
         result = analysis.verifyCollectionOperation(operation, bindings);
       else if (structFamily)
         result = analysis.verifyStructOperation(operation, bindings);
+      else if (bitsWidthFamily)
+        result = analysis.verifyBitsSymbolicWidths(operation);
+      else if (auto pred = dyn_cast<SourcePredicateOp>(operation)) {
+        auto width = analysis.getPackedWidth(pred.getInput().getType(),
+                                             bindings, pred);
+        if (failed(width))
+          result = failure();
+        else if (*width != 1)
+          result = pred.emitOpError()
+                   << "source SCF predicate requires width-one Bits";
+      }
       if (failed(result))
         return WalkResult::interrupt();
       return WalkResult::advance();

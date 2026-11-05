@@ -1069,6 +1069,15 @@ LogicalResult HardwareAnalysis::verifyResolvedOperation(
   if (isa<StructOp, StructCreateOp, StructGetOp>(op) &&
       failed(verifyStructOperation(op, bindings, true)))
     return failure();
+  if (auto pred = dyn_cast<SourcePredicateOp>(op)) {
+    if (!isa<BitsType>(pred.getInput().getType()))
+      return op->emitOpError() << "source SCF predicate requires width-one Bits";
+    auto width = getPackedWidth(pred.getInput().getType(), bindings, op);
+    if (failed(width))
+      return failure();
+    if (*width != 1)
+      return op->emitOpError() << "source SCF predicate requires width-one Bits";
+  }
   if (auto write = dyn_cast<SourceStateWriteOp>(op); write && !write.getIndices().empty()) {
     auto owner = write->getParentOfType<ModuleOp>();
     SourceStateOp state;
