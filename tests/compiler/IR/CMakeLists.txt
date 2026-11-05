@@ -46,6 +46,8 @@ set_tests_properties(ACIROpsStandaloneTests PROPERTIES LABELS "api;gate;nightly"
 add_executable(ACIRCoreStandaloneTests LayerProbesTest.cpp)
 target_compile_definitions(ACIRCoreStandaloneTests PRIVATE
   PYCIRCUIT_CORE_PROBE=1)
+target_include_directories(ACIRCoreStandaloneTests PRIVATE
+  "${PYCIRCUIT_SOURCE_DIR}/lib")
 target_link_libraries(ACIRCoreStandaloneTests PRIVATE
   "$<LINK_LIBRARY:WHOLE_ARCHIVE,ACIRCore>" GTest::gtest_main)
 add_test(NAME ACIRCoreStandaloneTests COMMAND ACIRCoreStandaloneTests)

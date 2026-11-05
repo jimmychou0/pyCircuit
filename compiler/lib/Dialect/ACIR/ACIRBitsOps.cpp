@@ -6,6 +6,7 @@
 #include "ACIRSourceContracts.h"
 #include "IR/StateDeclarationContracts.h"
 #include "Dialect/ACIR/SourceCheckBudget.h"
+#include <thread>
 #include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
 
 using namespace mlir;
