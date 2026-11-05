@@ -20,6 +20,10 @@ module {
 
 // -----
 
+#w1 = #ac.static_expr<{kind = "literal", location = {path = "case_eq.py", line = 1 : i64, column = 1 : i64, end_line = 1 : i64, end_column = 2 : i64}, origin = {site = {definition = @top, ast_path = []}, expansion = []}, value = {kind = "integer", value = #ac.math_int<1>}}>
+!b1 = !ac.bits<#w1>
+#w8 = #ac.static_expr<{kind = "literal", location = {path = "case_eq.py", line = 1 : i64, column = 1 : i64, end_line = 1 : i64, end_column = 2 : i64}, origin = {site = {definition = @top, ast_path = []}, expansion = []}, value = {kind = "integer", value = #ac.math_int<8>}}>
+!b8 = !ac.bits<#w8>
 module {
   "ac.module"() ({
   ^bb0(%lhs: !b1, %rhs: !b8):
