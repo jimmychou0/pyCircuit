@@ -178,7 +178,7 @@ FailureOr<SourceUnitStructure> verifyStructure(mlir::ModuleOp unit, bool body,
   // rejection for source packages while the native verifiers' reroute (§5)
   // moves their analysis-dependent calls out of the operations archive.
   bool transactions = false;
-  for (Operation &operation : unit.getBody().front())
+  for (Operation &operation : unit.getBody()->getOperations())
     if (isa<SourceStateOp, SourceStateReadOp, SourceStateWriteOp,
              SourceMethodOp, SourceMethodCallOp,
              SourceTransactionOp>(operation))
