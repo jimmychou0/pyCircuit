@@ -177,12 +177,19 @@ FailureOr<SourceUnitStructure> verifyStructure(mlir::ModuleOp unit, bool body,
   // (routing preparation / routed package verification). This keeps every
   // rejection for source packages while the native verifiers' reroute (§5)
   // moves their analysis-dependent calls out of the operations archive.
+  // Skip bodies with any retained transaction surface (state, Methods,
+  // transactions or rule bodies): their semantic checks run during the
+  // routing preparation instead; the walk here covers only plain modules.
   bool transactions = false;
-  for (Operation &operation : unit.getBody()->getOperations())
-    if (isa<SourceStateOp, SourceStateReadOp, SourceStateWriteOp,
-             SourceMethodOp, SourceMethodCallOp,
-             SourceTransactionOp>(operation))
-      transactions = true;
+  unit.walk([&](Operation *operation) {
+    transactions |= isa<SourceStateOp, SourceStateReadOp,
+                        SourceStateWriteOp, SourceMethodOp,
+                        SourceMethodCallOp, SourceTransactionOp>(operation);
+    if (auto module = dyn_cast<ac::ModuleOp>(operation))
+      for (Operation &child : module.getBody()->getOperations())
+        if (isa<RuleOp>(child))
+          transactions = true;
+  });
   if (!transactions) {
     HardwareAnalysis analysis(unit);
     HardwareBindings bindings;
