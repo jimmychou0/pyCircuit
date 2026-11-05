@@ -212,10 +212,10 @@ LogicalResult InstanceOp::verify() {
 }
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &) {
   if (isTransactionalPackage(*this)) return verifyTransactionalOperation(*this);
-  // Signature/width verification of the resolved callee moves to the
-  // staged tiers (r9 §5): the preflight visit (routed/final) and the
-  // routing preparation (source).
-  return success();
+  HardwareAnalysis a((*this)->getParentOfType<mlir::ModuleOp>());
+  HardwareBindings b;
+  b.owner = (*this)->getParentOp();
+  return a.verifyInstance(*this, b);
 }
 LogicalResult YieldOp::verify() {
   if (isTransactionalPackage(*this)) return verifyTransactionalOperation(*this);
