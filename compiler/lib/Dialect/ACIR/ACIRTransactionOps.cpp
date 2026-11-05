@@ -731,13 +731,6 @@ LogicalResult SourceTransactionOp::verifyRegions() {
   return success();
 }
 
-LogicalResult SourceTransactionOp::verifyRegions() {
-  if (failed(region(*this, 0, getCaptures().getTypes(), {})))
-    return failure();
-  if (failed(region(*this, 1, getCaptures().getTypes(), getResultTypes())))
-    return failure();
-  return failed(getSourceRegistrationEntry(*this)) ? failure() : success();
-}
 
 Operation *detail::findUnloweredTransaction(Operation *root) {
   SmallVector<Operation *> pending;
