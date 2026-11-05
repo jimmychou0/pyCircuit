@@ -177,7 +177,11 @@ FailureOr<SourceUnitStructure> verifyStructure(mlir::ModuleOp unit, bool body,
   // (routing preparation / routed package verification). This keeps every
   // rejection for source packages while the native verifiers' reroute (§5)
   // moves their analysis-dependent calls out of the operations archive.
-  {
+  if (!llvm::any_of(unit.getBody().front(), [](Operation &operation) {
+        return isa<SourceStateOp, SourceStateReadOp, SourceStateWriteOp,
+                   SourceMethodOp, SourceMethodCallOp,
+                   SourceTransactionOp>(operation);
+      })) {
     HardwareAnalysis analysis(unit);
     HardwareBindings bindings;
     auto semanticWalk = unit.walk([&](Operation *operation) {
