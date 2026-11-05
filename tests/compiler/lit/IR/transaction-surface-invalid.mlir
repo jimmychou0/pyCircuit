@@ -1,9 +1,9 @@
-// RUN: %pycircuit_opt %s --split-input-file --ac-verify-hardware --verify-diagnostics
+// RUN: %pycircuit_opt %s --split-input-file --ac-route-transactions --verify-diagnostics
 
 // The transaction-surface and state-declaration binding rejections live in
 // the staged tiers since the B2 step-2 transaction family: the resolved
-// dispatch rows and the source-check catalog own these diagnostics through
-// the closed ac.system envelope, while the native verifier keeps the
+// dispatch rows run under the routing preparation and the routed catalog
+// owns the state declaration binding, while the native verifier keeps the
 // placement, occurrence and region grammar (see transaction-effects-invalid.mlir).
 #w1 = #ac.static_expr<{kind = "literal", value = {kind = "integer", value = #ac.math_int<1>}, origin = {site = {definition = @Counter, ast_path = []}, expansion = []}, location = {path = "transactions.py", line = 1 : i64, column = 1 : i64, end_line = 1 : i64, end_column = 2 : i64}}>
 #w2 = #ac.static_expr<{kind = "literal", value = {kind = "integer", value = #ac.math_int<2>}, origin = {site = {definition = @Counter, ast_path = []}, expansion = []}, location = {path = "transactions.py", line = 1 : i64, column = 1 : i64, end_line = 1 : i64, end_column = 2 : i64}}>
@@ -15,7 +15,7 @@
 #root = {site = {definition = @Root, ast_path = []}, expansion = []}
 #span = {path = "transactions.py", line = 1 : i64, column = 1 : i64, end_line = 1 : i64, end_column = 2 : i64}
 #byte_constraint = {kind = "hardware", type = !b8, source_kind = "fixed_bits"}
-module {
+module attributes {ac.source_units = [{package = "", path = "transactions.py"}]} {
   "ac.module"() ({
   ^bb0(%clk: !b1, %rst: !b1, %data: !b8):
     %initial = "ac.bits.constant"() {value = #w1} : () -> !b8
@@ -48,7 +48,7 @@ module {
 #root = {site = {definition = @Root, ast_path = []}, expansion = []}
 #span = {path = "transactions.py", line = 1 : i64, column = 1 : i64, end_line = 1 : i64, end_column = 2 : i64}
 #byte_constraint = {kind = "hardware", type = !b8, source_kind = "fixed_bits"}
-module {
+module attributes {ac.source_units = [{package = "", path = "transactions.py"}]} {
   "ac.module"() ({
   ^bb0(%clk: !b1, %rst: !b1, %data: !b8):
     %initial = "ac.bits.constant"() {value = #w1} : () -> !b8
@@ -81,7 +81,7 @@ module {
 #root = {site = {definition = @Root, ast_path = []}, expansion = []}
 #span = {path = "transactions.py", line = 1 : i64, column = 1 : i64, end_line = 1 : i64, end_column = 2 : i64}
 #byte_constraint = {kind = "hardware", type = !b8, source_kind = "fixed_bits"}
-module {
+module attributes {ac.source_units = [{package = "", path = "transactions.py"}]} {
   "ac.module"() ({
   ^bb0(%clk: !b1, %rst: !b1, %data: !b8):
     %initial = "ac.bits.constant"() {value = #w1} : () -> !b8
@@ -114,7 +114,7 @@ module {
 #root = {site = {definition = @Root, ast_path = []}, expansion = []}
 #span = {path = "transactions.py", line = 1 : i64, column = 1 : i64, end_line = 1 : i64, end_column = 2 : i64}
 #byte_constraint = {kind = "hardware", type = !b8, source_kind = "fixed_bits"}
-module {
+module attributes {ac.source_units = [{package = "", path = "transactions.py"}]} {
   "ac.module"() ({
   ^bb0(%clk: !b1, %rst: !b1, %data: !b8):
     %initial = "ac.bits.constant"() {value = #w1} : () -> !b8
@@ -147,7 +147,7 @@ module {
 #root = {site = {definition = @Root, ast_path = []}, expansion = []}
 #span = {path = "transactions.py", line = 1 : i64, column = 1 : i64, end_line = 1 : i64, end_column = 2 : i64}
 #byte_constraint = {kind = "hardware", type = !b8, source_kind = "fixed_bits"}
-module {
+module attributes {ac.source_units = [{package = "", path = "transactions.py"}]} {
   "ac.module"() ({
   ^bb0(%clk: !b1, %rst: !b1, %data: !b8):
     %initial = "ac.bits.constant"() {value = #w1} : () -> !b8
@@ -180,7 +180,7 @@ module {
 #root = {site = {definition = @Root, ast_path = []}, expansion = []}
 #span = {path = "transactions.py", line = 1 : i64, column = 1 : i64, end_line = 1 : i64, end_column = 2 : i64}
 #byte_constraint = {kind = "hardware", type = !b8, source_kind = "fixed_bits"}
-module {
+module attributes {ac.source_units = [{package = "", path = "transactions.py"}]} {
   "ac.module"() ({
   ^bb0(%clk: !b1, %rst: !b1, %data: !b8):
     %initial = "ac.bits.constant"() {value = #w1} : () -> !b8
