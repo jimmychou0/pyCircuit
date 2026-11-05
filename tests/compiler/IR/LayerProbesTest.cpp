@@ -35,7 +35,7 @@ TEST(ACIRCoreStandalone, ReferencesEveryCoreUnit) {
   // ACIRSourceContracts: shared contracts entry.
   (void)&acir::ac::areEquivalentHardwareTypes;
   // IR/StateDeclarationContracts: declared-category placement.
-  (void)&acir::verifyRoutedLogicalStatePlacement;
+  (void)&acir::ac::verifyRoutedLogicalStatePlacement;
   SUCCEED();
 }
 } // namespace
