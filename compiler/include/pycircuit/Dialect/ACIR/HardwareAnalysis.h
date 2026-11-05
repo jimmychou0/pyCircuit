@@ -333,6 +333,16 @@ public:
   verifyModuleDeclaration(mlir::Operation *operation,
                           const HardwareBindings &bindings,
                           bool requireResolved = false) const;
+  /// Verify the staged transaction-surface bound checks: state
+  /// selector/payload resolution, Method contract constraints and formal
+  /// proposals, Method call resolution with bound-signature agreement,
+  /// transaction/branch control predicates and the guard-yield predicate.
+  /// The moved bodies keep the lexical owner-scope call shape of the native
+  /// verifiers they moved from.
+  mlir::LogicalResult
+  verifyTransactionSurfaceOperation(mlir::Operation *operation,
+                                    const HardwareBindings &bindings,
+                                    bool requireResolved = false) const;
   /// Normalize the complete writer tuples together before building merge IR.
   mlir::LogicalResult normalizeMergeOperands(
       mlir::Type baseType, llvm::SmallVectorImpl<mlir::ArrayAttr> &paths,

@@ -1433,11 +1433,21 @@ private:
       // including retained definitions outside the instance closure. This
       // work was previously unbudgeted native-verifier work; catalog keeps
       // it without new debits.
-      for (auto &op : definition.getBody().front())
-        if (auto logical = dyn_cast<acir::LogicalStateOpInterface>(&op))
+      for (auto &op : definition.getBody().front()) {
+        if (auto logical = dyn_cast<acir::LogicalStateOpInterface>(&op)) {
           if (failed(verifyLogicalStateDeclarationBinding(logical, &analysis,
                                                            &local, &budget)))
             return failure();
+        } else if (auto source = dyn_cast<acir::SourceStateOp>(&op)) {
+          // Source ac.state declarations do not implement the routed
+          // logical-state interface; their source binding (the identical
+          // declarationBoundChecks plus closed-initializer set the native
+          // verify ran) is this catalog's declaration row since the B2
+          // step-2 transaction family moved it off the native verifier.
+          if (failed(verifyLogicalStateSourceBinding(source)))
+            return failure();
+        }
+      }
       auto sampling = catalogSampling(definition, local, bindings);
       if (failed(sampling))
         return failure();

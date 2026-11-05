@@ -69,6 +69,7 @@ add_acir_library(ACIRDialect SOURCES
   QueueBoundChecks.cpp
   BitsBoundChecks.cpp
   ModuleDefinitionBoundChecks.cpp
+  TransactionBoundChecks.cpp
   SourceUnitValidation.cpp
   FinalSourceUnitValidation.cpp
   SourceNamespaceValidation.cpp
