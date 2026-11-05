@@ -644,17 +644,24 @@ HardwareAnalysis::verifyCollectionOperation(Operation *op,
       if (failed(width(match.getMask().getType(), *n)))
         return failure();
       // Same width-one rejection the native verifyRegions used before the
-      // r3 residual split, evaluated with the current bindings.
-      auto yielded = dyn_cast<BitsType>(
-          match.getBody().front().back().getOperand(0).getType());
-      if (!yielded)
-        return match.emitOpError() << "table.match predicate must yield one bit";
-      auto w = getPackedWidth(yielded, bindings, match);
-      if (failed(w))
-        return failure();
-      if (*w != 1)
-        return match.emitOpError()
-               << "table.match predicate must yield one bit";
+      // r3 residual split, evaluated with the current bindings. Only runs
+      // once the native region grammar has established the yield shape.
+      auto &body = match.getBody();
+      if (!body.empty() && !body.front().empty() &&
+          isa<YieldOp>(body.front().back()) &&
+          body.front().back().getNumOperands() == 1) {
+        auto yielded =
+            dyn_cast<BitsType>(body.front().back().getOperand(0).getType());
+        if (!yielded)
+          return match.emitOpError()
+                 << "table.match predicate must yield one bit";
+        auto w = getPackedWidth(yielded, bindings, match);
+        if (failed(w))
+          return failure();
+        if (*w != 1)
+          return match.emitOpError()
+                 << "table.match predicate must yield one bit";
+      }
     }
   } else if (auto choose = dyn_cast<TableChooseOp>(op)) {
     if (choose.getPolicy() != "first" ||
