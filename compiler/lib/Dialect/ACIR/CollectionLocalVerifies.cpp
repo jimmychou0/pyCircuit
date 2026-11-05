@@ -2,6 +2,7 @@
 // with the operations layer; the shared member implementations live in
 // CollectionAnalysis.cpp.
 #include "ACIRSourceContracts.h"
+#include "IR/StateDeclarationContracts.h"
 #include "pycircuit/Dialect/ACIR/ACIROps.h"
 
 using namespace mlir;

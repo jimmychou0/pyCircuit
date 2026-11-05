@@ -107,12 +107,4 @@ LogicalResult QueueOp::verify() {
          << "retired ac.queue is not admitted; use a canonical FIFO instance";
 }
 
-bool isQueueInstance(InstanceOp instance) {
-  if (!instance)
-    return false;
-  auto callee = instance.getCalleeAttr();
-  return callee &&
-         (callee.getValue() == "pycircuit.__builtins__.fifo_local" ||
-          callee.getValue() == "pycircuit.__builtins__.fifo");
-}
 } // namespace acir::ac

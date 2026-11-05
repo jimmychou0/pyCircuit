@@ -8,6 +8,7 @@
 
 #include <limits>
 #include <optional>
+#include "llvm/ADT/ScopeExit.h"
 
 using namespace mlir;
 
