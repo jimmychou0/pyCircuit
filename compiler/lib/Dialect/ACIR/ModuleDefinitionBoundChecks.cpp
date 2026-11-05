@@ -493,10 +493,8 @@ LogicalResult HardwareAnalysis::verifyModuleDeclaration(
     bool requireResolved) const {
   if (auto module = dyn_cast<ModuleOp>(operation)) {
     auto layout = getModulePortLayout(module);
-    if (failed(layout)) {
-      module->emitOpError() << "DEBUG layout failed";
+    if (failed(layout))
       return failure();
-    }
     auto rootKind = module->getAttrOfType<StringAttr>("ac.root_kind");
     if (rootKind &&
         (!rootKind || rootKind.getValue() != "system" ||
@@ -505,25 +503,14 @@ LogicalResult HardwareAnalysis::verifyModuleDeclaration(
       return module.emitOpError()
              << "source system must be a closed zero-result definition "
                 "with one inferred clock/reset domain";
-    if (failed(detail::verifyModuleSourceCallContract(module))) {
-      module->emitOpError() << "DEBUG call contract failed";
-      return failure();
-    }
-    auto defChecks = verifyDefinitionSourceChecks(module);
-    if (failed(defChecks))
-      module->emitOpError() << "DEBUG definition checks failed";
-    return defChecks;
+    return detail::verifyModuleSourceCallContract(module) ||
+           verifyDefinitionSourceChecks(module);
   }
   if (auto imported = dyn_cast<ModuleImportOp>(operation)) {
-    if (failed(verifySourceTransactionSummary(
-            imported, imported.getTransactionSummaryAttr()))) {
-      imported->emitOpError() << "DEBUG summary failed";
-      return failure();
-    }
-    auto importCheck = verifyImport(imported);
-    if (failed(importCheck))
-      imported->emitOpError() << "DEBUG import failed";
-    return importCheck;
+    if (imported.getSemanticKind() == "transactions")
+      return verifySourceTransactionSummary(
+          imported, imported.getTransactionSummaryAttr());
+    return verifyImport(imported);
   }
   if (auto instance = dyn_cast<InstanceOp>(operation)) {
     // The native verifySymbolUses bound the parent module as the owner;
