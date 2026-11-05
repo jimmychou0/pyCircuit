@@ -464,3 +464,4 @@ HardwareAnalysis::resolveQueue(InstanceOp queue,
   return checkQueue(*this, queue, bindings, true);
 }
 
+} // namespace acir::ac
