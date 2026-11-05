@@ -10,10 +10,9 @@
 // Core probe: whole-archive linking pulls EVERY core member, and this TU
 // references one symbol per enumerated core TU, so any reverse dependency
 // inside ACIRCore fails here at link time (r9 §1 per-TU symbol table).
-// Verified core-only references only: generated types, the identity and
-// shape grammar, the placement/equivalence contracts. Ops- or
-// analysis-layer symbols are deliberately not referenced here; the
-// undefined symbols that would appear otherwise are the probe's finding.
+#include "pycircuit/Dialect/ACIR/ACIRDialect.h"
+#include "pycircuit/Dialect/GFIR/GFIRDialect.h"
+#include "mlir/IR/OperationSupport.h"
 namespace {
 TEST(ACIRCoreStandalone, ReferencesEveryCoreUnit) {
   // ACIRCoreDefs + PacketTypes: generated type accessor and shape grammar.
