@@ -34,7 +34,11 @@ target_include_directories(ACIRCore PRIVATE
   "${PYCIRCUIT_SOURCE_DIR}/lib"
 )
 
-add_acir_library(ACIRDialect SOURCES
+# The staged common analysis layer (B2 step-2 design r9 §5): every
+# HardwareAnalysis-based TU. The operations layer below links ACIRCore and
+# calls into this target only through the shared contract entries; the
+# probes and pycircuit_verify_layering enforce the direction.
+add_acir_library(ACIRAnalysis SOURCES
   HardwareAnalysis.cpp
   HardwareAnalysisDependencies.cpp
   HardwareAnalysisValidation.cpp
@@ -55,6 +59,29 @@ add_acir_library(ACIRDialect SOURCES
   SourceTransactionSummary.cpp
   TransactionalContracts.cpp
   EntryBoundary.cpp
+  CollectionAnalysis.cpp
+  EnumAnalysis.cpp
+  SourceUnitValidation.cpp
+  FinalSourceUnitValidation.cpp
+  SourceNamespaceValidation.cpp
+  HardwareGrantProof.cpp
+  "${PYCIRCUIT_SOURCE_DIR}/lib/Analysis/LogicalStateValidation.cpp"
+)
+add_dependencies(ACIRAnalysis
+  ACIRDialectIncGen
+  ACIRAttributesIncGen
+  ACIRTypesIncGen
+  ACIROpsIncGen
+)
+target_link_libraries(ACIRAnalysis PUBLIC
+  ACIRDialect
+  PycircuitStateInterfaces
+)
+target_include_directories(ACIRAnalysis PRIVATE
+  "${PYCIRCUIT_SOURCE_DIR}/lib"
+)
+
+add_acir_library(ACIRDialect SOURCES
   ACIRTransactionOps.cpp
   ACIRModuleOps.cpp
   ACIRModuleContracts.cpp
@@ -62,11 +89,6 @@ add_acir_library(ACIRDialect SOURCES
   ACIRSourceControlFlowOps.cpp
   ACIRSystemOps.cpp
   ACIRPacketOps.cpp
-  CollectionAnalysis.cpp
-  EnumAnalysis.cpp
-  SourceUnitValidation.cpp
-  FinalSourceUnitValidation.cpp
-  SourceNamespaceValidation.cpp
   ACIRBitsOps.cpp
   CollectionLocalVerifies.cpp
   ACIREnumOps.cpp
@@ -77,7 +99,6 @@ add_acir_library(ACIRDialect SOURCES
   ACIRRegistration.cpp
   SourceEffects.cpp
   SourceRegistrationEntry.cpp
-  HardwareGrantProof.cpp
 )
 add_dependencies(ACIRDialect
   ACIRDialectIncGen
