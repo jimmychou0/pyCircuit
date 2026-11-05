@@ -8,6 +8,7 @@
 #include "pycircuit/Dialect/ACIR/ACIROps.h"
 #include "ACIRSourceContracts.h"
 #include "HardwareSourceChecks.h"
+#include "pycircuit/Dialect/ACIR/SourceMethodAnalysis.h"
 
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
@@ -507,7 +508,7 @@ LogicalResult HardwareAnalysis::verifyModuleDeclaration(
     return verifyDefinitionSourceChecks(module);
   }
   if (auto imported = dyn_cast<ModuleImportOp>(operation)) {
-    if (failed(detail::verifySourceTransactionSummary(
+    if (failed(verifySourceTransactionSummary(
             imported, imported.getTransactionSummaryAttr())))
       return failure();
     return verifyImport(imported);
