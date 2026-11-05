@@ -17,8 +17,8 @@ module {
     ^bb0(%input: !b8):
       %not = "ac.bits.unary"(%input) {opcode = "not"} : (!b8) -> !b8
       "ac.yield"(%not) : (!b8) -> ()
-    }) {name = "invert", occurrence = {site = {definition = @top, ast_path = []}, expansion = []}} : (!b8) -> !b8
-    %right = "ac.instance"(%clk, %rst, %en, %invert, %init) {instance_name = "right", callee = @storage, parameters = [], type_arguments = [!b8], occurrence = {site = {definition = @top, ast_path = []}, expansion = []}} : (!b1, !b1, !b1, !b8, !b8) -> !b8
+    }) {name = "invert", occurrence = {site = {definition = @top, ast_path = [{kind = "index", value = 2 : i64}]}, expansion = []}} : (!b8) -> !b8
+    %right = "ac.instance"(%clk, %rst, %en, %invert, %init) {instance_name = "right", callee = @storage, parameters = [], type_arguments = [!b8], occurrence = {site = {definition = @top, ast_path = [{kind = "index", value = 1 : i64}]}, expansion = []}} : (!b1, !b1, !b1, !b8, !b8) -> !b8
     "ac.yield"(%left, %right) : (!b8, !b8) -> ()
   }) {sym_name = "top", source_owner = {package = "", path = "top.py"}, parameters = [], type_parameters = [], function_type = (!b1, !b1, !b1, !b8, !b8) -> (!b8, !b8), input_names = ["clk", "rst", "en", "d", "init"], output_names = ["qa", "qb"]} : () -> ()
   "ac.system"() {entry = {callee = @top, parameters = [], type_arguments = []}, domain = "default"} : () -> ()

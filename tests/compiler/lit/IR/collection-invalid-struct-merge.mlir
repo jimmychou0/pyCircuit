@@ -32,6 +32,7 @@ module {
     %next, %en = "ac.value.merge"(%base, %zero, %zero, %inner, %y) {paths = [["inner"], ["inner", "y"]], operandSegmentSizes = array<i32: 1, 2, 2>} : (!outer, !b1, !b1, !ac.struct<"Inner">, !b8) -> (!outer, !b1)
     "ac.yield"(%next) : (!outer) -> ()
   }) {sym_name = "top", source_owner = {package = "", path = "top.py"}, parameters = [], type_parameters = [], function_type = (!outer, !b1, !ac.struct<"Inner">, !b8) -> !outer, input_names = ["base", "zero", "inner", "y"], output_names = ["next"]} : () -> ()
+  "ac.system"() {entry = {callee = @top, parameters = [], type_arguments = []}, domain = "default"} : () -> ()
 }
 
 // -----
@@ -74,6 +75,7 @@ module {
     %next, %en = "ac.value.merge"(%base, %guard, %long) {paths = [["chunks"]], operandSegmentSizes = array<i32: 1, 1, 1>} : (!packet, !b1, !long) -> (!packet, !b1)
     "ac.yield"() : () -> ()
   }) {sym_name = "top", source_owner = {package = "", path = "top.py"}, parameters = [], type_parameters = [], function_type = (!b8, !b1) -> (), input_names = ["value", "guard"], output_names = []} : () -> ()
+  "ac.system"() {entry = {callee = @top, parameters = [], type_arguments = []}, domain = "default"} : () -> ()
 }
 
 // -----
@@ -120,4 +122,5 @@ module {
     %next, %en = "ac.value.merge"(%base, %guard, %seconds) {paths = [["chunks"]], operandSegmentSizes = array<i32: 1, 1, 1>} : (!packet, !b1, !seconds) -> (!packet, !b1)
     "ac.yield"() : () -> ()
   }) {sym_name = "top", source_owner = {package = "", path = "top.py"}, parameters = [], type_parameters = [], function_type = (!b8, !b1) -> (), input_names = ["value", "guard"], output_names = []} : () -> ()
+  "ac.system"() {entry = {callee = @top, parameters = [], type_arguments = []}, domain = "default"} : () -> ()
 }
