@@ -454,8 +454,12 @@ TEST_F(TableDependencySummaryTest,
       d.print(out);
       return success();
     });
-    EXPECT_TRUE(failed(mlir::verify(*unit)));
+    // The struct declaration's native verify is grammar-only (r3
+    // ACIRPacketOps row); the bound extent checks live in the staged
+    // struct entry and fire below.
+    EXPECT_TRUE(succeeded(mlir::verify(*unit)));
     ac::HardwareAnalysis analysis(*unit);
+    EXPECT_TRUE(failed(analysis.verifyStructOperation(declaration, {}, true)));
     EXPECT_TRUE(failed(analysis.getPackedWidth(record("types.Pair"), {}, *unit)));
     EXPECT_TRUE(failed(analysis.getLeaves(record("types.Pair"), {}, *unit)));
     EXPECT_TRUE(diagnostics.find("positive") != std::string::npos ||
