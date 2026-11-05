@@ -245,6 +245,11 @@ int compareClosedSourceStructure(mlir::Attribute left, mlir::Attribute right);
 
 
 
+mlir::LogicalResult
+verifyEntryBoundaryAttributeEntry(mlir::Operation *operation,
+                                  mlir::Attribute attribute);
+mlir::LogicalResult
+verifyModuleObservationIdentitiesEntry(mlir::Operation *module);
 } // namespace acir::ac::detail
 
 #endif // ACIR_LIB_DIALECT_ACIR_ACIRSOURCECONTRACTS_H

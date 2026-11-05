@@ -25,7 +25,8 @@ LogicalResult ACIRDialect::verifyOperationAttribute(Operation *operation,
       return operation->emitOpError("unlinked/linked stage requires transactional version 2");
   }
   if (name == "ac.entry_boundary")
-    return detail::verifyEntryBoundaryAttribute(operation, attribute.getValue());
+    return detail::verifyEntryBoundaryAttributeEntry(operation,
+                                                     attribute.getValue());
   if (name == "ac.anchor_provenance") {
     auto package = dyn_cast<mlir::ModuleOp>(operation);
     auto stage = package ? package->getAttrOfType<StringAttr>("ac.stage")

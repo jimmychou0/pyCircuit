@@ -151,7 +151,7 @@ LogicalResult ModuleOp::verifyRegions() {
   if (failed(body(*this, getFunctionType().getInputs(),
                   getFunctionType().getResults())))
     return failure();
-  if (failed(detail::verifyModuleObservationIdentities(*this)))
+  if (failed(detail::verifyModuleObservationIdentitiesEntry(*this)))
     return failure();
   // Scope authority is this exact immutable lexical definition. Repeated
   // operands share interned types, so validate each type root once

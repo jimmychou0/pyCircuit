@@ -61,6 +61,7 @@ add_acir_library(ACIRAnalysis SOURCES
   EntryBoundary.cpp
   CollectionAnalysis.cpp
   EnumAnalysis.cpp
+  QueueAnalysis.cpp
   SourceUnitValidation.cpp
   FinalSourceUnitValidation.cpp
   SourceNamespaceValidation.cpp

@@ -1,7 +1,6 @@
 // Collection operation local verifiers (B2 step-2 design r9): these stay
 // with the operations layer; the shared member implementations live in
 // CollectionAnalysis.cpp.
-#include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
 #include "ACIRSourceContracts.h"
 #include "pycircuit/Dialect/ACIR/ACIROps.h"
 
@@ -101,10 +100,8 @@ LogicalResult TableMatchOp::verifyRegions() {
       dyn_cast<BitsType>(getBody().front().back().getOperand(0).getType());
   if (!result)
     return emitOpError() << "table.match predicate must yield one bit";
-  HardwareAnalysis a((*this)->getParentOfType<mlir::ModuleOp>());
-  auto w = a.getPackedWidth(result, scope(*this), *this);
-  if (failed(w) || *w != 1)
-    return emitOpError() << "table.match predicate must yield one bit";
+  // Predicate width resolution runs staged (r9 §5); the structural
+  // one-bit-shape and region checks stay native.
   return scalarRegion(*this, args, TypeRange{result});
 }
 } // namespace acir::ac
