@@ -10,5 +10,6 @@ module {
     // expected-error @+1 {{struct.create field type mismatch}}
     %bad = ac.struct.create(%data, %tag) : (!b8, !b5) -> !ac.struct<"Packet">
     "ac.yield"(%bad) : (!ac.struct<"Packet">) -> ()
-  }) {sym_name = "top", source_owner = {package = "", path = "top.py"}, parameters = [], type_parameters = [], function_type = (!b8, !b5) -> !ac.struct<"Packet">, input_names = ["data", "tag"], output_names = ["packet"]} : () -> ()
+    }) {sym_name = "top", source_owner = {package = "", path = "top.py"}, parameters = [], type_parameters = [], function_type = (!b8, !b5) -> !ac.struct<"Packet">, input_names = ["data", "tag"], output_names = ["packet"]} : () -> ()
+  "ac.system"() {entry = {callee = @top, parameters = [], type_arguments = []}, domain = "default"} : () -> ()
 }
