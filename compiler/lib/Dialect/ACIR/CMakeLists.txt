@@ -1,25 +1,9 @@
-# ACIRCore: generated type/attribute definitions plus the analysis-free
-# grammar and contract TUs below the operations layer (B2 step-2 design
-# r9 §1). GFIRDialect links exactly this plus the shared interfaces.
-add_dependencies(ACIRCore
-  ACIRDialectIncGen
-  ACIRAttributesIncGen
-  ACIRTypesIncGen
-  ACIROpsIncGen
-)
-target_link_libraries(ACIRCore PUBLIC MLIRFuncDialect)
-target_include_directories(ACIRCore PUBLIC
-  "$<BUILD_INTERFACE:${PYCIRCUIT_SOURCE_DIR}/include>"
-  "$<BUILD_INTERFACE:${PYCIRCUIT_BINARY_DIR}/include>"
-  "$<INSTALL_INTERFACE:include>"
-)
-target_include_directories(ACIRCore PRIVATE
-  "${PYCIRCUIT_SOURCE_DIR}/lib"
-)
-target_include_directories(ACIRCore INTERFACE
-  "$<BUILD_INTERFACE:${PYCIRCUIT_SOURCE_DIR}/lib>"
-)
-
+# ACIRCore: generated type/attribute definitions and the common-IR
+# contracts below the operations layer (B2 step-2 design r9 §1, narrowed
+# to the self-contained subset). GFIRDialect links exactly this plus the
+# shared interfaces; the grammar TUs that reference concrete op classes
+# remain in the operations target pending the interface-based reroutes
+# (r9 §1 leaf extraction).
 add_acir_library(ACIRCore SOURCES
   ACIRCoreDefs.cpp
   ACIRPacketTypes.cpp
@@ -31,8 +15,10 @@ add_dependencies(ACIRCore
   ACIRTypesIncGen
 )
 target_link_libraries(ACIRCore PUBLIC MLIRFuncDialect)
-target_include_directories(ACIRCore PRIVATE
-  "${PYCIRCUIT_SOURCE_DIR}/lib"
+target_include_directories(ACIRCore PUBLIC
+  "$<BUILD_INTERFACE:${PYCIRCUIT_SOURCE_DIR}/include>"
+  "$<BUILD_INTERFACE:${PYCIRCUIT_BINARY_DIR}/include>"
+  "$<INSTALL_INTERFACE:include>"
 )
 target_include_directories(ACIRCore INTERFACE
   "$<BUILD_INTERFACE:${PYCIRCUIT_SOURCE_DIR}/lib>"
