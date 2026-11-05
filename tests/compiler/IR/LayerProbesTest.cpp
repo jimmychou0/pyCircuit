@@ -21,10 +21,13 @@
 #include "IR/StateDeclarationContracts.h"
 namespace {
 TEST(ACIRCoreStandalone, ReferencesEveryCoreUnit) {
-  // ACIRCoreDefs: generated attribute classes and their registration.
+  // ACIRCoreDefs: generated attribute classes and their registration
+  // (the generated typedef `get` anchors here too).
   (void)&acir::ac::MathIntAttr::get;
-  // ACIRPacketTypes: packet type hierarchy and its verification.
   (void)&acir::ac::BitsType::get;
+  // ACIRPacketTypes: out-of-line custom type verifies and the shape
+  // schema (not re-emitted by the generated classes).
+  (void)&acir::ac::detail::shapeSchema;
   // ACIRIdentityContracts: occurrence grammar and its memo.
   (void)&acir::ac::detail::verifyOccurrence;
   // ACIRSourceContracts: source site/occurrence contract leaves.

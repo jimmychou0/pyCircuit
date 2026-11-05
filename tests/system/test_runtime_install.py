@@ -238,8 +238,11 @@ def test_compiler_dev_install_links_a_native_consumer() -> None:
             "-DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF",
         ]
     )
-    _checked(["cmake", "--build", str(gfir_build)])
-    _checked([str(gfir_build / "gfir_core_only")])
+    _checked([cmake, "--build", str(gfir_build)])
+    gfir_executable = gfir_build / "gfir_core_only"
+    if os.name == "nt":
+        gfir_executable = gfir_executable.with_suffix(".exe")
+    _checked([str(gfir_executable)])
     executable = consumer_build / "compiler_dev_consumer"
     if os.name == "nt":
         executable = executable.with_suffix(".exe")

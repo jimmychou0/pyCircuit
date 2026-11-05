@@ -4,4 +4,5 @@ add_acir_library(PycircuitStateInterfaces SOURCES
 )
 add_dependencies(PycircuitStateInterfaces
   LogicalStateInterfacesIncGen
+  ModuleChildInterfacesIncGen
 )

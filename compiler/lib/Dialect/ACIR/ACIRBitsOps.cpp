@@ -1,7 +1,9 @@
 // Bits operation verifiers (B2 step-2 design r9 §5): local bodies keep
-// every check; symbolic-width equivalence uses the core static evaluator
-// (evaluateSourceStaticExpr), not the staged analysis, so the operations
-// archive stays self-contained below the analysis layer.
+// every check; symbolic-width equivalence keeps the recorded baseline
+// semantics — the staged evaluator (HardwareAnalysis::evaluateStatic)
+// with soft non-equivalence on evaluation failure and the budgeted
+// prepay recursion — so admission behavior is unchanged from before the
+// layering split.
 #include "pycircuit/Dialect/ACIR/ACIROps.h"
 #include "ACIRSourceContracts.h"
 #include "IR/StateDeclarationContracts.h"
