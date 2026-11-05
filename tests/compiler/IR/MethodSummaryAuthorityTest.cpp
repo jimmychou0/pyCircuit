@@ -2116,6 +2116,14 @@ TEST_F(MethodSummaryAuthorityTest,
         "transaction_summary"));
     EXPECT_TRUE(mlir::succeeded(capture([&] { return mlir::verify(*file); })))
         << diagnostics;
+    // The derived transaction-summary schema is owned by the staged module
+    // declaration entry (r3 ACIRModuleOps row); native verification keeps the
+    // import grammar only. The staged checks keep the native message texts.
+    ac::HardwareAnalysis analysis(*file);
+    EXPECT_TRUE(mlir::succeeded(capture([&] {
+      return analysis.verifyModuleDeclaration(declaration, {}, true);
+    })))
+        << diagnostics;
     structureAccepts(declaration,
                      declaration->getAttrOfType<mlir::DictionaryAttr>(
                          "transaction_summary"));
@@ -2123,7 +2131,9 @@ TEST_F(MethodSummaryAuthorityTest,
         declaration->getAttrOfType<mlir::DictionaryAttr>("transaction_summary"),
         "unexpected", builder.getUnitAttr());
     declaration->setAttr("transaction_summary", malformed);
-    EXPECT_TRUE(mlir::failed(capture([&] { return mlir::verify(*file); })));
+    EXPECT_TRUE(mlir::failed(capture([&] {
+      return analysis.verifyModuleDeclaration(declaration, {}, true);
+    })));
     EXPECT_FALSE(diagnostics.empty());
   }
 }

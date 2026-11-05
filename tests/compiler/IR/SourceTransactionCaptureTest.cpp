@@ -3846,8 +3846,8 @@ TEST_F(SourceTransactionCaptureTest,
       OwningOpRef<ModuleOp> headerCopy(
           cast<ModuleOp>((*compiled->interface)->clone()));
       StringRef methodName = mutation == 2 ? "singleton" : "split";
+      ac::ModuleImportOp provider;
       if (summary) {
-        ac::ModuleImportOp provider;
         for (auto declaration : headerCopy->getOps<ac::ModuleImportOp>())
           if (declaration.getSymName().ends_with("Owner")) provider = declaration;
         ASSERT_TRUE(provider);
@@ -3870,7 +3870,17 @@ TEST_F(SourceTransactionCaptureTest,
       }
       diagnostics.clear();
       if (mutation != 2) {
-        EXPECT_TRUE(failed(mlir::verify(summary ? *headerCopy : *bodyCopy)));
+        // The published summary schema is owned by the staged module
+        // declaration entry (r3 ACIRModuleOps row); the body-side method
+        // contract stays a native check. The staged checks keep the native
+        // message texts.
+        if (summary) {
+          ac::HardwareAnalysis analysis(*headerCopy);
+          EXPECT_TRUE(failed(
+              analysis.verifyModuleDeclaration(provider, {}, true)));
+        } else {
+          EXPECT_TRUE(failed(mlir::verify(*bodyCopy)));
+        }
       } else {
         // A singleton scalar form is structurally valid, but it is a different
         // authored callable contract from the tuple in the unchanged peer.
@@ -4546,8 +4556,8 @@ TEST_F(SourceTransactionCaptureTest,
     OwningOpRef<ModuleOp> body(cast<ModuleOp>((*compiled->body)->clone()));
     OwningOpRef<ModuleOp> header(
         cast<ModuleOp>((*compiled->interface)->clone()));
+    ac::ModuleImportOp client;
     if (mutateHeader) {
-      ac::ModuleImportOp client;
       for (auto declaration : header->getOps<ac::ModuleImportOp>())
         if (declaration.getSymName().ends_with("Client"))
           client = declaration;
@@ -4577,8 +4587,16 @@ TEST_F(SourceTransactionCaptureTest,
       ASSERT_TRUE(changedCall);
     }
     diagnostics.clear();
-    EXPECT_TRUE(failed(mlir::verify(mutateHeader ? *header : *body)))
-        << diagnostics;
+    // The published summary schema is owned by the staged module declaration
+    // entry (r3 ACIRModuleOps row); the body-side receiver forging stays a
+    // native call-op check. The staged checks keep the native message texts.
+    if (mutateHeader) {
+      ac::HardwareAnalysis analysis(*header);
+      EXPECT_TRUE(failed(analysis.verifyModuleDeclaration(client, {}, true)))
+          << diagnostics;
+    } else {
+      EXPECT_TRUE(failed(mlir::verify(*body))) << diagnostics;
+    }
     EXPECT_TRUE(failed(
         compiler::verifyIntrinsicSourceUnitPair(*body, *header, error())));
     EXPECT_FALSE(diagnostics.empty());
@@ -5050,7 +5068,12 @@ def Owner() -> ac.u8:
         ASSERT_NE(forged, summary);
         provider->setAttr("transaction_summary", forged);
         diagnostics.clear();
-        EXPECT_TRUE(failed(mlir::verify(*header)));
+        // The published transaction summary schema is owned by the staged
+        // module declaration entry (r3 ACIRModuleOps row); the staged checks
+        // keep the native message texts.
+        ac::HardwareAnalysis analysis(*header);
+        EXPECT_TRUE(
+            failed(analysis.verifyModuleDeclaration(provider, {}, true)));
         // callable_after was never an autonomous-row field. Its closed schema
         // rejects that extra key before the retired-ordering semantic check.
         StringRef category = section == "autonomous" && field == "callable_after"
