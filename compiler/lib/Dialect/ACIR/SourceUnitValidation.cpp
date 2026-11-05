@@ -211,15 +211,13 @@ FailureOr<SourceUnitStructure> verifyStructure(mlir::ModuleOp unit, bool body,
         result = analysis.verifyStructOperation(operation, bindings);
       else if (bitsWidthFamily)
         result = analysis.verifyBitsSymbolicWidths(operation);
-      else if (false && isa<ModuleOp, ModuleImportOp, InstanceOp, SourceExpectOp>(
+      else if (isa<ModuleOp, ModuleImportOp, InstanceOp, SourceExpectOp>(
                    operation))
         result = analysis.verifyModuleDeclaration(operation, bindings);
       else if (auto pred = dyn_cast<SourcePredicateOp>(operation)) {
         auto width = analysis.getPackedWidth(pred.getInput().getType(),
                                              bindings, pred);
-        if (failed(width))
-          result = failure();
-        else if (*width != 1)
+        if (failed(width) || *width != 1)
           result = pred.emitOpError()
                    << "source SCF predicate requires width-one Bits";
       }
