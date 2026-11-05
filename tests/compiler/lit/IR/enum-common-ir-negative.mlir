@@ -281,7 +281,7 @@ module {
     %state = "ac.enum.create"() {member = "IDLE"} : () -> !ac.enum<"pkg.State">
     // expected-error @+1 {{enum.to_bits result width must equal 3}}
     %bad = "ac.enum.to_bits"(%state) : (!ac.enum<"pkg.State">) -> !b5
-    "ac.yield"(%input) : (!b1) -> !b1
+    "ac.yield"(%input) : (!b1) -> ()
   }) {sym_name = "user", source_owner = {package = "fixture", path = "fixture.py"}, parameters = [], type_parameters = [], function_type = (!b1) -> !b1, input_names = ["input"], output_names = ["output"]} : () -> ()
   "ac.system"() {entry = {callee = @user, parameters = [], type_arguments = []}, domain = "default"} : () -> ()
 }
@@ -302,7 +302,7 @@ module {
     %raw = "ac.bits.constant"() {value = #w0} : () -> !b5
     // expected-error @+1 {{enum.from_bits input width must equal 3}}
     %bad, %member = "ac.enum.from_bits"(%raw) : (!b5) -> (!ac.enum<"pkg.State">, !b1)
-    "ac.yield"(%input) : (!b1) -> !b1
+    "ac.yield"(%input) : (!b1) -> ()
   }) {sym_name = "user", source_owner = {package = "fixture", path = "fixture.py"}, parameters = [], type_parameters = [], function_type = (!b1) -> !b1, input_names = ["input"], output_names = ["output"]} : () -> ()
   "ac.system"() {entry = {callee = @user, parameters = [], type_arguments = []}, domain = "default"} : () -> ()
 }
@@ -323,7 +323,7 @@ module {
     %raw = "ac.bits.constant"() {value = #w0} : () -> !b3
     // expected-error @+1 {{enum.from_bits membership result width must equal 1}}
     %bad, %member = "ac.enum.from_bits"(%raw) : (!b3) -> (!ac.enum<"pkg.State">, !b2)
-    "ac.yield"(%input) : (!b1) -> !b1
+    "ac.yield"(%input) : (!b1) -> ()
   }) {sym_name = "user", source_owner = {package = "fixture", path = "fixture.py"}, parameters = [], type_parameters = [], function_type = (!b1) -> !b1, input_names = ["input"], output_names = ["output"]} : () -> ()
   "ac.system"() {entry = {callee = @user, parameters = [], type_arguments = []}, domain = "default"} : () -> ()
 }
