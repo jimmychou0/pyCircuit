@@ -1,4 +1,4 @@
-// RUN: %pycircuit_opt %s --split-input-file --verify-diagnostics
+// RUN: %pycircuit_opt %s --split-input-file --ac-verify-hardware --verify-diagnostics
 #w5 = #ac.static_expr<{kind = "literal", location = {path = "top.py", line = 1 : i64, column = 1 : i64, end_line = 1 : i64, end_column = 2 : i64}, origin = {site = {definition = @top, ast_path = []}, expansion = []}, value = {kind = "integer", value = #ac.math_int<5>}}>
 !b5 = !ac.bits<#w5>
 #w8 = #ac.static_expr<{kind = "literal", location = {path = "top.py", line = 1 : i64, column = 1 : i64, end_line = 1 : i64, end_column = 2 : i64}, origin = {site = {definition = @top, ast_path = []}, expansion = []}, value = {kind = "integer", value = #ac.math_int<8>}}>
