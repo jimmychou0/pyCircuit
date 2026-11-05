@@ -2,6 +2,7 @@
 // r9 §5): the nominal-field schema, packed-width and declaration-agreement
 // checks moved to the staged StructBoundChecks TU and run from the
 // source-unit walk and the resolved operation dispatch.
+#include "pycircuit/Dialect/ACIR/ACIROps.h"
 #include "ACIRSourceContracts.h"
 #include "llvm/ADT/StringSet.h"
 using namespace mlir;
