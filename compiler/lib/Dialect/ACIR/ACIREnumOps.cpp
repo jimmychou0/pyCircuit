@@ -9,14 +9,15 @@ using namespace mlir;
 
 namespace acir::ac {
 
-// Native local verifiers (r9 §5 reroute): structure/grammar only. The
-// enum-value semantic checks run at the staged entries — the source-tier
-// walk in SourceUnitValidation (requireResolved=false) and
-// verifyResolvedOperation for routed/final packages — with their
-// diagnostics unchanged at the new sites.
-LogicalResult EnumCreateOp::verify() { return success(); }
-LogicalResult EnumToBitsOp::verify() { return success(); }
-LogicalResult EnumFromBitsOp::verify() { return success(); }
+LogicalResult EnumCreateOp::verify() {
+  return detail::verifyEnumValueLocally(*this);
+}
+LogicalResult EnumToBitsOp::verify() {
+  return detail::verifyEnumValueLocally(*this);
+}
+LogicalResult EnumFromBitsOp::verify() {
+  return detail::verifyEnumValueLocally(*this);
+}
 
 
 LogicalResult EnumOp::verify() {
