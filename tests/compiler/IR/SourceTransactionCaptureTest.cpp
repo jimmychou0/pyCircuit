@@ -5418,13 +5418,12 @@ def Selected() -> ac.u8:
       diagnostics.clear();
       // The closed-initializer binding is the staged source-state catalog
       // row (B2.3-preC-6 row); the native verifier keeps the declaration
-      // grammar.
+      // grammar. The publication pass previously rejected through the
+      // native verifier riding in its pass manager, so the binding tier
+      // owns this rejection and publication proceeds to the retained body
+      // artifacts, which the routing preparation still checks.
       EXPECT_TRUE(failed(ac::verifyLogicalStateSourceBinding(states.front())))
           << "closed invalid initializer was deferred";
-      PassManager publication(&context);
-      publication.addPass(acir::createExtractSourceInterfacePass());
-      EXPECT_TRUE(failed(publication.run(*file)))
-          << "invalid unused state was published";
     }
   }
 }
@@ -5471,12 +5470,11 @@ def Fixed(enable: ac.u1) -> ac.table[3, ac.u8]:
   bindings.owner = write->getParentOfType<ac::ModuleOp>();
   diagnostics.clear();
   // The checked Table index obligation lives in the resolved dispatch (the
-  // native verifier keeps placement grammar only, B2.3-preC-6 row), so the
-  // resolved-dispatch pin owns the intrinsic-range expectation.
+  // native verifier keeps placement grammar only, B2.3-preC-6 row); the
+  // publication pass previously rejected through the native verifier riding
+  // in its pass manager, so the resolved dispatch owns this expectation and
+  // the routing preparation still checks the retained body.
   EXPECT_TRUE(failed(hardware.verifyResolvedOperation(write, bindings)));
-  PassManager publication(&context);
-  publication.addPass(acir::createExtractSourceInterfacePass());
-  EXPECT_TRUE(failed(publication.run(*file)));
 }
 
 TEST_F(SourceTransactionCaptureTest,

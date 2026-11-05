@@ -3078,7 +3078,11 @@ TEST_F(MethodSummaryAuthorityTest,
       builder.getArrayAttr(
           {changed(nominal, "type", mlir::TypeAttr::get(otherPacket)),
            intent}));
-  EXPECT_TRUE(rejectsSurface(*file));
+  // The nominal proposal-data contract is the staged transaction entry; the
+  // mutation also trips the native body-yield grammar, so the staged entry
+  // is pinned directly to keep the proposal-data diagnostic text.
+  EXPECT_TRUE(
+      mlir::failed(capture([&] { return stagedTransactions(*file); })));
   EXPECT_NE(diagnostics.find("match its input contract"), std::string::npos)
       << diagnostics;
 }
