@@ -576,8 +576,12 @@ TEST_F(RoutedAnchorTest, ExternStillRequiresExactCompleteDependencySummary) {
       imported->removeAttr("dependency_summary");
     else
       imported->setAttr("dependency_summary", builder.getArrayAttr({}));
-    // The declaration contract does not waive the existing summary verifier.
-    rejects([&] { return mlir::verify(*file); }, "dependency");
+    // The declaration contract does not waive the existing summary verifier;
+    // the import bound checks run from the staged module declaration entry
+    // (r3 ACIRModuleOps row).
+    ac::HardwareAnalysis analysis(*file);
+    rejects([&] { return analysis.verifyModuleDeclaration(imported, {}, true); },
+            "dependency");
   }
 }
 
