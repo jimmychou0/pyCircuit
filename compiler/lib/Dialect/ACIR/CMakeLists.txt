@@ -10,6 +10,13 @@ add_acir_library(ACIRCore SOURCES
   ACIRIdentityContracts.cpp
   ACIRSourceContracts.cpp
   SourceStaticValueContracts.cpp
+  ACIRStaticContracts.cpp
+  SourceAttributeContracts.cpp
+  SourceSyntaxSiteContracts.cpp
+  SourceValueSemantics.cpp
+  ACIRStaticEvaluation.cpp
+  SourceStaticRecordConstructors.cpp
+  SourceStaticDomains.cpp
   "${PYCIRCUIT_SOURCE_DIR}/lib/IR/StateDeclarationContracts.cpp"
   "${PYCIRCUIT_SOURCE_DIR}/lib/Compiler/SourceIdentifier.cpp"
 )
@@ -34,13 +41,6 @@ target_include_directories(ACIRCore PRIVATE
 )
 
 add_acir_library(ACIRDialect SOURCES
-  ACIRStaticContracts.cpp
-  SourceAttributeContracts.cpp
-  SourceSyntaxSiteContracts.cpp
-  SourceValueSemantics.cpp
-  ACIRStaticEvaluation.cpp
-  SourceStaticRecordConstructors.cpp
-  SourceStaticDomains.cpp
   "${PYCIRCUIT_SOURCE_DIR}/lib/Analysis/LogicalStateValidation.cpp"
   HardwareAnalysis.cpp
   HardwareAnalysisDependencies.cpp
