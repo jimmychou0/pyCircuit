@@ -315,7 +315,10 @@ TEST_F(TableDependencySummaryTest,
       cast<ac::ModuleOp>(SymbolTable::lookupSymbolIn(*unit, "unit.Parent"));
   auto instance = *module.getBody().front().getOps<ac::InstanceOp>().begin();
   instance->setOperand(0, module.getBody().front().getArgument(1));
-  EXPECT_TRUE(failed(mlir::verify(*unit)));
+  ac::HardwareAnalysis analysis(*unit);
+  ac::HardwareBindings bindings;
+  bindings.owner = module;
+  EXPECT_TRUE(failed(analysis.verifyResolvedOperation(instance, bindings)));
   auto malformed = parse(R"mlir(
     "ac.module"() ({
     ^bb0(%input: !t3):
@@ -406,7 +409,8 @@ TEST_F(TableDependencySummaryTest,
       return success();
     });
     ac::HardwareAnalysis analysis(*unit);
-    EXPECT_TRUE(failed(mlir::verify(*unit)));
+    EXPECT_TRUE(failed(analysis.verifyDefinitionSourceChecks(
+        cast<ac::ModuleOp>(*unit->getBody()->getOperations().begin()))));
     EXPECT_TRUE(failed(analysis.getPackedWidth(
         record("types.Cycle"), {}, *unit)));
     EXPECT_TRUE(failed(analysis.getLeaves(
