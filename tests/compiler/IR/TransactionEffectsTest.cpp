@@ -8,6 +8,7 @@
 #include "mlir/Parser/Parser.h"
 #include "pycircuit/Dialect/ACIR/ACIRDialect.h"
 #include "pycircuit/Dialect/ACIR/ACIROps.h"
+#include "pycircuit/Analysis/LogicalStateValidation.h"
 #include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
 #include "pycircuit/Dialect/ACIR/SourceUnitValidation.h"
 #include "llvm/ADT/STLExtras.h"
