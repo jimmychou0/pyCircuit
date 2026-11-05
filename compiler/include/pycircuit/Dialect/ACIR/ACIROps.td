@@ -844,7 +844,6 @@ def ACIR_StructCreateOp : ACIR_Op<"struct.create", [Pure]> {
   }];
   let arguments = (ins Variadic<ACIR_HardwareType>:$values);
   let results = (outs ACIR_StructType:$result);
-  let hasVerifier = 1;
   let assemblyFormat =
       "`(` $values `)` attr-dict `:` functional-type($values, results)";
 }
@@ -859,7 +858,6 @@ def ACIR_StructGetOp : ACIR_Op<"struct.get", [Pure]> {
   }];
   let arguments = (ins ACIR_StructType:$value, StrAttr:$field);
   let results = (outs ACIR_HardwareType:$result);
-  let hasVerifier = 1;
   let assemblyFormat =
       "$value `[` $field `]` attr-dict `:` functional-type(operands, results)";
 }
