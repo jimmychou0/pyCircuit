@@ -14,7 +14,7 @@
 // a member that silently stopped being part of the closure (r9 §4).
 #include "pycircuit/Dialect/ACIR/ACIRAttributes.h"
 #include "pycircuit/Dialect/ACIR/ACIRTypes.h"
-#include "pycircuit/Dialect/ACIR/ACIRSourceContracts.h"
+#include "Dialect/ACIR/ACIRSourceContracts.h"
 #include "pycircuit/Dialect/ACIR/SourceIdentifier.h"
 #include "IR/StateDeclarationContracts.h"
 namespace {
