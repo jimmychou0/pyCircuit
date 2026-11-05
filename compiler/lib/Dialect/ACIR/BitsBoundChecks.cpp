@@ -14,6 +14,7 @@ using namespace mlir;
 
 namespace acir::ac {
 namespace {
+bool isPositive(const llvm::APSInt &value) { return !value.isNegative() && !value.isZero(); }
 LogicalResult prepayClosedWidth(
     llvm::PointerUnion<Attribute, Type> node, Operation *site,
     detail::SourceCheckBudget &budget, unsigned depth = 0,
