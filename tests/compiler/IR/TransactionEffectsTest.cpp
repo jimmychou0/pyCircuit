@@ -119,6 +119,22 @@ protected:
         });
     return function();
   }
+  // The effect-family rejections moved to the staged side (r3 rows); the
+  // migrated pins run the staged module declaration entry over the file's
+  // expect/observe effects.
+  mlir::LogicalResult stagedEffects(mlir::ModuleOp file) {
+    ac::HardwareAnalysis analysis(file);
+    mlir::LogicalResult result = mlir::success();
+    file.walk([&](mlir::Operation *op) {
+      if (isa<ac::SourceExpectOp, ac::SourceObserveOp>(op)) {
+        result = analysis.verifyModuleDeclaration(op, {}, true);
+        return failed(result) ? mlir::WalkResult::interrupt()
+                              : mlir::WalkResult::advance();
+      }
+      return mlir::WalkResult::advance();
+    });
+    return result;
+  }
   mlir::Operation *find(mlir::ModuleOp file, llvm::StringRef name,
                         unsigned ordinal = 0) {
     mlir::Operation *result = nullptr;
@@ -642,7 +658,7 @@ TEST_F(TransactionEffectsTest,
     }
     effect.addAttribute("occurrence", occurrence);
     builder.create(effect);
-    EXPECT_TRUE(mlir::failed(capture([&] { return mlir::verify(*file); })))
+    EXPECT_TRUE(mlir::failed(capture([&] { return stagedEffects(*file); })))
         << mutation.str();
     EXPECT_FALSE(diagnostics.empty());
   }
@@ -669,7 +685,7 @@ TEST_F(TransactionEffectsTest,
       effect.addAttribute("occurrence", method->getAttr("occurrence"));
     builder.setInsertionPoint(body.getTerminator());
     builder.create(effect);
-    EXPECT_TRUE(mlir::failed(capture([&] { return mlir::verify(*file); })))
+    EXPECT_TRUE(mlir::failed(capture([&] { return stagedEffects(*file); })))
         << mutation.str();
     EXPECT_FALSE(diagnostics.empty());
   }
