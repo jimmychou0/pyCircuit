@@ -15,7 +15,6 @@ add_acir_library(ACIRCore SOURCES
   SourceStaticValueContracts.cpp
   ACIRSourceContracts.cpp
   "${PYCIRCUIT_SOURCE_DIR}/lib/Compiler/SourceIdentifier.cpp"
-  "${PYCIRCUIT_SOURCE_DIR}/lib/Analysis/LogicalStateValidation.cpp"
   "${PYCIRCUIT_SOURCE_DIR}/lib/IR/StateDeclarationContracts.cpp"
 )
 add_dependencies(ACIRCore
@@ -35,6 +34,7 @@ target_include_directories(ACIRCore PRIVATE
 )
 
 add_acir_library(ACIRDialect SOURCES
+  "${PYCIRCUIT_SOURCE_DIR}/lib/Analysis/LogicalStateValidation.cpp"
   HardwareAnalysis.cpp
   HardwareAnalysisDependencies.cpp
   HardwareAnalysisValidation.cpp

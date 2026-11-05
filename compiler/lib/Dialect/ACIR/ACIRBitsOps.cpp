@@ -41,54 +41,79 @@ LogicalResult requireOneBit(BitsType type, Operation *operation,
   return success();
 }
 
-LogicalResult bitsPrepayClosedWidth(
-    Type type, Operation *site, detail::SourceCheckBudget &budget) {
-  // Width graph prepay from the pre-split implementation: pay the closed
-  // width expression tree before evaluation (depth/repetition accounted).
-  struct Walk {
-    detail::SourceCheckBudget &budget;
-    Operation *site;
-    LogicalResult visit(Attribute attr, unsigned depth) {
-      if (depth > 128)
-        return site->emitOpError() << "width expression depth exceeded";
-      if (failed(budget.debit(1, site))) return failure();
-      if (auto expr = dyn_cast<StaticExprAttr>(attr)) {
-        auto tree = expr.getTree();
-        auto kind = tree.getAs<StringAttr>("kind");
-        if (kind && kind.getValue() == "type_width") {
-          auto ref = tree.getAs<DictionaryAttr>("ref");
-          auto owner = ref ? ref.getAs<FlatSymbolRefAttr>("owner") : FlatSymbolRefAttr();
-          auto name = ref ? ref.getAs<StringAttr>("name") : StringAttr();
-          if (!owner || !name) return success();
-          return success();
-        }
-        return visit(tree, depth + 1);
-      }
-      if (auto array = dyn_cast<ArrayAttr>(attr))
-        for (Attribute child : array)
-          if (failed(visit(child, depth + 1))) return failure();
-      return success();
-    }
+LogicalResult prepayClosedWidth(
+    llvm::PointerUnion<Attribute, Type> node, Operation *site,
+    detail::SourceCheckBudget &budget, unsigned depth = 0,
+    uint64_t repetitions = 1) {
+  using Budget = detail::SourceCheckBudget;
+  if (!node) return success();
+  if (depth > 128)
+    return emitError(UnknownLoc::get(site->getContext()))
+           << "closed width comparison depth exceeded";
+  uint64_t visits = Budget::multiply(repetitions, 4 * uint64_t(depth + 1));
+  auto pay = [&](uint64_t units) {
+    return budget.debit(Budget::multiply(visits, units), site);
   };
-  if (auto bits = dyn_cast<BitsType>(type))
-    return Walk{budget, site}.visit(bits.getWidth(), 0);
-  return success();
+  if (failed(pay(1))) return failure();
+  bool valid = true;
+  auto attribute = [&](Attribute value) {
+    if (valid && value && failed(prepayClosedWidth(
+                             value, site, budget, depth + 1, repetitions)))
+      valid = false;
+  };
+  auto type = [&](Type value) {
+    if (valid && value && failed(prepayClosedWidth(
+                             value, site, budget, depth + 1, repetitions)))
+      valid = false;
+  };
+  if (auto value = dyn_cast<Attribute>(node)) {
+    uint64_t bytes = 0, slots = 0, slotBytes = 0;
+    if (auto string = dyn_cast<StringAttr>(value)) bytes = string.getValue().size();
+    if (auto integer = dyn_cast<MathIntAttr>(value))
+      bytes = integer.getCanonicalValue().size();
+    if (auto integer = dyn_cast<IntegerAttr>(value))
+      bytes = (uint64_t(integer.getValue().getBitWidth()) + 7) / 8;
+    if (auto dictionary = dyn_cast<DictionaryAttr>(value)) {
+      slots = dictionary.size();
+      slotBytes = sizeof(NamedAttribute);
+    }
+    if (auto array = dyn_cast<ArrayAttr>(value)) {
+      slots = array.size();
+      slotBytes = sizeof(Attribute);
+    }
+    if (failed(pay(Budget::add(bytes, Budget::add(
+                     Budget::multiply(slots, slots + 1),
+                     Budget::bytes(Budget::multiply(slots + 1, slotBytes)))))))
+      return failure();
+    if (auto expression = dyn_cast<StaticExprAttr>(value)) {
+      auto kind = expression.getTree().getAs<StringAttr>("kind");
+      // type_width re-enters packed layout/type resolution. Pay its repeated
+      // substitution/probe/evaluation at every nesting, without resetting cost.
+      if (kind && kind.getValue() == "type_width")
+        repetitions = Budget::multiply(repetitions, 8);
+    }
+    value.walkImmediateSubElements(attribute, type);
+  } else {
+    cast<Type>(node).walkImmediateSubElements(attribute, type);
+  }
+  return success(valid);
 }
 
 FailureOr<bool> equivalentWidths(Operation *site, BitsType lhs, BitsType rhs) {
   if (areEquivalentHardwareTypes(lhs, rhs)) return true;
-  // Baseline semantics restored (B2 review F2): the staged analysis's
-  // evaluator resolves type_width over closed types, and a structurally
-  // different but numerically equal width stays NON-equivalent (soft)
-  // rather than a verifier failure. The operations target contains the
-  // analysis after the slice-IV revert, so this is a same-target call.
   detail::SourceCheckBudget budget(HardwareSourceCheckLimits{});
   budget.setPhase("closed Bits width comparison");
   detail::SourceCheckBudget::RawDiagnosticScope rawDiagnostics(budget);
-  if (failed(bitsPrepayClosedWidth(Type(lhs), site, budget)) ||
-      failed(bitsPrepayClosedWidth(Type(rhs), site, budget)))
+  if (failed(prepayClosedWidth(Type(lhs), site, budget)) ||
+      failed(prepayClosedWidth(Type(rhs), site, budget)))
     return failure();
-  HardwareAnalysis hardware(site->getParentOfType<mlir::ModuleOp>());
+  // No package scan, defaults or instance facts belong in this fallback.
+  // Unresolved/nominal-dependent widths retain the symbolic comparison above.
+  HardwareAnalysis hardware(mlir::ModuleOp{});
+  const auto checkingThread = std::this_thread::get_id();
+  ScopedDiagnosticHandler quiet(site->getContext(), [&](Diagnostic &) {
+    return success(std::this_thread::get_id() == checkingThread);
+  });
   auto left = hardware.evaluateStatic(lhs.getWidth(), {}, site);
   if (failed(left)) return false;
   auto right = hardware.evaluateStatic(rhs.getWidth(), {}, site);

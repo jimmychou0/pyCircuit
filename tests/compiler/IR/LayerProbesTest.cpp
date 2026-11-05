@@ -12,17 +12,32 @@
 #include "gtest/gtest.h"
 
 #ifdef PYCIRCUIT_CORE_PROBE
-// Core probe: the dialect class constructor compiles in the operations
-// layer (r9 keeps registration ops-side), so the core archive provides no
-// loadable dialect. This executable's guarantee is its LINK LINE: it
-// carries exactly ACIRCore (enforced by verify-layering), and linking
-// succeeds only if the core archive is self-contained for the symbols
-// this TU references — none, by design: the linker would reject any
-// undeclared dependency from the archive's extracted members only when
-// they are referenced. The per-TU symbol table of r9 §1 lands with the
-// analysis slice; today this probe pins the target graph.
+// Core probe: whole-archive linking pulls EVERY core member, and the TU
+// references one symbol per enumerated core TU, so any reverse dependency
+// inside ACIRCore fails here at link time (r9 §1 per-TU symbol table).
+#include "pycircuit/Dialect/ACIR/ACIRTypes.h"
+#include "pycircuit/Dialect/ACIR/ACIRAttributes.h"
+#include "ACIRSourceContracts.h"
+#include "IR/StateDeclarationContracts.h"
+#include "mlir/IR/BuiltinAttributes.h"
 namespace {
-TEST(ACIRCoreStandalone, CoreTargetLinks) { SUCCEED(); }
+TEST(ACIRCoreStandalone, ReferencesEveryCoreUnit) {
+  auto *context = static_cast<mlir::MLIRContext *>(nullptr);
+  (void)context;
+  // ACIRCoreDefs: generated type accessor symbol.
+  (void)&acir::ac::BitsType::get;
+  // ACIRPacketTypes: the relocated shape grammar.
+  (void)&acir::ac::detail::shapeSchema;
+  // ACIRIdentityContracts: occurrence grammar.
+  (void)&acir::ac::detail::verifyOccurrence;
+  // ACIRStaticContracts + static cluster: template type leaf.
+  (void)&acir::ac::detail::verifySourceTemplateType;
+  // ACIRSourceContracts: shared contracts entry.
+  (void)&acir::ac::areEquivalentHardwareTypes;
+  // IR/StateDeclarationContracts: declared-category placement.
+  (void)&acir::verifyRoutedLogicalStatePlacement;
+  SUCCEED();
+}
 } // namespace
 #else
 // Ops-layer containment probe: this executable links ONLY the ACIRDialect
