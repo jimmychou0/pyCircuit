@@ -232,6 +232,8 @@ def test_compiler_dev_install_links_a_native_consumer() -> None:
             "-G",
             "Ninja",
             "-DCMAKE_PREFIX_PATH=" + str(install),
+            "-DLLVM_DIR=" + _cache_path(cache, "LLVM_DIR"),
+            "-DMLIR_DIR=" + _cache_path(cache, "MLIR_DIR"),
             "-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF",
             "-DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF",
         ]
