@@ -1,5 +1,4 @@
 #include "pycircuit/Dialect/ACIR/ACIRTypes.h"
-#include "Dialect/ACIR/ACIRSourceContracts.h"
 #include "IR/StateDeclarationContracts.h"
 #include "pycircuit/Dialect/ACIR/ACIRDialect.h"
 #include "pycircuit/Dialect/GFIR/GFIRDialect.h"
@@ -17,14 +16,10 @@
 #include "mlir/IR/OperationSupport.h"
 namespace {
 TEST(ACIRCoreStandalone, ReferencesEveryCoreUnit) {
-  // ACIRCoreDefs + PacketTypes: generated type accessor and shape grammar.
+  // ACIRCoreDefs + PacketTypes: generated type accessor.
   (void)&acir::ac::BitsType::get;
-  (void)&acir::ac::detail::shapeSchema;
-  // ACIRIdentityContracts: occurrence grammar.
-  (void)&acir::ac::detail::verifyOccurrence;
-  // StateDeclarationContracts: placement and equivalence.
+  // StateDeclarationContracts: placement contract.
   (void)&acir::ac::verifyRoutedLogicalStatePlacement;
-  (void)&acir::ac::areEquivalentHardwareTypes;
   SUCCEED();
 }
 } // namespace

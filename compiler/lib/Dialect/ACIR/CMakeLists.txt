@@ -1,22 +1,6 @@
 # ACIRCore: generated type/attribute definitions plus the analysis-free
 # grammar and contract TUs below the operations layer (B2 step-2 design
 # r9 §1). GFIRDialect links exactly this plus the shared interfaces.
-add_acir_library(ACIRCore SOURCES
-  ACIRCoreDefs.cpp
-  ACIRPacketTypes.cpp
-  ACIRIdentityContracts.cpp
-  ACIRStaticContracts.cpp
-  SourceAttributeContracts.cpp
-  SourceSyntaxSiteContracts.cpp
-  SourceValueSemantics.cpp
-  ACIRStaticEvaluation.cpp
-  SourceStaticRecordConstructors.cpp
-  SourceStaticDomains.cpp
-  SourceStaticValueContracts.cpp
-  ACIRSourceContracts.cpp
-  "${PYCIRCUIT_SOURCE_DIR}/lib/Compiler/SourceIdentifier.cpp"
-  "${PYCIRCUIT_SOURCE_DIR}/lib/IR/StateDeclarationContracts.cpp"
-)
 add_dependencies(ACIRCore
   ACIRDialectIncGen
   ACIRAttributesIncGen
@@ -36,8 +20,37 @@ target_include_directories(ACIRCore INTERFACE
   "$<BUILD_INTERFACE:${PYCIRCUIT_SOURCE_DIR}/lib>"
 )
 
+add_acir_library(ACIRCore SOURCES
+  ACIRCoreDefs.cpp
+  ACIRPacketTypes.cpp
+  "${PYCIRCUIT_SOURCE_DIR}/lib/IR/StateDeclarationContracts.cpp"
+)
+add_dependencies(ACIRCore
+  ACIRDialectIncGen
+  ACIRAttributesIncGen
+  ACIRTypesIncGen
+)
+target_link_libraries(ACIRCore PUBLIC MLIRFuncDialect)
+target_include_directories(ACIRCore PRIVATE
+  "${PYCIRCUIT_SOURCE_DIR}/lib"
+)
+target_include_directories(ACIRCore INTERFACE
+  "$<BUILD_INTERFACE:${PYCIRCUIT_SOURCE_DIR}/lib>"
+)
+
 add_acir_library(ACIRDialect SOURCES
+  ACIRIdentityContracts.cpp
+  ACIRStaticContracts.cpp
+  SourceAttributeContracts.cpp
+  SourceSyntaxSiteContracts.cpp
+  SourceValueSemantics.cpp
+  ACIRStaticEvaluation.cpp
+  SourceStaticRecordConstructors.cpp
+  SourceStaticDomains.cpp
+  SourceStaticValueContracts.cpp
+  ACIRSourceContracts.cpp
   "${PYCIRCUIT_SOURCE_DIR}/lib/Analysis/LogicalStateValidation.cpp"
+  "${PYCIRCUIT_SOURCE_DIR}/lib/Compiler/SourceIdentifier.cpp"
   HardwareAnalysis.cpp
   HardwareAnalysisDependencies.cpp
   HardwareAnalysisValidation.cpp
