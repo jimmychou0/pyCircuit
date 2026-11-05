@@ -577,7 +577,8 @@ def ACIR_SourceExpectOp : ACIR_Op<"expect", [
   let arguments = (ins ACIR_BitsType:$condition, ACIR_BitsType:$path,
       Variadic<ACIR_BitsType>:$sampling, StrAttr:$kind,
       DictionaryAttr:$location);
-  
+}
+
 def ACIR_InstanceOp : ACIR_Op<"instance", [
     ModuleChildOpInterface,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
