@@ -211,6 +211,9 @@ FailureOr<SourceUnitStructure> verifyStructure(mlir::ModuleOp unit, bool body,
         result = analysis.verifyStructOperation(operation, bindings);
       else if (bitsWidthFamily)
         result = analysis.verifyBitsSymbolicWidths(operation);
+      else if (isa<ModuleOp, ModuleImportOp, InstanceOp, SourceExpectOp>(
+                   operation))
+        result = analysis.verifyModuleDeclaration(operation, bindings);
       else if (auto pred = dyn_cast<SourcePredicateOp>(operation)) {
         auto width = analysis.getPackedWidth(pred.getInput().getType(),
                                              bindings, pred);

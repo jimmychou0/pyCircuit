@@ -1069,6 +1069,9 @@ LogicalResult HardwareAnalysis::verifyResolvedOperation(
   if (isa<StructOp, StructCreateOp, StructGetOp>(op) &&
       failed(verifyStructOperation(op, bindings, true)))
     return failure();
+  if (isa<ModuleOp, ModuleImportOp, InstanceOp, SourceExpectOp>(op) &&
+      failed(verifyModuleDeclaration(op, bindings, true)))
+    return failure();
   if (auto pred = dyn_cast<SourcePredicateOp>(op)) {
     if (!isa<BitsType>(pred.getInput().getType()))
       return op->emitOpError() << "source SCF predicate requires width-one Bits";

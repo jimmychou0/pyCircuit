@@ -77,9 +77,14 @@ public:
       // grammar-only, so the plan owns their bound checks with the same
       // empty-binding shape the native bodies used.
       for (Operation &operation : package.getBody()->getOperations())
-        if (isa<StructOp>(operation) &&
-            failed(analysis.verifyStructOperation(&operation,
-                                                  HardwareBindings{}, true)))
+        if (isa<StructOp, ModuleImportOp>(operation) &&
+            failed((isa<StructOp>(operation)
+                        ? analysis.verifyStructOperation(&operation,
+                                                         HardwareBindings{},
+                                                         true)
+                        : analysis.verifyModuleDeclaration(&operation,
+                                                           HardwareBindings{},
+                                                           true))))
           return failure();
     }
     if (failed(verifyHardwarePackageEnvelope(
@@ -1425,6 +1430,11 @@ private:
           if (failed(verifyLogicalStateDeclarationBinding(logical, &analysis,
                                                            &local, &budget)))
             return failure();
+      // Per-definition source checks for every definition, including
+      // retained definitions outside the instance closure (r3
+      // ACIRModuleOps row: the native verifyRegions call was severed).
+      if (failed(analysis.verifyDefinitionSourceChecks(definition)))
+        return failure();
       auto sampling = catalogSampling(definition, local, bindings);
       if (failed(sampling))
         return failure();

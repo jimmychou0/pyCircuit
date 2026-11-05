@@ -48,12 +48,8 @@ LogicalResult verifyModuleSignature(Operation *op) {
   if (!sig || !inputs || !outputs || inputs.size() != sig.getNumInputs() ||
       outputs.size() != sig.getNumResults())
     return error() << "port name counts must match function signature";
-  auto layout = getModulePortLayout(op);
-  if (failed(layout))
-    return failure();
-  Attribute rawRootKind = op->getAttr("ac.root_kind");
-  auto rootKind = dyn_cast_or_null<StringAttr>(rawRootKind);
-  if (rawRootKind && (!rootKind || rootKind.getValue() != "system"))
+  auto rootKind = op->getAttrOfType<StringAttr>("ac.root_kind");
+  if (rootKind && rootKind.getValue() != "system")
     return error() << "ac.root_kind must be 'system' when present";
   if (failed(getSystemSamples(op)))
     return failure();
@@ -69,12 +65,8 @@ LogicalResult verifyModuleSignature(Operation *op) {
        types = op->getAttrOfType<ArrayAttr>("type_parameters");
   if (!parameters || !types)
     return error() << "module requires parameter inventories";
-  if (rootKind &&
-      (!parameters.empty() || !types.empty() || layout->sourceInputCount != 2 ||
-       layout->sourceOutputCount != 0 ||
-       !op->getAttrOfType<DictionaryAttr>("ac.domain_inputs")))
-    return error() << "source system must be a closed zero-result definition "
-                      "with one inferred clock/reset domain";
+  // The closed-zero-result system shape check moved to the staged module
+  // declaration entry with the port layout (r3 ACIRModuleOps row).
   names.clear();
   bool defaultSeen = false;
   for (Attribute raw : parameters) {
@@ -114,7 +106,9 @@ LogicalResult verifyModuleSignature(Operation *op) {
     if (!hardware(t))
       return error() << "output must have hardware payload type";
   if (failed(verifySourceReferenceParameters(op))) return failure();
-  return detail::verifyModuleSourceCallContract(op);
+  // The source call contract and the remaining bound declaration checks run
+  // from the staged module declaration entry (r3 ACIRModuleOps row).
+  return success();
 }
 } // namespace detail
 namespace {
@@ -177,10 +171,10 @@ LogicalResult ModuleOp::verifyRegions() {
   });
   if (result.wasInterrupted())
     return failure();
-  // Per-definition source checks run through the shared entry defined with
-  // the staged analysis (r9 §5); the preflight catalog and the standalone
-  // scope both consult the same synchronous definitions map.
-  return verifyDefinitionSourceChecksStandalone(*this);
+  // Per-definition source checks run through the staged module declaration
+  // entry from the preflight catalog and the source walk (r9 §5); the
+  // native region verifier keeps the local scope walk above.
+  return success();
 }
 LogicalResult RuleOp::verify() {
   if (!isa<ModuleOp>((*this)->getParentOp()) || getName().empty())
@@ -212,10 +206,9 @@ LogicalResult InstanceOp::verify() {
 }
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &) {
   if (isTransactionalPackage(*this)) return verifyTransactionalOperation(*this);
-  HardwareAnalysis a((*this)->getParentOfType<mlir::ModuleOp>());
-  HardwareBindings b;
-  b.owner = (*this)->getParentOp();
-  return a.verifyInstance(*this, b);
+  // Callee resolution, occurrence binding and payload contracts run from
+  // the staged module declaration entry (r3 ACIRModuleOps row).
+  return success();
 }
 LogicalResult YieldOp::verify() {
   if (isTransactionalPackage(*this)) return verifyTransactionalOperation(*this);
@@ -243,22 +236,11 @@ LogicalResult ModuleImportOp::verify() {
                                               "fifo_local", "fifo_downstream_pop"},
                           primitive.getValue()))
     return emitOpError() << "unknown trusted primitive kind";
-  if (getSemanticKind() == "transactions")
-    return verifySourceTransactionSummary(*this, getTransactionSummaryAttr());
-  return HardwareAnalysis((*this)->getParentOfType<mlir::ModuleOp>())
-      .verifyImport(*this);
+  // The transaction-summary structure and import schema checks run from the
+  // staged module declaration entry (r3 ACIRModuleOps row).
+  return success();
 }
 LogicalResult SourceObserveOp::verify() {
   return detail::verifySourceObservationStructure(*this);
-}
-LogicalResult SourceExpectOp::verify() {
-  HardwareBindings bindings;
-  auto *parent = (*this)->getParentOp();
-  bindings.owner = isa_and_nonnull<SourceMethodOp, SourceTransactionOp>(parent)
-                       ? parent->getParentOp()
-                       : parent;
-  return detail::verifySourceExpectOperation(
-      HardwareAnalysis((*this)->getParentOfType<mlir::ModuleOp>()), *this,
-      bindings);
 }
 } // namespace acir::ac
