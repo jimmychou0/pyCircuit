@@ -198,11 +198,15 @@ FailureOr<SourceUnitStructure> verifyStructure(mlir::ModuleOp unit, bool body,
       bool collectionFamily = isa<CollectionOp, TableCreateOp, TableSplatOp,
           TableMapOp, TableViewOp, TableIndexOp, TableReadOp, TableGetOp,
           TableMatchOp, TableChooseOp, TableFoldOp, ValueMergeOp>(operation);
+      bool structFamily =
+          isa<StructOp, StructCreateOp, StructGetOp>(operation);
       LogicalResult result = success();
       if (enumFamily)
         result = analysis.verifyEnumValueOperation(operation, bindings);
       else if (collectionFamily)
         result = analysis.verifyCollectionOperation(operation, bindings);
+      else if (structFamily)
+        result = analysis.verifyStructOperation(operation, bindings);
       if (failed(result))
         return WalkResult::interrupt();
       return WalkResult::advance();

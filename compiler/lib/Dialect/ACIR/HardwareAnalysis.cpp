@@ -1066,6 +1066,9 @@ LogicalResult HardwareAnalysis::verifyResolvedOperation(
           ValueMergeOp>(op) &&
       failed(verifyCollectionOperation(op, bindings, true)))
     return failure();
+  if (isa<StructOp, StructCreateOp, StructGetOp>(op) &&
+      failed(verifyStructOperation(op, bindings, true)))
+    return failure();
   if (auto write = dyn_cast<SourceStateWriteOp>(op); write && !write.getIndices().empty()) {
     auto owner = write->getParentOfType<ModuleOp>();
     SourceStateOp state;

@@ -72,6 +72,15 @@ public:
       // All children are verified; retain the package's own invariants and
       // cross-child region/dominance checks without scheduling them again.
       if (failed(mlir::verify(package, false))) return failure();
+      // Package-level declaration families whose semantic checks moved to
+      // the staged side (r3 ACIRPacketOps row): the native verifiers are
+      // grammar-only, so the plan owns their bound checks with the same
+      // empty-binding shape the native bodies used.
+      for (Operation &operation : package.getBody()->getOperations())
+        if (isa<StructOp>(operation) &&
+            failed(analysis.verifyStructOperation(&operation,
+                                                  HardwareBindings{}, true)))
+          return failure();
     }
     if (failed(verifyHardwarePackageEnvelope(
             analysis, profile, [&](uint64_t units, Operation *site) {

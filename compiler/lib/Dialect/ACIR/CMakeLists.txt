@@ -65,6 +65,7 @@ add_acir_library(ACIRDialect SOURCES
   EntryBoundary.cpp
   CollectionAnalysis.cpp
   EnumAnalysis.cpp
+  StructBoundChecks.cpp
   SourceUnitValidation.cpp
   FinalSourceUnitValidation.cpp
   SourceNamespaceValidation.cpp
