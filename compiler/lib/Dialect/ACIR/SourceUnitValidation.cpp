@@ -186,7 +186,7 @@ FailureOr<SourceUnitStructure> verifyStructure(mlir::ModuleOp unit, bool body,
                         SourceStateWriteOp, SourceMethodOp,
                         SourceMethodCallOp, SourceTransactionOp>(operation);
     if (auto module = dyn_cast<ac::ModuleOp>(operation))
-      for (Operation &child : module.getBody()->getOperations())
+      for (Operation &child : module.getBody().front())
         if (isa<RuleOp>(child))
           transactions = true;
   });
