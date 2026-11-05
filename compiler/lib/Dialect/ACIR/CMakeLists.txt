@@ -23,6 +23,10 @@ target_include_directories(ACIRCore PUBLIC
 target_include_directories(ACIRCore INTERFACE
   "$<BUILD_INTERFACE:${PYCIRCUIT_SOURCE_DIR}/lib>"
 )
+# StateDeclarationContracts.cpp includes its own header via the lib/ path.
+target_include_directories(ACIRCore PRIVATE
+  "$<BUILD_INTERFACE:${PYCIRCUIT_SOURCE_DIR}/lib>"
+)
 
 add_acir_library(ACIRDialect SOURCES
   ACIRIdentityContracts.cpp
