@@ -315,7 +315,10 @@ TEST_F(TableDependencySummaryTest,
       cast<ac::ModuleOp>(SymbolTable::lookupSymbolIn(*unit, "unit.Parent"));
   auto instance = *module.getBody().front().getOps<ac::InstanceOp>().begin();
   instance->setOperand(0, module.getBody().front().getArgument(1));
-  EXPECT_TRUE(failed(mlir::verify(*unit)));
+  ac::HardwareAnalysis analysis(*unit);
+  ac::HardwareBindings bindings;
+  bindings.owner = module;
+  EXPECT_TRUE(failed(analysis.verifyInstance(instance, bindings)));
   auto malformed = parse(R"mlir(
     "ac.module"() ({
     ^bb0(%input: !t3):
@@ -323,7 +326,19 @@ TEST_F(TableDependencySummaryTest,
       "ac.yield"(%out) : (!t2) -> ()
     }) {sym_name = "unit.BadView", source_owner = {package = "", path = "unit.py"}, parameters = [], type_parameters = [], function_type = (!t3) -> !t2, input_names = ["input"], output_names = ["out"]} : () -> ()
   )mlir");
-  EXPECT_FALSE(malformed);
+  ASSERT_TRUE(malformed);
+  auto malformedView =
+      *cast<ac::ModuleOp>(SymbolTable::lookupSymbolIn(*malformed,
+                                                       "unit.BadView"))
+           .getBody()
+           .front()
+           .getOps<ac::TableViewOp>()
+           .begin();
+  ac::HardwareAnalysis malformedAnalysis(*malformed);
+  ac::HardwareBindings malformedBindings;
+  malformedBindings.owner = malformedView->getParentOp();
+  EXPECT_TRUE(failed(malformedAnalysis.verifyCollectionOperation(
+      malformedView.getOperation(), malformedBindings)));
 }
 
 TEST_F(TableDependencySummaryTest,
