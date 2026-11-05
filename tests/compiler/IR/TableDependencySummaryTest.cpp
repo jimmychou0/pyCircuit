@@ -318,7 +318,7 @@ TEST_F(TableDependencySummaryTest,
   ac::HardwareAnalysis analysis(*unit);
   ac::HardwareBindings bindings;
   bindings.owner = module;
-  EXPECT_TRUE(failed(analysis.verifyResolvedOperation(instance, bindings)));
+  EXPECT_TRUE(failed(analysis.verifyInstance(instance, bindings)));
   auto malformed = parse(R"mlir(
     "ac.module"() ({
     ^bb0(%input: !t3):
