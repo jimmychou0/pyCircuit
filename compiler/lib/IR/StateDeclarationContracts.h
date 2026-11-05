@@ -34,6 +34,14 @@ mlir::LogicalResult verifyLiteralControlWidth(mlir::Operation *site,
                                               mlir::Value control,
                                               llvm::StringRef description);
 
+// Bits payload carrier whose width, when a literal integer is directly
+// available without binding evaluation, resolves as a positive u64 natural
+// width. Any literal width is accepted (design review r3 F6: the
+// transactional resource contract fixes no carrier width, unlike the ==1
+// control check); symbolic widths defer to the staged width closure.
+mlir::LogicalResult verifyLiteralWidthResolves(mlir::Operation *site,
+                                               mlir::Type payload);
+
 // Structural dictionary shape of an ac.payload_constraint attribute: closed
 // field set, hardware kind, payload type agreement and known source kind.
 // Semantic width, scope and symbolic-template obligations stay with the

@@ -61,6 +61,7 @@ add_acir_library(ACIRDialect SOURCES
   SourceTransactionStateAnalysis.cpp
   SourceTransactionSummary.cpp
   TransactionalContracts.cpp
+  TransactionalLinkedChecks.cpp
   ACIRModuleContracts.cpp
   EntryBoundary.cpp
   EntryBoundaryEnvelope.cpp

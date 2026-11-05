@@ -191,6 +191,29 @@ LogicalResult verifyLiteralControlWidth(Operation *site, Value control,
   return success();
 }
 
+LogicalResult verifyLiteralWidthResolves(Operation *site, Type payload) {
+  auto bits = dyn_cast<ac::BitsType>(payload);
+  if (!bits)
+    return success();
+  auto tree = bits.getWidth().getTree();
+  auto kind = tree.getAs<StringAttr>("kind");
+  if (!kind || kind.getValue() != "literal")
+    return success();
+  auto literal = tree.getAs<DictionaryAttr>("value");
+  auto literalKind = literal ? literal.getAs<StringAttr>("kind") : StringAttr();
+  if (!literalKind || literalKind.getValue() != "integer")
+    return success();
+  auto width = literal.getAs<ac::MathIntAttr>("value");
+  if (!width)
+    return site->emitOpError()
+           << "hardware static value must be a mathematical integer";
+  llvm::APSInt value(width.getCanonicalValue());
+  if (value.isNegative() || value.isZero() || value.getActiveBits() > 64)
+    return site->emitOpError()
+           << "hardware static value must be positive and fit u64";
+  return success();
+}
+
 LogicalResult verifyPayloadConstraintShape(Operation *site, Attribute raw,
                                            Type payload) {
   auto value = dyn_cast_or_null<DictionaryAttr>(raw);
