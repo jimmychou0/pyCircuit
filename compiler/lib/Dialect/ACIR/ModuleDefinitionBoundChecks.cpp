@@ -503,8 +503,9 @@ LogicalResult HardwareAnalysis::verifyModuleDeclaration(
       return module.emitOpError()
              << "source system must be a closed zero-result definition "
                 "with one inferred clock/reset domain";
-    return detail::verifyModuleSourceCallContract(module) ||
-           verifyDefinitionSourceChecks(module);
+    if (failed(detail::verifyModuleSourceCallContract(module)))
+      return failure();
+    return verifyDefinitionSourceChecks(module);
   }
   if (auto imported = dyn_cast<ModuleImportOp>(operation)) {
     if (imported.getSemanticKind() == "transactions")
