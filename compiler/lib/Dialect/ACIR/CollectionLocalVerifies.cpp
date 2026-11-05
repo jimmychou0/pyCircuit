@@ -19,12 +19,6 @@ bool equivalentTypes(TypeRange lhs, TypeRange rhs) {
   return true;
 }
 
-HardwareBindings scope(Operation *op) {
-  HardwareBindings b;
-  b.owner = op->getParentOfType<ModuleOp>();
-  return b;
-}
-
 LogicalResult scalarRegion(Operation *op, TypeRange args, TypeRange results) {
   auto &region = op->getRegion(0);
   if (!region.hasOneBlock() || region.front().empty() ||
