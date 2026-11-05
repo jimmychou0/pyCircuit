@@ -135,6 +135,37 @@ protected:
     });
     return result;
   }
+  // The transaction-surface rejections moved to the staged side (r2 §5
+  // ACIRTransactionOps rows); the migrated pins run the staged transaction
+  // entry over the file's transaction-surface operations.
+  mlir::LogicalResult stagedTransactions(mlir::ModuleOp file) {
+    ac::HardwareAnalysis analysis(file);
+    mlir::LogicalResult result = mlir::success();
+    file.walk([&](mlir::Operation *op) {
+      if (isa<ac::SourceStateReadOp, ac::SourceStateWriteOp,
+              ac::SourceFormalWriteOp, ac::SourceMethodOp,
+              ac::SourceMethodCallOp, ac::SourceBranchOp,
+              ac::SourceTransactionOp>(op)) {
+        result = analysis.verifyTransactionSurfaceOperation(op, {}, true);
+        return failed(result) ? mlir::WalkResult::interrupt()
+                              : mlir::WalkResult::advance();
+      }
+      return mlir::WalkResult::advance();
+    });
+    return result;
+  }
+  // The source ac.state declaration binding moved off the native verifier
+  // into the staged catalog row (B1-boundary); the migrated pins run the
+  // staged source binding over the file's state declarations.
+  mlir::LogicalResult stagedStateBindings(mlir::ModuleOp file) {
+    mlir::LogicalResult result = mlir::success();
+    file.walk([&](ac::SourceStateOp state) {
+      result = ac::verifyLogicalStateSourceBinding(state);
+      return failed(result) ? mlir::WalkResult::interrupt()
+                            : mlir::WalkResult::advance();
+    });
+    return result;
+  }
   mlir::Operation *find(mlir::ModuleOp file, llvm::StringRef name,
                         unsigned ordinal = 0) {
     mlir::Operation *result = nullptr;
@@ -147,6 +178,15 @@ protected:
   }
   void reject(mlir::ModuleOp file, llvm::StringRef reason) {
     EXPECT_TRUE(mlir::failed(capture([&] { return mlir::verify(file); })));
+    EXPECT_NE(diagnostics.find(reason.str()), std::string::npos) << diagnostics;
+  }
+  void rejectStaged(mlir::ModuleOp file, llvm::StringRef reason) {
+    EXPECT_TRUE(mlir::failed(capture([&] { return stagedTransactions(file); })));
+    EXPECT_NE(diagnostics.find(reason.str()), std::string::npos) << diagnostics;
+  }
+  void rejectStateBinding(mlir::ModuleOp file, llvm::StringRef reason) {
+    EXPECT_TRUE(
+        mlir::failed(capture([&] { return stagedStateBindings(file); })));
     EXPECT_NE(diagnostics.find(reason.str()), std::string::npos) << diagnostics;
   }
   mlir::DictionaryAttr changed(mlir::DictionaryAttr dictionary,
@@ -167,6 +207,10 @@ protected:
   }
   void rejectsContract(mlir::ModuleOp file) {
     EXPECT_TRUE(mlir::failed(capture([&] { return mlir::verify(file); })));
+    EXPECT_FALSE(diagnostics.empty());
+  }
+  void rejectsStagedContract(mlir::ModuleOp file) {
+    EXPECT_TRUE(mlir::failed(capture([&] { return stagedTransactions(file); })));
     EXPECT_FALSE(diagnostics.empty());
   }
   template <typename Effect>
@@ -308,7 +352,8 @@ TEST_F(TransactionEffectsTest, MissingAndForeignStateReferencesFailClosed) {
     }
     find(*file, "ac.state.read")
         ->setAttr("state", builder.getStringAttr(symbol));
-    reject(*file, "state");
+    // The selected state resolution is the staged transaction entry.
+    rejectStaged(*file, "state");
   }
 }
 
@@ -319,7 +364,8 @@ TEST_F(TransactionEffectsTest, ReceiverMustResolveToTheDeclaredMethodOwner) {
     auto *call = find(*file, "ac.method.call");
     call->setAttr("instance_path",
                   builder.getArrayAttr({builder.getStringAttr(path)}));
-    reject(*file, "instance");
+    // The receiver resolution is the staged transaction entry.
+    rejectStaged(*file, "instance");
   }
   auto file = parse();
   ASSERT_TRUE(file);
@@ -328,7 +374,7 @@ TEST_F(TransactionEffectsTest, ReceiverMustResolveToTheDeclaredMethodOwner) {
                 mlir::SymbolRefAttr::get(
                     &context, "Root",
                     {mlir::FlatSymbolRefAttr::get(&context, "step")}));
-  reject(*file, "callee");
+  rejectStaged(*file, "callee");
 }
 
 TEST_F(TransactionEffectsTest,
@@ -342,13 +388,14 @@ TEST_F(TransactionEffectsTest,
     ASSERT_TRUE(file);
     auto *read = find(*file, "ac.state.read", 2);
     read->setAttr("selectors", mlir::parseAttribute(selectors, &context));
-    reject(*file, "state");
+    // The selected state resolution is the staged transaction entry.
+    rejectStaged(*file, "state");
   }
   auto file = parse();
   ASSERT_TRUE(file);
   auto *write = find(*file, "ac.state.write");
   write->setOperand(1, write->getOperand(0));
-  reject(*file, "type");
+  rejectStaged(*file, "type");
 }
 
 TEST_F(TransactionEffectsTest, RegionsRespectCaptureAndReturnTypes) {
@@ -365,7 +412,8 @@ TEST_F(TransactionEffectsTest, RegionsRespectCaptureAndReturnTypes) {
   auto *transaction = find(*file, "ac.transaction");
   auto *yield = transaction->getRegion(0).front().getTerminator();
   yield->setOperand(0, transaction->getRegion(0).front().getArgument(1));
-  reject(*file, "guard");
+  // The guard-yield control predicate is the staged transaction entry.
+  rejectStaged(*file, "guard");
 }
 
 TEST_F(TransactionEffectsTest, GuardCannotPerformWritesOrMethodCalls) {
@@ -497,7 +545,8 @@ TEST_F(TransactionEffectsTest, InitializersRequireStaticAcyclicConstructors) {
   ASSERT_TRUE(runtime);
   auto *state = find(*runtime, "ac.state");
   state->setOperand(2, state->getBlock()->getArgument(2));
-  reject(*runtime, "closed static literal/constructor DAG");
+  // The closed-initializer binding is the staged source-state catalog row.
+  rejectStateBinding(*runtime, "closed static literal/constructor DAG");
 
   {
     auto file = parse();
@@ -511,7 +560,7 @@ TEST_F(TransactionEffectsTest, InitializersRequireStaticAcyclicConstructors) {
     computation.addAttribute("opcode", builder.getStringAttr("add"));
     auto *op = builder.create(computation);
     owner->setOperand(2, op->getResult(0));
-    reject(*file, "closed static literal/constructor DAG");
+    rejectStateBinding(*file, "closed static literal/constructor DAG");
   }
   auto cycle = parse();
   ASSERT_TRUE(cycle);
@@ -524,7 +573,7 @@ TEST_F(TransactionEffectsTest, InitializersRequireStaticAcyclicConstructors) {
   get.addAttribute("field", builder.getStringAttr("lanes"));
   auto *projection = builder.create(get);
   constructor->setOperand(0, projection->getResult(0));
-  reject(*cycle, "cyclic");
+  rejectStateBinding(*cycle, "cyclic");
 }
 
 TEST_F(TransactionEffectsTest, ControlWidthsAndStatePayloadCannotBeInferred) {
@@ -537,13 +586,18 @@ TEST_F(TransactionEffectsTest, ControlWidthsAndStatePayloadCannotBeInferred) {
                            ? op->getBlock()->getArgument(2)
                            : op->getBlock()->getArgument(0);
     op->setOperand(0, replacement);
-    reject(*file, "width-one Bits");
+    // The state declaration controls are the staged source-state catalog
+    // row; the effect control predicates are the staged transaction entry.
+    if (name == "ac.state")
+      rejectStateBinding(*file, "width-one Bits");
+    else
+      rejectStaged(*file, "width-one Bits");
   }
   auto file = parse();
   ASSERT_TRUE(file);
   auto *state = find(*file, "ac.state");
   state->setOperand(2, state->getOperand(1));
-  reject(*file, "initial value and old-Q payload types must match");
+  rejectStateBinding(*file, "initial value and old-Q payload types must match");
 }
 
 TEST_F(TransactionEffectsTest, CallsAndOrdinaryReturnsKeepExactSignature) {
@@ -555,7 +609,9 @@ TEST_F(TransactionEffectsTest, CallsAndOrdinaryReturnsKeepExactSignature) {
       call->eraseOperand(1);
     else
       call->setOperand(1, call->getOperand(0));
-    reject(*file, arity ? "arity" : "payload type");
+    // The bound-signature arity and payload agreement are the staged
+    // transaction entry.
+    rejectStaged(*file, arity ? "arity" : "payload type");
   }
   for (llvm::StringRef name : {"ac.method", "ac.transaction"}) {
     auto file = parse();
@@ -766,7 +822,8 @@ TEST_F(TransactionEffectsTest,
   find(*file, "ac.instance", 1)
       ->setAttr("occurrence",
                 find(*file, "ac.instance")->getAttr("occurrence"));
-  reject(*file, "occurrence");
+  // The receiver inventory identity is the staged transaction entry.
+  rejectStaged(*file, "occurrence");
 }
 
 TEST_F(TransactionEffectsTest, ReceiverOccurrenceMustNameItsActualParent) {
@@ -774,7 +831,7 @@ TEST_F(TransactionEffectsTest, ReceiverOccurrenceMustNameItsActualParent) {
   ASSERT_TRUE(file);
   find(*file, "ac.instance")
       ->setAttr("occurrence", find(*file, "ac.state")->getAttr("occurrence"));
-  reject(*file, "definition");
+  rejectStaged(*file, "definition");
 }
 
 TEST_F(TransactionEffectsTest, SourceIdentityMustNameItsActualModuleOwner) {
@@ -893,7 +950,12 @@ TEST_F(TransactionEffectsTest, MethodParameterRowsHaveAnExactClosedSchema) {
       setParameter(method, changed(parameter(method), name,
                                    missing ? mlir::Attribute()
                                            : builder.getI64IntegerAttr(0)));
-      rejectsContract(*file);
+      // The constraint row's hardware authority is the staged transaction
+      // entry; the remaining row schema stays a native parameter check.
+      if (name == "constraint")
+        rejectsStagedContract(*file);
+      else
+        rejectsContract(*file);
     }
   }
   auto file = parse();
@@ -1010,7 +1072,8 @@ TEST_F(TransactionEffectsTest, MethodConstraintsCannotInventLogicalAuthority) {
         method->setAttr("ac.result_constraints", builder.getArrayAttr({value}));
       else
         setParameter(method, changed(parameter(method), "constraint", value));
-      rejectsContract(*file);
+      // The hardware call constraints are the staged transaction entry.
+      rejectsStagedContract(*file);
     }
   }
 }
@@ -1027,10 +1090,13 @@ TEST_F(TransactionEffectsTest, MalformedCalleeMetadataRejectsDuringSymbolUse) {
         method->removeAttr(name);
       else
         method->setAttr(name, builder.getUnitAttr());
-      mlir::SymbolTableCollection symbols;
       auto call = mlir::cast<SourceMethodCallOp>(find(*file, "ac.method.call"));
-      EXPECT_TRUE(mlir::failed(
-          capture([&] { return call.verifySymbolUses(symbols); })));
+      // The callee/receiver resolution moved to the staged transaction
+      // entry; native symbol uses keep the operand/region grammar.
+      EXPECT_TRUE(mlir::failed(capture([&] {
+        return ac::HardwareAnalysis(*file)
+            .verifyTransactionSurfaceOperation(call, {}, true);
+      })));
       EXPECT_FALSE(diagnostics.empty());
     }
   }
@@ -1076,7 +1142,12 @@ TEST_F(TransactionEffectsTest,
       auto *extra = new mlir::Block;
       candidate.getElseRegion().push_back(extra);
     }
-    rejectsContract(*malformed);
+    // The bounded arm result agreement is the staged transaction entry; the
+    // occurrence, location and arm-shape grammar stay native.
+    if (mutation == 3)
+      rejectsStagedContract(*malformed);
+    else
+      rejectsContract(*malformed);
   }
 }
 

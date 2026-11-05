@@ -18,6 +18,7 @@
 #include "pycircuit/Dialect/ACIR/ACIRDialect.h"
 #include "pycircuit/Dialect/GFIR/GFIRDialect.h"
 #include "pycircuit/Dialect/ACIR/ACIROps.h"
+#include "pycircuit/Analysis/LogicalStateValidation.h"
 #include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
 #include "pycircuit/Dialect/ACIR/SourceMethodAnalysis.h"
 #include "pycircuit/Dialect/ACIR/SourceTransactionStateAnalysis.h"
@@ -4891,7 +4892,11 @@ def Owner() -> ac.u8:
   body.getOperations().insert(body.getTerminator()->getIterator(), copied);
   body.getTerminator()->setOperands(copied->getResults());
   diagnostics.clear();
-  EXPECT_TRUE(failed(mlir::verify(*file)));
+  // The receiver resolution and its private autonomous authority check are
+  // the staged transaction entry (B2.3-preC-6 row).
+  ac::HardwareAnalysis analysis(*file);
+  EXPECT_TRUE(
+      failed(analysis.verifyTransactionSurfaceOperation(copied, {}, true)));
   EXPECT_NE(diagnostics.find("autonomous"), std::string::npos) << diagnostics;
 }
 
@@ -5411,7 +5416,10 @@ def Selected() -> ac.u8:
           extractLow ? "low" : "value",
           ac::StaticExprAttr::get(&context, fields.getDictionary(&context)));
       diagnostics.clear();
-      EXPECT_TRUE(failed(mlir::verify(*file)))
+      // The closed-initializer binding is the staged source-state catalog
+      // row (B2.3-preC-6 row); the native verifier keeps the declaration
+      // grammar.
+      EXPECT_TRUE(failed(ac::verifyLogicalStateSourceBinding(states.front())))
           << "closed invalid initializer was deferred";
       PassManager publication(&context);
       publication.addPass(acir::createExtractSourceInterfacePass());
@@ -5462,8 +5470,10 @@ def Fixed(enable: ac.u1) -> ac.table[3, ac.u8]:
   ac::HardwareBindings bindings;
   bindings.owner = write->getParentOfType<ac::ModuleOp>();
   diagnostics.clear();
+  // The checked Table index obligation lives in the resolved dispatch (the
+  // native verifier keeps placement grammar only, B2.3-preC-6 row), so the
+  // resolved-dispatch pin owns the intrinsic-range expectation.
   EXPECT_TRUE(failed(hardware.verifyResolvedOperation(write, bindings)));
-  EXPECT_TRUE(failed(mlir::verify(*file)));
   PassManager publication(&context);
   publication.addPass(acir::createExtractSourceInterfacePass());
   EXPECT_TRUE(failed(publication.run(*file)));
