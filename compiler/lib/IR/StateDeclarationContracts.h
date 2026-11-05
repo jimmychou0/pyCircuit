@@ -19,7 +19,7 @@ bool areEquivalentHardwareTypes(mlir::Type lhs, mlir::Type rhs);
 /// analysis-hosted helper shared by the staged entries.
 mlir::FailureOr<mlir::Type>
 selectedPayloadType(mlir::Operation *operation, mlir::Type root,
-                    mlir::ArrayAttr selectors, llvm::ValueRange indices);
+                    mlir::ArrayAttr selectors, mlir::ValueRange indices);
 
 
 // Named direct module placement with a valid instance identifier and a
