@@ -63,6 +63,7 @@ add_acir_library(ACIRDialect SOURCES
   TransactionalContracts.cpp
   ACIRModuleContracts.cpp
   EntryBoundary.cpp
+  EntryBoundaryEnvelope.cpp
   CollectionAnalysis.cpp
   EnumAnalysis.cpp
   StructBoundChecks.cpp
