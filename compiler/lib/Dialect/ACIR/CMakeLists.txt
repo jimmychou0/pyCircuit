@@ -32,6 +32,9 @@ target_include_directories(ACIRCore PUBLIC
 target_include_directories(ACIRCore PRIVATE
   "${PYCIRCUIT_SOURCE_DIR}/lib"
 )
+target_include_directories(ACIRCore INTERFACE
+  "$<BUILD_INTERFACE:${PYCIRCUIT_SOURCE_DIR}/lib>"
+)
 
 add_acir_library(ACIRDialect SOURCES
   "${PYCIRCUIT_SOURCE_DIR}/lib/Analysis/LogicalStateValidation.cpp"

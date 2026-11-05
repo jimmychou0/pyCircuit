@@ -17,7 +17,7 @@
 // inside ACIRCore fails here at link time (r9 §1 per-TU symbol table).
 #include "pycircuit/Dialect/ACIR/ACIRTypes.h"
 #include "pycircuit/Dialect/ACIR/ACIRAttributes.h"
-#include "ACIRSourceContracts.h"
+#include "Dialect/ACIR/ACIRSourceContracts.h"
 #include "IR/StateDeclarationContracts.h"
 #include "mlir/IR/BuiltinAttributes.h"
 namespace {
