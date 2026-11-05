@@ -1,35 +1,39 @@
-# ACIRCore: generated type/attribute definitions and the common-IR
-# contracts below the operations layer (B2 step-2 design r9 §1, narrowed
-# to the self-contained subset). GFIRDialect links exactly this plus the
-# shared interfaces; the grammar TUs that reference concrete op classes
-# remain in the operations target pending the interface-based reroutes
-# (r9 §1 leaf extraction).
+# ACIRCore: generated type/attribute definitions and the grammar/contract
+# leaf TUs below the operations layer (B2 step-2 design r9 §1). GFIRDialect
+# links exactly this plus the shared interfaces. Every member here is
+# self-contained: no concrete-op out-of-line definitions, no staged analysis.
+# The WHOLE_ARCHIVE core probe in tests/compiler/IR pulls every member and
+# fails at link time if any of them references a symbol above this layer.
 add_acir_library(ACIRCore SOURCES
   ACIRCoreDefs.cpp
   ACIRPacketTypes.cpp
+  ACIRIdentityContracts.cpp
+  ACIRSourceContracts.cpp
+  SourceStaticValueContracts.cpp
   "${PYCIRCUIT_SOURCE_DIR}/lib/IR/StateDeclarationContracts.cpp"
+  "${PYCIRCUIT_SOURCE_DIR}/lib/Compiler/SourceIdentifier.cpp"
 )
 add_dependencies(ACIRCore
   ACIRDialectIncGen
   ACIRAttributesIncGen
   ACIRTypesIncGen
+  ACIROpsIncGen
 )
-target_link_libraries(ACIRCore PUBLIC MLIRFuncDialect)
+target_link_libraries(ACIRCore PUBLIC
+  MLIRFuncDialect
+  PycircuitStateInterfaces
+)
 target_include_directories(ACIRCore PUBLIC
   "$<BUILD_INTERFACE:${PYCIRCUIT_SOURCE_DIR}/include>"
   "$<BUILD_INTERFACE:${PYCIRCUIT_BINARY_DIR}/include>"
   "$<INSTALL_INTERFACE:include>"
 )
-target_include_directories(ACIRCore INTERFACE
-  "$<BUILD_INTERFACE:${PYCIRCUIT_SOURCE_DIR}/lib>"
-)
-# StateDeclarationContracts.cpp includes its own header via the lib/ path.
+# ACIRSourceContracts.h and SourceIdentifierUnicodeData.h live under lib/.
 target_include_directories(ACIRCore PRIVATE
   "$<BUILD_INTERFACE:${PYCIRCUIT_SOURCE_DIR}/lib>"
 )
 
 add_acir_library(ACIRDialect SOURCES
-  ACIRIdentityContracts.cpp
   ACIRStaticContracts.cpp
   SourceAttributeContracts.cpp
   SourceSyntaxSiteContracts.cpp
@@ -37,10 +41,7 @@ add_acir_library(ACIRDialect SOURCES
   ACIRStaticEvaluation.cpp
   SourceStaticRecordConstructors.cpp
   SourceStaticDomains.cpp
-  SourceStaticValueContracts.cpp
-  ACIRSourceContracts.cpp
   "${PYCIRCUIT_SOURCE_DIR}/lib/Analysis/LogicalStateValidation.cpp"
-  "${PYCIRCUIT_SOURCE_DIR}/lib/Compiler/SourceIdentifier.cpp"
   HardwareAnalysis.cpp
   HardwareAnalysisDependencies.cpp
   HardwareAnalysisValidation.cpp

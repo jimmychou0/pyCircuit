@@ -1,6 +1,5 @@
-#include "pycircuit/Dialect/ACIR/ACIRTypes.h"
-#include "IR/StateDeclarationContracts.h"
 #include "pycircuit/Dialect/ACIR/ACIRDialect.h"
+#include "pycircuit/Dialect/ACIR/ACIRTypes.h"
 #include "pycircuit/Dialect/GFIR/GFIRDialect.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/MLIRContext.h"
@@ -8,18 +7,32 @@
 #include "gtest/gtest.h"
 
 #ifdef PYCIRCUIT_CORE_PROBE
-// Core probe: whole-archive linking pulls EVERY core member, and this TU
-// references one symbol per enumerated core TU, so any reverse dependency
-// inside ACIRCore fails here at link time (r9 §1 per-TU symbol table).
-#include "pycircuit/Dialect/ACIR/ACIRDialect.h"
-#include "pycircuit/Dialect/GFIR/GFIRDialect.h"
-#include "mlir/IR/OperationSupport.h"
+// Core probe: the executable links the ACIRCore target as WHOLE_ARCHIVE,
+// so every core member object is pulled regardless of use, and any
+// reverse dependency inside ACIRCore fails here at link time. This TU
+// references one symbol per enumerated core TU so the probe also detects
+// a member that silently stopped being part of the closure (r9 §4).
+#include "pycircuit/Dialect/ACIR/ACIRAttributes.h"
+#include "pycircuit/Dialect/ACIR/ACIRTypes.h"
+#include "pycircuit/Dialect/ACIR/ACIRSourceContracts.h"
+#include "pycircuit/Dialect/ACIR/SourceIdentifier.h"
+#include "IR/StateDeclarationContracts.h"
 namespace {
 TEST(ACIRCoreStandalone, ReferencesEveryCoreUnit) {
-  // ACIRCoreDefs + PacketTypes: generated type accessor.
+  // ACIRCoreDefs: generated attribute classes and their registration.
+  (void)&acir::ac::MathIntAttr::get;
+  // ACIRPacketTypes: packet type hierarchy and its verification.
   (void)&acir::ac::BitsType::get;
-  // StateDeclarationContracts: placement contract.
+  // ACIRIdentityContracts: occurrence grammar and its memo.
+  (void)&acir::ac::detail::verifyOccurrence;
+  // ACIRSourceContracts: source site/occurrence contract leaves.
+  (void)&acir::ac::detail::verifySite;
+  // SourceStaticValueContracts: closed static-value grammar.
+  (void)&acir::ac::detail::verifyStaticValueStructure;
+  // StateDeclarationContracts: declaration placement contracts.
   (void)&acir::ac::verifyRoutedLogicalStatePlacement;
+  // SourceIdentifier: Python identifier grammar leaf.
+  (void)&acir::ac::detail::verifyPythonAstIdentifier;
   SUCCEED();
 }
 } // namespace
