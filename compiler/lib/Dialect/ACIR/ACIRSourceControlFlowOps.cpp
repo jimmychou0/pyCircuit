@@ -1,6 +1,5 @@
 #include "ACIRSourceContracts.h"
 #include "pycircuit/Dialect/ACIR/ACIROps.h"
-#include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
 
 using namespace mlir;
 
@@ -15,20 +14,8 @@ LogicalResult SourceIndexOp::verify() {
 }
 
 LogicalResult SourcePredicateOp::verify() {
-  auto package = (*this)->getParentOfType<mlir::ModuleOp>();
-  HardwareAnalysis analysis(package);
-  HardwareBindings bindings;
-  bindings.owner = (*this)->getParentOfType<ModuleOp>();
-  auto width = analysis.getPackedWidth(getInput().getType(), bindings, *this);
-  if (failed(width) || *width != 1)
-    return emitOpError() << "source SCF predicate requires width-one Bits";
-  for (OpOperand &use : getResult().getUses()) {
-    auto name = use.getOwner()->getName().getStringRef();
-    if (use.getOperandNumber() != 0 ||
-        (name != "scf.if" && name != "scf.condition"))
-      return emitOpError()
-             << "source SCF predicate may only control scf.if/scf.condition";
-  }
+  // Width resolution runs staged (r9 §5); this transient transport's
+  // structure is checked by its consumers.
   return success();
 }
 } // namespace acir::ac

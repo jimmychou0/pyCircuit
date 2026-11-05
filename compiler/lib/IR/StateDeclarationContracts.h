@@ -15,6 +15,12 @@ namespace acir::ac {
 /// HardwareAnalysis.h so common-IR and GFIR checks can use it without the
 /// staged analysis layer; HardwareAnalysis.h keeps a matching declaration).
 bool areEquivalentHardwareTypes(mlir::Type lhs, mlir::Type rhs);
+/// Selected transaction-state payload type (B2 step-2 design r9 §5):
+/// analysis-hosted helper shared by the staged entries.
+mlir::FailureOr<mlir::Type>
+selectedPayloadType(mlir::Operation *operation, mlir::Type root,
+                    mlir::ArrayAttr selectors, llvm::ValueRange indices);
+
 
 // Named direct module placement with a valid instance identifier and a
 // well-formed occurrence whose origin names the owning module.

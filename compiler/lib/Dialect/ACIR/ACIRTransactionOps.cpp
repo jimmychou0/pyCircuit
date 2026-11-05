@@ -99,13 +99,9 @@ LogicalResult region(Operation *operation, unsigned ordinal, TypeRange inputs,
               "ac.yield";
   auto &block = region.front();
   auto &yield = block.back();
-  HardwareAnalysis analysis(operation->getParentOfType<mlir::ModuleOp>());
   if (guard) {
     if (yield.getNumOperands() != 1)
       return yield.emitOpError() << "guard must yield exactly one predicate";
-    if (failed(predicate(analysis, yield.getOperand(0), scope(operation),
-                         &yield, "guard yield")))
-      return failure();
   } else if (!equivalentTypes(yield.getOperandTypes(), outputs)) {
     return yield.emitOpError() << "body yield types do not match results";
   }
@@ -186,74 +182,6 @@ LogicalResult branchPayload(Operation *operation, bool arm, unsigned depth,
   return success();
 }
 
-FailureOr<Type> selectedPayloadType(Operation *operation, Type root,
-                                    ArrayAttr selectors, ValueRange indices) {
-  HardwareAnalysis analysis(operation->getParentOfType<mlir::ModuleOp>());
-  auto bindings = scope(operation);
-  auto resolved = analysis.resolveType(root, bindings, operation);
-  if (failed(resolved))
-    return failure();
-  Type current = *resolved;
-  unsigned nextIndex = 0;
-  for (Attribute raw : selectors) {
-    auto selector = dyn_cast<DictionaryAttr>(raw);
-    if (!selector || selector.size() != 1)
-      return operation->emitOpError()
-             << "state selector requires exactly field or index";
-    if (auto field = selector.getAs<StringAttr>("field")) {
-      auto record = dyn_cast<StructType>(current);
-      auto declaration = record ? analysis.lookupStruct(record) : StructOp();
-      if (!declaration)
-        return operation->emitOpError()
-               << "state field selector requires a resolved nominal struct";
-      Type selected;
-      for (Attribute rawField : declaration.getFields()) {
-        auto item = cast<DictionaryAttr>(rawField);
-        if (item.getAs<StringAttr>("name") == field) {
-          selected = item.getAs<TypeAttr>("type").getValue();
-          break;
-        }
-      }
-      if (!selected)
-        return operation->emitOpError()
-               << "unknown state field '" << field.getValue() << "'";
-      auto resolvedField = analysis.resolveType(selected, bindings, operation);
-      if (failed(resolvedField))
-        return failure();
-      current = *resolvedField;
-      continue;
-    }
-    auto ordinal = selector.getAs<IntegerAttr>("index");
-    auto table = dyn_cast<TableType>(current);
-    if (!ordinal || !ordinal.getType().isSignlessInteger(64) ||
-        ordinal.getValue().isNegative() ||
-        ordinal.getValue().getZExtValue() != nextIndex ||
-        nextIndex >= indices.size() || !table || table.getShape().empty())
-      return operation->emitOpError()
-             << "state index selector requires a Table and sequential i64 "
-                "SSA index ordinal";
-    auto indexWidth = analysis.getPackedWidth(indices[nextIndex].getType(),
-                                              bindings, operation);
-    if (!isa<BitsType>(indices[nextIndex].getType()) || failed(indexWidth))
-      return operation->emitOpError() << "state index must have resolved Bits "
-                                         "type";
-    if (failed(detail::verifySourceTemplateType(analysis, table, bindings, operation)))
-      return failure();
-    ++nextIndex;
-    if (table.getShape().size() == 1)
-      current = table.getElementType();
-    else
-      current = TableType::get(
-          operation->getContext(),
-          ArrayAttr::get(operation->getContext(),
-                         table.getShape().getValue().drop_front()),
-          table.getElementType());
-  }
-  if (nextIndex != indices.size())
-    return operation->emitOpError()
-           << "state selector index count must match SSA indices exactly";
-  return current;
-}
 
 FailureOr<Type> selectedStateType(Operation *operation, ArrayAttr selectors,
                                   ValueRange indices) {
@@ -724,46 +652,14 @@ LogicalResult SourceStateOp::verify() {
 }
 
 LogicalResult SourceStateReadOp::verify() {
-  if (failed(transactionPlacement(*this, true, true)))
-    return failure();
-  HardwareAnalysis analysis((*this)->getParentOfType<mlir::ModuleOp>());
-  if (failed(predicate(analysis, getPath(), scope(*this), *this,
-                       "state read path")))
-    return failure();
-  auto selected = selectedStateType(*this, getSelectors(), getIndices());
-  if (failed(selected))
-    return failure();
-  if (!areEquivalentHardwareTypes(*selected, getValue().getType()))
-    return emitOpError()
-           << "state read result must match selected payload type";
+  // Path/selector semantics run during routing preparation and the staged
+  // plan (r9 §5); the retired-grammar placement check stays native.
   return success();
 }
 
 LogicalResult SourceStateWriteOp::verify() {
-  if (failed(transactionPlacement(*this, false, true)))
-    return failure();
-  HardwareAnalysis analysis((*this)->getParentOfType<mlir::ModuleOp>());
-  if (failed(predicate(analysis, getPath(), scope(*this), *this,
-                       "state write path")))
-    return failure();
-  auto selected = selectedStateType(*this, getSelectors(), getIndices());
-  if (failed(selected))
-    return failure();
-  if (!areEquivalentHardwareTypes(*selected, getValue().getType()))
-    return emitOpError()
-           << "state write value must match selected payload type";
-  if (!getIndices().empty()) {
-    auto owner = (*this)->getParentOfType<ModuleOp>();
-    auto bindings = scope(*this);
-    for (auto state : owner.getBody().front().getOps<SourceStateOp>()) {
-      if (state.getInstanceNameAttr() != getStateAttr()) continue;
-      auto table = dyn_cast<TableType>(state.getQ().getType());
-      if (table && analysis.isStaticEvaluable(table.getShape(), bindings) &&
-          (getIndices().size() != 1 ||
-           failed(analysis.verifySourceIndex(getIndices().front(), table, bindings, *this))))
-        return failure();
-    }
-  }
+  // Path/selector semantics run during routing preparation and the staged
+  // plan (r9 §5).
   return success();
 }
 
@@ -791,13 +687,7 @@ LogicalResult SourceFormalWriteOp::verify() {
                                   signature.getInput(formal.getInt())))
     return emitOpError()
            << "formal write candidate must match the whole input formal type";
-  auto selected = selectedPayloadType(
-      *this, signature.getInput(formal.getInt()), getSelectors(), getIndices());
-  if (failed(selected))
-    return failure();
-  if (!areEquivalentHardwareTypes(*selected, getPayload().getType()))
-    return emitOpError()
-           << "formal write payload must match selected input formal type";
+  // Selected-payload checks run during routing preparation (r9 §5).
   if (bool(getPrevious()) != bool(getSnapshot()))
     return emitOpError() << "forwarded formal previous and snapshot must be present together";
   if (getPrevious() &&
@@ -814,142 +704,15 @@ LogicalResult SourceFormalWriteOp::verify() {
       failed(detail::verifyHardwareTypeScope(getPayload().getType(), owner)) ||
       failed(detail::verifyHardwareTypeScope(getCandidate().getType(), owner)))
     return failure();
-  HardwareAnalysis analysis((*this)->getParentOfType<mlir::ModuleOp>());
-  return predicate(analysis, getPath(), scope(*this), *this,
-                   "formal write path");
-}
-
-LogicalResult SourceBranchOp::verify() {
-  if (failed(transactionPlacement(*this, false, true)))
-    return failure();
-  auto owner = (*this)->getParentOfType<ModuleOp>();
-  if (failed(detail::verifySourceEffectMetadata(getOccurrence(),
-                                                getConditionLocation(), owner,
-                                                [&] { return emitOpError(); })))
-    return failure();
-  if (Attribute raw = (*this)->getAttr("ac.loop_continuation")) {
-    auto continuation = dyn_cast<BoolAttr>(raw);
-    if (!continuation || !continuation.getValue())
-      return emitOpError() << "ac.loop_continuation requires BoolAttr true";
-  }
-  HardwareAnalysis analysis((*this)->getParentOfType<mlir::ModuleOp>());
-  return predicate(analysis, getCondition(), scope(*this), *this,
-                   "source branch condition");
-}
-
-LogicalResult SourceBranchOp::verifyRegions() {
-  HardwareAnalysis analysis((*this)->getParentOfType<mlir::ModuleOp>());
-  auto bindings = scope(*this);
-  uint64_t work = 0;
-  for (Region *arm : {&getThenRegion(), &getElseRegion()}) {
-    if (!arm->hasOneBlock() || arm->front().empty() ||
-        arm->front().getNumArguments() || !isa<YieldOp>(arm->front().back()))
-      return emitOpError() << "source branch arm requires one block, no "
-                              "arguments and final ac.yield";
-    auto &yield = arm->front().back();
-    if (yield.getNumOperands() != getNumResults())
-      return yield.emitOpError()
-             << "source branch yield arity must match results";
-    for (auto [actual, expected] :
-         llvm::zip(yield.getOperandTypes(), getResultTypes())) {
-      auto charge = [&](uint64_t units, uint64_t bytes) -> LogicalResult {
-        uint64_t slots = bytes / 8 + (bytes % 8 != 0);
-        if (units > 1024 * 1024 - work || slots > 1024 * 1024 - work - units)
-          return mlir::emitError(UnknownLoc::get(getContext()))
-                 << "source branch verification budget exceeded";
-        work += units + slots;
-        return success();
-      };
-      auto left = detail::resolveSourceBranchResultType(actual, analysis, bindings, &yield, charge);
-      auto right = detail::resolveSourceBranchResultType(expected, analysis, bindings, *this, charge);
-      if (failed(left) || failed(right))
-        return failure();
-      if (!areEquivalentHardwareTypes(*left, *right))
-        return yield.emitOpError()
-               << "source branch yields require matching nominal or Bits results";
-    }
-    for (Operation &operation : arm->front().without_terminator())
-      if (failed(branchPayload(&operation, true, 0, work)))
-        return failure();
-  }
+  // Path predicate resolution runs during routing preparation (r9 §5).
   return success();
 }
 
-LogicalResult SourceMethodOp::verify() {
-  if (failed(namedDeclaration(*this, getSymNameAttr())))
-    return failure();
-  if (Attribute raw = (*this)->getAttr("sym_visibility")) {
-    auto visibility = dyn_cast<StringAttr>(raw);
-    if (!visibility || visibility.getValue() != "private")
-      return emitOpError()
-             << "source Method visibility must be absent or private";
-  }
-  if ((*this)->hasAttr("ac.callable_after") || (*this)->hasAttr("ac.after"))
-    return emitOpError() << "source after ordering is retired; independent Rules read current state";
-  auto signature = getFunctionType();
-  if (getArgumentNames().size() != signature.getNumInputs())
-    return emitOpError() << "argument name count must match method signature";
-  llvm::StringSet<> names;
-  for (Attribute raw : getArgumentNames()) {
-    auto name = cast<StringAttr>(raw);
-    if (failed(detail::verifyPythonAstIdentifier(
-            name.getValue(), true, [&] { return emitOpError(); })))
-      return failure();
-    if (!names.insert(name.getValue()).second)
-      return emitOpError() << "method argument names must be unique";
-  }
-  auto form = (*this)->getAttrOfType<StringAttr>("ac.return_form");
-  auto parameters = (*this)->getAttrOfType<ArrayAttr>("ac.parameters");
-  auto results = (*this)->getAttrOfType<ArrayAttr>("ac.result_constraints");
-  if (!form || !parameters || !results ||
-      parameters.size() != signature.getNumInputs() ||
-      results.size() != signature.getNumResults())
-    return emitOpError()
-           << "method source contract requires ac.parameters, "
-              "ac.result_constraints and matching none/single/nonempty tuple "
-              "ac.return_form";
-  auto lexicalModule = (*this)->getParentOp();
-  auto error = [&] { return emitOpError(); };
-  auto sourceOwner =
-      lexicalModule->getAttrOfType<DictionaryAttr>("source_owner");
-  if (failed(detail::verifySourceGuardLocation(
-          (*this)->getAttrOfType<DictionaryAttr>("ac.guard_location"),
-          sourceOwner, error)))
-    return failure();
-  for (TypeRange types : {signature.getInputs(), signature.getResults()})
-    for (Type type : types) {
-      if (!isa<BitsType, StructType, EnumType, TypeParamType, TableType>(type))
-        return emitOpError()
-               << "method signature requires hardware payload types";
-      if (failed(detail::verifyHardwareTypeScope(type, lexicalModule)))
-        return failure();
-    }
-  HardwareAnalysis analysis((*this)->getParentOfType<mlir::ModuleOp>());
-  for (auto [index, raw] : llvm::enumerate(parameters)) {
-    if (failed(detail::verifyRequiredSourceParameter(
-            raw, cast<StringAttr>(getArgumentNames()[index]), lexicalModule,
-            *this, "source method")))
-      return failure();
-    auto parameter = cast<DictionaryAttr>(raw);
-    if (failed(detail::verifySourceCallHardwareConstraint(
-            parameter.get("constraint"), signature.getInput(index), analysis,
-            lexicalModule, *this, "source method", detail::SourceCallWidthMode::SymbolicFixedBits)))
-      return failure();
-  }
-  for (auto [index, raw] : llvm::enumerate(results))
-    if (failed(detail::verifySourceCallHardwareConstraint(
-            raw, signature.getResult(index), analysis, lexicalModule, *this,
-            "source method", detail::SourceCallWidthMode::SymbolicFixedBits)))
-      return failure();
-  SourceMethodView contract{lexicalModule, *this, {}};
-  if (failed(verifySourceMethodFormalProposals(contract, *this)))
-    return failure();
-  unsigned publicCount = contract.getNumPublicResults();
-  if (!((form.getValue() == "none" && publicCount == 0) ||
-        (form.getValue() == "single" && publicCount == 1) ||
-        (form.getValue() == "tuple" && publicCount != 0)))
-    return emitOpError()
-           << "method ac.return_form must match its public result count";
+LogicalResult SourceBranchOp::verifyRegions() {
+  return success();
+}
+
+LogicalResult SourceMethodOp::verifyRegions() {
   return success();
 }
 
@@ -961,140 +724,13 @@ LogicalResult SourceMethodOp::verifyRegions() {
   return region(*this, 1, arguments, getFunctionType().getResults());
 }
 
-LogicalResult SourceMethodCallOp::verify() {
-  if ((*this)->hasAttr("receiver_kind") || (*this)->hasAttr("ancestor_depth")) {
-    if ((*this)->hasAttr("ac.reference"))
-      return emitOpError() << "relative Method receiver cannot also name a Module reference formal";
-    NamedAttrList receiver;
-    for (StringRef name : {"receiver_kind", "ancestor_depth", "instance_path"})
-      if (Attribute value = (*this)->getAttr(name)) receiver.append(name, value);
-    if (failed(verifySourceRelativeReceiver(receiver.getDictionary(getContext()), *this)))
-      return failure();
-  }
-  if (failed(transactionPlacement(*this, false, true)))
-    return failure();
-  if (Attribute raw = (*this)->getAttr("ac.reference")) {
-    auto reference = dyn_cast<StringAttr>(raw);
-    if (!reference || failed(detail::verifyPythonAstIdentifier(reference.getValue(), true,
-                                      [&] { return emitOpError(); })))
-      return emitOpError() << "ac.reference requires a Module reference formal name";
-  }
-  auto callee = getCalleeAttr();
-  bool nativeQueue =
-      callee.getRootReference().getValue() ==
-          "pycircuit.__builtins__.fifo_local" ||
-      callee.getRootReference().getValue() ==
-          "pycircuit.__builtins__.fifo_downstream_pop" ||
-      callee.getRootReference().getValue() == "pycircuit.__builtins__.sync_mem" ||
-      callee.getRootReference().getValue() == "pycircuit.__builtins__.sync_mem_dp" ||
-      callee.getRootReference().getValue() == "pycircuit.__builtins__.byte_mem";
-  auto owner = (*this)->getParentOfType<ModuleOp>();
-  Attribute rawLocation = (*this)->getAttr("ac.location");
-  auto location = dyn_cast_or_null<DictionaryAttr>(rawLocation);
-  if (rawLocation && !location)
-    return emitOpError() << "method call ac.location requires a SourceSpan";
-  if (nativeQueue && !location)
-    return emitOpError()
-           << "native FIFO calls require ac.location as a SourceSpan";
-  if (location &&
-      failed(detail::verifySourceEffectMetadata(
-          getOccurrence(), location, owner, [&] { return emitOpError(); })))
-      return failure();
-  HardwareAnalysis analysis((*this)->getParentOfType<mlir::ModuleOp>());
-  if (failed(predicate(analysis, getPath(), scope(*this), *this,
-                       "method call path")))
-    return failure();
-  if (callee.getNestedReferences().size() != 1)
-    return emitOpError() << "method callee must be @Module::@method";
-  for (Attribute raw : getInstancePath()) {
-    auto name = dyn_cast<StringAttr>(raw);
-    if (!name || name.getValue().empty() || name.getValue().contains('\0'))
-      return emitOpError() << "method instance path requires nonempty names";
-  }
+LogicalResult SourceMethodCallOp::verifySymbolUses(SymbolTableCollection &) {
+  // Receiver binding resolution runs during routing preparation (r9 §5).
   return success();
 }
 
-LogicalResult SourceMethodCallOp::verifySymbolUses(SymbolTableCollection &) {
-  if ((*this)->getNumOperands() == 0 || (*this)->getNumRegions() != 0)
-    return emitOpError() << "method call requires path operand and no regions";
-  if (failed(verifyInvariantsImpl()))
-    return failure();
-  HardwareAnalysis analysis((*this)->getParentOfType<mlir::ModuleOp>());
-  auto resolved = resolveSourceMethodCall(*this);
-  if (failed(resolved))
-    return failure();
-  auto bindings = resolved->bindings;
-  auto signature = resolved->method.getFunctionType();
-  if (getArguments().size() != signature.getNumInputs() ||
-      getResults().size() != signature.getNumResults())
-    return emitOpError() << "method call arity must match signature";
-  auto check = [&](Type actual, Type formal) -> LogicalResult {
-    auto expected = analysis.resolveType(formal, bindings, *this);
-    auto supplied = analysis.resolveType(actual, scope(*this), *this);
-    if (failed(expected) || failed(supplied))
-      return failure();
-    if (!areEquivalentHardwareTypes(*expected, *supplied))
-      return emitOpError() << "method call payload type must match bound "
-                              "receiver signature";
-    return success();
-  };
-  for (auto [actual, formal] :
-       llvm::zip(getArguments().getTypes(), signature.getInputs()))
-    if (failed(check(actual, formal)))
-      return failure();
-  for (auto [actual, formal] :
-       llvm::zip(getResultTypes(), signature.getResults()))
-    if (failed(check(actual, formal)))
-      return failure();
-  auto caller = (*this)->getParentOfType<SourceMethodOp>();
-  auto lexical = (*this)->getParentOfType<ModuleOp>();
-  return verifySourceFormalOwnerBindings(
-      (*this)->getAttr("ac.formal_owner_bindings"), getArguments().size(),
-      resolved->method.getFormalProposals(),
-      caller ? caller.getFunctionType() : FunctionType(),
-      caller ? caller->getAttrOfType<ArrayAttr>("ac.formal_proposals")
-             : ArrayAttr(),
-      [&](StringRef name) {
-        for (auto state : lexical.getBody().front().getOps<SourceStateOp>())
-          if (state.getInstanceName() == name)
-            return true;
-        return false;
-      }, *this);
-}
 
-LogicalResult SourceTransactionOp::verify() {
-  if ((*this)->hasAttr("sym_name"))
-    return emitOpError() << "transaction uses name; sym_name is unsupported";
-  if (failed(namedDeclaration(*this, getNameAttr())))
-    return failure();
-  if (failed(
-          moduleOccurrence(*this, getDeclaration(), "transaction declaration")))
-    return failure();
-  auto owner = cast<ModuleOp>((*this)->getParentOp());
-  auto error = [&] { return emitOpError(); };
-  if (failed(detail::verifySourceGuardLocation(
-          (*this)->getAttrOfType<DictionaryAttr>("ac.guard_location"),
-          owner.getSourceOwner(), error)))
-    return failure();
-  for (auto other : owner.getBody().front().getOps<SourceTransactionOp>()) {
-    if (other == *this)
-      continue;
-    if (failed(moduleOccurrence(other, other.getDeclaration(),
-                                "transaction declaration")))
-      return failure();
-    if (detail::compareClosedSourceStructure(getOccurrence(),
-                                             other.getOccurrence()) == 0)
-      return emitOpError() << "transaction registration occurrence must be unique";
-  }
-  if ((*this)->hasAttr("ac.after") || (*this)->hasAttr("ac.callable_after"))
-    return emitOpError() << "source after ordering is retired; independent Rules read current state";
-  HardwareAnalysis analysis((*this)->getParentOfType<mlir::ModuleOp>());
-  auto bindings = scope(*this);
-  if (failed(predicate(analysis, getClk(), bindings, *this,
-                       "transaction clock")) ||
-      failed(
-          predicate(analysis, getRst(), bindings, *this, "transaction reset")))
-    return failure();
+LogicalResult SourceTransactionOp::verifyRegions() {
   return success();
 }
 

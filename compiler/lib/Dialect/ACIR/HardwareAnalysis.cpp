@@ -1255,4 +1255,74 @@ getMemoryPrimitiveLayout(InstanceOp instance,
   result.predicateType = *bit;
   return result;
 }
+FailureOr<Type> selectedPayloadType(Operation *operation, Type root,
+                                    ArrayAttr selectors, ValueRange indices) {
+  HardwareAnalysis analysis(operation->getParentOfType<mlir::ModuleOp>());
+  HardwareBindings bindings;
+  bindings.owner = operation->getParentOfType<ModuleOp>();
+  auto resolved = analysis.resolveType(root, bindings, operation);
+  if (failed(resolved))
+    return failure();
+  Type current = *resolved;
+  unsigned nextIndex = 0;
+  for (Attribute raw : selectors) {
+    auto selector = dyn_cast<DictionaryAttr>(raw);
+    if (!selector || selector.size() != 1)
+      return operation->emitOpError()
+             << "state selector requires exactly field or index";
+    if (auto field = selector.getAs<StringAttr>("field")) {
+      auto record = dyn_cast<StructType>(current);
+      auto declaration = record ? analysis.lookupStruct(record) : StructOp();
+      if (!declaration)
+        return operation->emitOpError()
+               << "state field selector requires a resolved nominal struct";
+      Type selected;
+      for (Attribute rawField : declaration.getFields()) {
+        auto item = cast<DictionaryAttr>(rawField);
+        if (item.getAs<StringAttr>("name") == field) {
+          selected = item.getAs<TypeAttr>("type").getValue();
+          break;
+        }
+      }
+      if (!selected)
+        return operation->emitOpError()
+               << "unknown state field '" << field.getValue() << "'";
+      auto resolvedField = analysis.resolveType(selected, bindings, operation);
+      if (failed(resolvedField))
+        return failure();
+      current = *resolvedField;
+      continue;
+    }
+    auto ordinal = selector.getAs<IntegerAttr>("index");
+    auto table = dyn_cast<TableType>(current);
+    if (!ordinal || !ordinal.getType().isSignlessInteger(64) ||
+        ordinal.getValue().isNegative() ||
+        ordinal.getValue().getZExtValue() != nextIndex ||
+        nextIndex >= indices.size() || !table || table.getShape().empty())
+      return operation->emitOpError()
+             << "state index selector requires a Table and sequential i64 "
+                "SSA index ordinal";
+    auto indexWidth = analysis.getPackedWidth(indices[nextIndex].getType(),
+                                              bindings, operation);
+    if (!isa<BitsType>(indices[nextIndex].getType()) || failed(indexWidth))
+      return operation->emitOpError() << "state index must have resolved Bits "
+                                         "type";
+    if (failed(detail::verifySourceTemplateType(analysis, table, bindings, operation)))
+      return failure();
+    ++nextIndex;
+    if (table.getShape().size() == 1)
+      current = table.getElementType();
+    else
+      current = TableType::get(
+          operation->getContext(),
+          ArrayAttr::get(operation->getContext(),
+                         table.getShape().getValue().drop_front()),
+          table.getElementType());
+  }
+  if (nextIndex != indices.size())
+    return operation->emitOpError()
+           << "state selector index count must match SSA indices exactly";
+  return current;
+}
+
 } // namespace acir::ac
