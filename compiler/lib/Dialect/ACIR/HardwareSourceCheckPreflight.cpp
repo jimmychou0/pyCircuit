@@ -72,6 +72,14 @@ public:
       // All children are verified; retain the package's own invariants and
       // cross-child region/dominance checks without scheduling them again.
       if (failed(mlir::verify(package, false))) return failure();
+      // Per-definition source checks record through the same scope entry
+      // the native verifyRegions call used before the r3 ACIRModuleOps
+      // severing; running them here keeps the recording mechanism,
+      // budget and validation identical.
+      for (Operation &operation : package.getBody()->getOperations())
+        if (auto module = dyn_cast<ModuleOp>(operation))
+          if (failed(analysis.verifyDefinitionSourceChecks(module)))
+            return failure();
       // Package-level declaration families whose semantic checks moved to
       // the staged side (r3 ACIRPacketOps row): the native verifiers are
       // grammar-only, so the plan owns their bound checks with the same
@@ -1430,11 +1438,6 @@ private:
           if (failed(verifyLogicalStateDeclarationBinding(logical, &analysis,
                                                            &local, &budget)))
             return failure();
-      // Per-definition source checks for every definition, including
-      // retained definitions outside the instance closure (r3
-      // ACIRModuleOps row: the native verifyRegions call was severed).
-      if (failed(analysis.verifyDefinitionSourceChecks(definition)))
-        return failure();
       auto sampling = catalogSampling(definition, local, bindings);
       if (failed(sampling))
         return failure();
