@@ -212,10 +212,11 @@ LogicalResult InstanceOp::verify() {
 }
 LogicalResult InstanceOp::verifySymbolUses(SymbolTableCollection &) {
   if (isTransactionalPackage(*this)) return verifyTransactionalOperation(*this);
-  HardwareAnalysis a((*this)->getParentOfType<mlir::ModuleOp>());
-  HardwareBindings b;
-  b.owner = (*this)->getParentOp();
-  return a.verifyInstance(*this, b);
+  // Signature verification of the resolved callee runs at the staged
+  // entries (r9 §5): HardwareAnalysis::verify via --ac-verify-hardware
+  // and the routing preparation; the lit fixtures pin the diagnostics
+  // there.
+  return success();
 }
 LogicalResult YieldOp::verify() {
   if (isTransactionalPackage(*this)) return verifyTransactionalOperation(*this);

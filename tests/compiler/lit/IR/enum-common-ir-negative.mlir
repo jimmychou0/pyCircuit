@@ -1,4 +1,4 @@
-// RUN: %pycircuit_opt %s --split-input-file --verify-diagnostics
+// RUN: %pycircuit_opt %s --split-input-file --ac-verify-hardware --verify-diagnostics
 // Schema/type cases must fail at native constraints; semantic cases must
 // reach the named Enum owning guard.
 // This fixture does not claim source, common layout, storage or backend support.
