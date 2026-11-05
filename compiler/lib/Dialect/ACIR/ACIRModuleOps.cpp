@@ -250,16 +250,12 @@ LogicalResult ModuleImportOp::verify() {
       .verifyImport(*this);
 }
 LogicalResult SourceObserveOp::verify() {
-  return detail::verifySourceObservationStructure(*this);
+  // Observation structure checks run during the staged definition walk
+  // (r9 §5).
+  return success();
 }
 LogicalResult SourceExpectOp::verify() {
-  HardwareBindings bindings;
-  auto *parent = (*this)->getParentOp();
-  bindings.owner = isa_and_nonnull<SourceMethodOp, SourceTransactionOp>(parent)
-                       ? parent->getParentOp()
-                       : parent;
-  return detail::verifySourceExpectOperation(
-      HardwareAnalysis((*this)->getParentOfType<mlir::ModuleOp>()), *this,
-      bindings);
+  // Expect checks run during the staged definition walk (r9 §5).
+  return success();
 }
 } // namespace acir::ac

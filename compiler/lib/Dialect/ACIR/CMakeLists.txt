@@ -58,6 +58,7 @@ add_acir_library(ACIRAnalysis SOURCES
   SourceTransactionStateAnalysis.cpp
   SourceTransactionSummary.cpp
   TransactionalContracts.cpp
+  ACIRModuleContracts.cpp
   EntryBoundary.cpp
   CollectionAnalysis.cpp
   EnumAnalysis.cpp
@@ -85,7 +86,6 @@ target_include_directories(ACIRAnalysis PRIVATE
 add_acir_library(ACIRDialect SOURCES
   ACIRTransactionOps.cpp
   ACIRModuleOps.cpp
-  ACIRModuleContracts.cpp
   ACIRQueueOps.cpp
   ACIRSourceControlFlowOps.cpp
   ACIRSystemOps.cpp
