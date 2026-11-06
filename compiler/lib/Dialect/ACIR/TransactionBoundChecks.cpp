@@ -53,11 +53,71 @@ LogicalResult predicate(const HardwareAnalysis &analysis, Value value,
 
 FailureOr<Type> selectedPayloadType(const HardwareAnalysis &analysis,
                                     const HardwareBindings &bindings,
-                                    Operation *operation, Type root,
-                                    ArrayAttr selectors, ValueRange indices) {
+                                    bool requireResolved, Operation *operation,
+                                    Type root, ArrayAttr selectors,
+                                    ValueRange indices) {
   auto resolved = analysis.resolveType(root, bindings, operation);
-  if (failed(resolved))
-    return failure();
+  if (failed(resolved)) {
+    if (requireResolved)
+      return failure();
+    // Source stage: check the definite facts on the raw carriers and defer
+    // the width evaluation (r8 follow-up: a legal unbound parameter must
+    // not reject the operation before its binding exists). A null carried
+    // type tells the caller to skip the resolved comparison; the binding
+    // tier re-runs the full resolution.
+    Type current = root;
+    unsigned nextIndex = 0;
+    for (Attribute raw : selectors) {
+      auto selector = dyn_cast<DictionaryAttr>(raw);
+      if (!selector || selector.size() != 1)
+        return operation->emitOpError()
+               << "state selector requires exactly field or index";
+      if (auto field = selector.getAs<StringAttr>("field")) {
+        auto record = dyn_cast<StructType>(current);
+        auto declaration = record ? analysis.lookupStruct(record) : StructOp();
+        if (!declaration)
+          return operation->emitOpError()
+                 << "state field selector requires a nominal struct";
+        Type selected;
+        for (Attribute rawField : declaration.getFields()) {
+          auto item = cast<DictionaryAttr>(rawField);
+          if (item.getAs<StringAttr>("name") == field) {
+            selected = item.getAs<TypeAttr>("type").getValue();
+            break;
+          }
+        }
+        if (!selected)
+          return operation->emitOpError()
+                 << "unknown state field '" << field.getValue() << "'";
+        current = selected;
+        continue;
+      }
+      auto ordinal = selector.getAs<IntegerAttr>("index");
+      auto table = dyn_cast<TableType>(current);
+      if (!ordinal || !ordinal.getType().isSignlessInteger(64) ||
+          ordinal.getValue().isNegative() ||
+          ordinal.getValue().getZExtValue() != nextIndex ||
+          nextIndex >= indices.size() || !table || table.getShape().empty())
+        return operation->emitOpError()
+               << "state index selector requires a Table and sequential i64 "
+                  "SSA index ordinal";
+      if (!isa<BitsType>(indices[nextIndex].getType()))
+        return operation->emitOpError() << "state index must have Bits type";
+      ++nextIndex;
+      if (table.getShape().size() == 1)
+        current = table.getElementType();
+      else
+        current = TableType::get(
+            operation->getContext(),
+            ArrayAttr::get(operation->getContext(),
+                           table.getShape().getValue().drop_front()),
+            table.getElementType());
+    }
+    if (nextIndex != indices.size())
+      return operation->emitOpError()
+             << "state selector index count must match SSA indices exactly";
+    return FailureOr<Type>(Type());
+  }
   Type current = *resolved;
   unsigned nextIndex = 0;
   for (Attribute raw : selectors) {
@@ -122,8 +182,8 @@ FailureOr<Type> selectedPayloadType(const HardwareAnalysis &analysis,
 
 FailureOr<Type> selectedStateType(const HardwareAnalysis &analysis,
                                   const HardwareBindings &bindings,
-                                  Operation *operation, ArrayAttr selectors,
-                                  ValueRange indices) {
+                                  bool requireResolved, Operation *operation,
+                                  ArrayAttr selectors, ValueRange indices) {
   auto owner = operation->getParentOfType<ModuleOp>();
   auto name = operation->getAttrOfType<StringAttr>("state");
   SourceStateOp state;
@@ -143,7 +203,7 @@ FailureOr<Type> selectedStateType(const HardwareAnalysis &analysis,
            << "state requires clock, reset, initial value and one old-Q result";
   if (failed(state.verifyInvariantsImpl()))
     return failure();
-  return selectedPayloadType(analysis, bindings, operation,
+  return selectedPayloadType(analysis, bindings, requireResolved, operation,
                              state.getQ().getType(), selectors, indices);
 }
 
