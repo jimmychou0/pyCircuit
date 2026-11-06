@@ -379,18 +379,6 @@ LogicalResult verifyTransactionalPackage(mlir::ModuleOp package) {
     return WalkResult::advance();
   });
   if (fail.wasInterrupted()) return failure();
-  // The payload-closure half is analysis-owned (r8 review): the registered
-  // host runs it as part of the supported structural verification entry;
-  // without a host the closure cannot run and the package is rejected.
-  auto *dialect = package->getContext()->getLoadedDialect("ac");
-  auto *host = dialect
-                   ? dialect->getRegisteredInterface<TransactionalClosureHost>()
-                   : nullptr;
-  if (!host)
-    return package.emitOpError()
-           << "transactional payload closure requires the staged acceptance "
-              "host";
-  return host->verifyLinkedWidths(package);
   llvm::StringSet<> symbols;
   for (Operation &op : *package.getBody()) {
     if (!isa<ModuleOp, ModuleImportOp, StructOp, EnumOp>(op))
@@ -538,6 +526,19 @@ LogicalResult verifyTransactionalPackage(mlir::ModuleOp package) {
   };
   for (Operation &declaration : *package.getBody())
     if (isa<ModuleOp, ModuleImportOp>(declaration) && failed(summarize(&declaration))) return failure();
+
+  // The payload-closure half is analysis-owned (r8 review): the registered
+  // host runs it as part of the supported structural verification entry;
+  // without a host the closure cannot run and the package is rejected.
+  auto *dialect = package->getContext()->getLoadedDialect("ac");
+  auto *host = dialect
+                   ? dialect->getRegisteredInterface<TransactionalClosureHost>()
+                   : nullptr;
+  if (!host)
+    return package.emitOpError()
+           << "transactional payload closure requires the staged acceptance "
+              "host";
+  return host->verifyLinkedWidths(package);
   return success();
 }
 } // namespace acir::ac
