@@ -94,7 +94,7 @@ std::string vocabulary(StringRef owner) {
          "#byte_constraint = {kind = \"hardware\", type = !b8, source_kind = "
          "\"fixed_bits\"}\n"
          "#value_constraint = {kind = \"hardware\", type = !bw, source_kind = "
-         "\"fixed_bits\"}\n";
+         "\"fixed_bits\"}\n"
          "#value_constraintM = {kind = \"hardware\", type = !bM, source_kind = "
          "\"fixed_bits\"}\n";
 }
