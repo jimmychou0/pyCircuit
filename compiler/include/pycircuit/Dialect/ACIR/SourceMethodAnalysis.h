@@ -89,10 +89,20 @@ struct SourceMethodView {
   mlir::ArrayAttr getArgumentNames() const;
   mlir::ArrayAttr getParameters() const;
   mlir::ArrayAttr getResultConstraints() const;
-  mlir::ArrayAttr getFormalProposals() const;
+  mlir::ArrayAttr getFormalProposals() const {
+    if (isNativeTerminal())
+      return {};
+    return definition
+               ? definition->getAttrOfType<mlir::ArrayAttr>("ac.formal_proposals")
+               : row.getAs<mlir::ArrayAttr>("ac.formal_proposals");
+  }
   /// Number of authored results, excluding checked trailing [data, intent]
   /// pairs for writable formals. Requires a verified Method contract.
-  unsigned getNumPublicResults() const;
+  unsigned getNumPublicResults() const {
+    auto proposals = getFormalProposals();
+    return getFunctionType().getNumResults() -
+           2 * (proposals ? proposals.size() : 0);
+  }
   mlir::StringAttr getReturnForm() const;
   mlir::StringAttr getVisibility() const;
   mlir::DictionaryAttr getDeclaration() const;

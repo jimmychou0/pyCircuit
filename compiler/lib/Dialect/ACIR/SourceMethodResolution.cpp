@@ -553,18 +553,6 @@ ArrayAttr SourceMethodView::getResultConstraints() const {
              ? definition->getAttrOfType<ArrayAttr>("ac.result_constraints")
              : row.getAs<ArrayAttr>("ac.result_constraints");
 }
-ArrayAttr SourceMethodView::getFormalProposals() const {
-  if (isNativeTerminal())
-    return {};
-  return definition
-             ? definition->getAttrOfType<ArrayAttr>("ac.formal_proposals")
-             : row.getAs<ArrayAttr>("ac.formal_proposals");
-}
-unsigned SourceMethodView::getNumPublicResults() const {
-  auto proposals = getFormalProposals();
-  return getFunctionType().getNumResults() -
-         2 * (proposals ? proposals.size() : 0);
-}
 LogicalResult
 verifySourceMethodFormalProposals(const SourceMethodView &method,
                                   Operation *site) {

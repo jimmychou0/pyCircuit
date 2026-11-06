@@ -65,7 +65,7 @@ target_link_libraries(ACIRCoreStandaloneTests PRIVATE
   "$<LINK_LIBRARY:WHOLE_ARCHIVE,ACIRCore>" GTest::gtest_main)
 add_test(NAME ACIRCoreStandaloneTests COMMAND ACIRCoreStandaloneTests)
 set_tests_properties(ACIRCoreStandaloneTests PROPERTIES LABELS "api;gate;nightly")
-target_link_libraries(ACIRLogicalStateInterfacesTests PRIVATE PycircuitStateInterfaces GFIRDialect)
+target_link_libraries(ACIRLogicalStateInterfacesTests PRIVATE PycircuitStateInterfaces GFIRDialect ACIRAnalysis)
 target_link_libraries(ACIRRoutedAnchorTests PRIVATE ACIRSourceCompiler)
 add_acir_api_test(ACIRAnchorArtifactTests AnchorArtifactTest.cpp)
 target_link_libraries(ACIRAnchorArtifactTests PRIVATE ACIRSourceCompiler ACIRTransforms MLIRPass)
