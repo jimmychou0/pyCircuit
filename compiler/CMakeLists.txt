@@ -115,7 +115,10 @@ function(_pyc_link_closure target out)
   set(acc "")
   set(pending "${target}")
   set(seen "")
-  while(pending)
+  # Terminate on the empty string, not on truthiness: a queued target
+  # named OFF (or NO, IGNORE, etc.) would otherwise end the walk early
+  # and skip its outgoing edges (r8 review follow-up).
+  while(NOT pending STREQUAL "")
     list(POP_FRONT pending head)
     if(head IN_LIST seen)
       continue()
