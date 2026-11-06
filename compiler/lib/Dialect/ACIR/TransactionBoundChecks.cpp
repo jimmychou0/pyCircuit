@@ -14,6 +14,7 @@
 
 #include "mlir/IR/Verifier.h"
 #include "llvm/ADT/PointerUnion.h"
+#include "llvm/Support/raw_ostream.h"
 #include "llvm/ADT/STLExtras.h"
 #include <functional>
 #include <limits>
@@ -604,9 +605,15 @@ LogicalResult HardwareAnalysis::verifyTransactionSurfaceOperation(
                                       read.getSelectors(), read.getIndices());
     if (failed(selected))
       return failure();
-    if (!areEquivalentHardwareTypes(*selected, read.getValue().getType()))
+    if (!areEquivalentHardwareTypes(*selected, read.getValue().getType())) {
+      llvm::errs() << "PROBE-MISMATCH selected=" << *selected << " value="
+                   << read.getValue().getType() << " owner="
+                   << (scope.owner ? (scope.owner->getAttrOfType<mlir::StringAttr>("sym_name") ?
+                        scope.owner->getAttrOfType<mlir::StringAttr>("sym_name").getValue().str() : "?") : "null")
+                   << " ints=" << scope.integers.size() << "\n"; // PROBE
       return read.emitOpError()
              << "state read result must match selected payload type";
+    }
     return success();
   }
   if (auto write = dyn_cast<SourceStateWriteOp>(operation)) {
