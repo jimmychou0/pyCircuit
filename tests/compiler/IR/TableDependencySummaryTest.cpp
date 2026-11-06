@@ -331,11 +331,12 @@ TEST_F(TableDependencySummaryTest,
   )mlir", /*verify=*/false);
   ASSERT_TRUE(malformed);
   ac::HardwareAnalysis malformedAnalysis(*malformed);
-  auto badView = *malformed->walk([&](ac::TableViewOp view) {
-    return mlir::WalkResult::interrupt();
-  });
+  ac::TableViewOp badView;
+  malformed->walk(
+      [&](ac::TableViewOp view) { badView = view; return mlir::WalkResult::interrupt(); });
+  ASSERT_TRUE(badView);
   EXPECT_TRUE(failed(malformedAnalysis.verifyCollectionOperation(
-      &badView, {}, /*requireResolved=*/true)));
+      badView.getOperation(), {}, /*requireResolved=*/true)));
 }
 
 TEST_F(TableDependencySummaryTest,
