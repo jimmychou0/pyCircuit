@@ -110,10 +110,10 @@ struct SourceMethodView {
   mlir::DictionaryAttr getGuardLocation() const;
   mlir::SymbolRefAttr getSymbol() const;
 
-FunctionType getFunctionType() const {
+mlir::FunctionType getFunctionType() const {
   if (isNativeMemoryTerminal()) {
-    auto signature = cast<FunctionType>(module->getAttrOfType<TypeAttr>("function_type").getValue());
-    auto kind = module->getAttrOfType<StringAttr>("primitive_kind").getValue();
+    auto signature = cast<mlir::FunctionType>(module->getAttrOfType<TypeAttr>("function_type").getValue());
+    auto kind = module->getAttrOfType<mlir::StringAttr>("primitive_kind").getValue();
     unsigned address = kind == "byte_mem" ? 2 : 3 + 2 * nativeMemoryPort;
     unsigned write = kind == "byte_mem" ? 3 : kind == "sync_mem_dp" ? 6 : 4;
     SmallVector<Type> inputs, results;
@@ -129,7 +129,7 @@ FunctionType getFunctionType() const {
     return FunctionType::get(module->getContext(), inputs, results);
   }
   if (isNativeQueueTerminal()) {
-    auto moduleType = cast<FunctionType>(
+    auto moduleType = cast<mlir::FunctionType>(
         module->getAttrOfType<TypeAttr>("function_type").getValue());
     Type formalPayload = moduleType.getInput(3);
     SmallVector<Type> inputs, results;
@@ -137,32 +137,32 @@ FunctionType getFunctionType() const {
         .push_back(formalPayload);
     return FunctionType::get(module->getContext(), inputs, results);
   }
-  return definition ? cast<FunctionType>(
+  return definition ? cast<mlir::FunctionType>(
                           definition->getAttrOfType<TypeAttr>("function_type")
                               .getValue())
-                    : cast<FunctionType>(
+                    : cast<mlir::FunctionType>(
                           row.getAs<TypeAttr>("function_type").getValue());
 }
-ArrayAttr getArgumentNames() const {
+mlir::ArrayAttr getArgumentNames() const {
   if (isNativeMemoryTerminal()) {
-    Builder builder(module->getContext());
+    mlir::Builder builder(module->getContext());
     if (nativeMemoryAction == NativeMemoryAction::Result) return builder.getArrayAttr({});
     if (nativeMemoryAction == NativeMemoryAction::Write)
       return builder.getStrArrayAttr({"address", "value", "mask"});
     return builder.getStrArrayAttr({"address"});
   }
   if (isNativeQueueTerminal()) {
-    Builder builder(module->getContext());
+    mlir::Builder builder(module->getContext());
     return nativeQueueAction == NativeQueueAction::Push
                ? builder.getArrayAttr({builder.getStringAttr("value")})
                : builder.getArrayAttr({});
   }
-  return definition ? definition->getAttrOfType<ArrayAttr>("argument_names")
-                    : row.getAs<ArrayAttr>("argument_names");
+  return definition ? definition->getAttrOfType<mlir::ArrayAttr>("argument_names")
+                    : row.getAs<mlir::ArrayAttr>("argument_names");
 }
-ArrayAttr getParameters() const {
+mlir::ArrayAttr getParameters() const {
   if (isNativeMemoryTerminal()) {
-    Builder builder(module->getContext());
+    mlir::Builder builder(module->getContext());
     auto signature = getFunctionType();
     auto names = getArgumentNames();
     SmallVector<Attribute> parameters;
@@ -183,7 +183,7 @@ ArrayAttr getParameters() const {
     return builder.getArrayAttr(parameters);
   }
   if (isNativeQueueTerminal()) {
-    Builder builder(module->getContext());
+    mlir::Builder builder(module->getContext());
     if (nativeQueueAction != NativeQueueAction::Push)
       return builder.getArrayAttr({});
     return builder.getArrayAttr({builder.getDictionaryAttr({
@@ -196,26 +196,26 @@ ArrayAttr getParameters() const {
             builder.getDictionaryAttr({builder.getNamedAttr(
                 "present", builder.getBoolAttr(false))}))})});
   }
-  return definition ? definition->getAttrOfType<ArrayAttr>("ac.parameters")
-                    : row.getAs<ArrayAttr>("ac.parameters");
+  return definition ? definition->getAttrOfType<mlir::ArrayAttr>("ac.parameters")
+                    : row.getAs<mlir::ArrayAttr>("ac.parameters");
 }
-ArrayAttr getResultConstraints() const {
+mlir::ArrayAttr getResultConstraints() const {
   if (isNativeMemoryTerminal()) {
-    Builder builder(module->getContext());
+    mlir::Builder builder(module->getContext());
     return getFunctionType().getNumResults()
         ? builder.getArrayAttr({nativeMemoryPayloadConstraint}) : builder.getArrayAttr({});
   }
   if (isNativeQueueTerminal()) {
-    Builder builder(module->getContext());
+    mlir::Builder builder(module->getContext());
     return nativeQueueAction == NativeQueueAction::Push
                ? builder.getArrayAttr({})
                : builder.getArrayAttr({nativeQueuePayloadConstraint});
   }
   return definition
-             ? definition->getAttrOfType<ArrayAttr>("ac.result_constraints")
-             : row.getAs<ArrayAttr>("ac.result_constraints");
+             ? definition->getAttrOfType<mlir::ArrayAttr>("ac.result_constraints")
+             : row.getAs<mlir::ArrayAttr>("ac.result_constraints");
 }
-StringAttr getReturnForm() const {
+mlir::StringAttr getReturnForm() const {
   if (isNativeMemoryTerminal())
     return StringAttr::get(module->getContext(), getFunctionType().getNumResults() ? "single" : "none");
   if (isNativeQueueTerminal())
@@ -223,29 +223,29 @@ StringAttr getReturnForm() const {
                            nativeQueueAction == NativeQueueAction::Push
                                ? "none"
                                : "single");
-  return definition ? definition->getAttrOfType<StringAttr>("ac.return_form")
-                    : row.getAs<StringAttr>("ac.return_form");
+  return definition ? definition->getAttrOfType<mlir::StringAttr>("ac.return_form")
+                    : row.getAs<mlir::StringAttr>("ac.return_form");
 }
-StringAttr getVisibility() const {
+mlir::StringAttr getVisibility() const {
   if (isNativeTerminal())
     return StringAttr::get(module->getContext(), "public");
-  return definition ? definition->getAttrOfType<StringAttr>("sym_visibility")
-                    : row.getAs<StringAttr>("visibility");
+  return definition ? definition->getAttrOfType<mlir::StringAttr>("sym_visibility")
+                    : row.getAs<mlir::StringAttr>("visibility");
 }
-DictionaryAttr getDeclaration() const {
+mlir::DictionaryAttr getDeclaration() const {
   if (isNativeMemoryTerminal())
-    return nativeMemoryInstance ? nativeMemoryInstance->getAttrOfType<DictionaryAttr>("occurrence")
-        : nativeMemoryOwnerRow.getAs<DictionaryAttr>("occurrence");
+    return nativeMemoryInstance ? nativeMemoryInstance->getAttrOfType<mlir::DictionaryAttr>("occurrence")
+        : nativeMemoryOwnerRow.getAs<mlir::DictionaryAttr>("occurrence");
   if (isNativeQueueTerminal())
     return nativeQueueInstance
-               ? nativeQueueInstance->getAttrOfType<DictionaryAttr>(
+               ? nativeQueueInstance->getAttrOfType<mlir::DictionaryAttr>(
                      "occurrence")
-                               : nativeQueueOwnerRow.getAs<DictionaryAttr>(
+                               : nativeQueueOwnerRow.getAs<mlir::DictionaryAttr>(
                                      "occurrence");
-  return definition ? definition->getAttrOfType<DictionaryAttr>("occurrence")
-                    : row.getAs<DictionaryAttr>("declaration");
+  return definition ? definition->getAttrOfType<mlir::DictionaryAttr>("occurrence")
+                    : row.getAs<mlir::DictionaryAttr>("declaration");
 }
-DictionaryAttr getGuardLocation() const {
+mlir::DictionaryAttr getGuardLocation() const {
   if (isNativeTerminal())
     return {};
   return definition
