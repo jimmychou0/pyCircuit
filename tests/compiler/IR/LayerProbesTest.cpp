@@ -6,7 +6,7 @@
 
 #include "gtest/gtest.h"
 
-#ifdef PYCIRCUIT_CORE_PROBE
+#if defined(PYCIRCUIT_CORE_PROBE)
 // Core probe: the executable links the ACIRCore target as WHOLE_ARCHIVE,
 // so every core member object is pulled regardless of use, and any
 // reverse dependency inside ACIRCore fails here at link time. This TU
@@ -47,6 +47,52 @@ TEST(ACIRCoreStandalone, ReferencesEveryCoreUnit) {
   // SourceIdentifier: Python identifier grammar leaf.
   (void)&acir::ac::detail::verifyPythonAstIdentifier;
   SUCCEED();
+}
+} // namespace
+#elif defined(PYCIRCUIT_ANALYSIS_PROBE)
+// Analysis-layer containment probe: this executable links ONLY the
+// ACIRAnalysis target. Constructing the analysis machinery and running the
+// staged transactional acceptance must pull no symbol from a target above
+// the analysis layer (B2 step-2 design r9 §4); the configure-time
+// pycircuit_verify_layering walk asserts the transitive closure. The ACIR
+// dialect resolves through ACIRAnalysis's own operations dependency, which
+// is below this layer in the directed topology.
+#include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
+#include "pycircuit/Dialect/ACIR/TransactionalContracts.h"
+#include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinOps.h"
+namespace {
+TEST(ACIRAnalysisStandalone, RunsTheStagedPackageAcceptance) {
+  mlir::DialectRegistry registry;
+  registry.insert<acir::ac::ACIRDialect>();
+  mlir::MLIRContext context(registry);
+  ASSERT_TRUE(context.getOrLoadDialect<acir::ac::ACIRDialect>() != nullptr);
+  auto package = mlir::ModuleOp::create(mlir::UnknownLoc::get(&context));
+  package->setAttr("ac.transactional",
+                   mlir::IntegerAttr::get(mlir::IntegerType::get(&context, 64),
+                                          2));
+  package->setAttr("ac.stage", mlir::StringAttr::get(&context, "linked"));
+  // The staged width-closure entry constructs HardwareAnalysis over the
+  // package and walks its payload types (B2 step-2 design r3 row; invoked
+  // from the analysis-side preflight acceptance at IX).
+  EXPECT_TRUE(mlir::succeeded(
+      acir::ac::verifyTransactionalLinkedPackage(package)));
+  acir::ac::HardwareAnalysis analysis(package);
+  EXPECT_EQ(analysis.getPackage(), package);
+  // The legacy routed/final stage still rejects transactional packages with
+  // the exact boundary text; the preflight build reaches that check through
+  // the staged width closure first.
+  std::string diagnostics;
+  mlir::ScopedDiagnosticHandler capture(&context, [&](mlir::Diagnostic &diagnostic) {
+    diagnostics += diagnostic.str();
+    return mlir::success();
+  });
+  EXPECT_TRUE(mlir::failed(analysis.verify()));
+  EXPECT_NE(diagnostics.find(
+                "transactional resource packages cannot enter legacy routed "
+                "or final hardware analysis"),
+            std::string::npos)
+      << diagnostics;
 }
 } // namespace
 #else

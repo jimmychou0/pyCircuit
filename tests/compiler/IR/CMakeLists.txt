@@ -43,6 +43,19 @@ target_link_libraries(ACIROpsStandaloneTests PRIVATE
 add_test(NAME ACIROpsStandaloneTests COMMAND ACIROpsStandaloneTests)
 set_tests_properties(ACIROpsStandaloneTests PROPERTIES LABELS "api;gate;nightly")
 
+# Analysis-layer containment probe: links exactly the ACIRAnalysis target
+# (the ACIR dialect resolves through its own operations dependency, which is
+# below the analysis layer); no target above the analysis layer may appear.
+add_executable(ACIRAnalysisStandaloneTests LayerProbesTest.cpp)
+target_compile_definitions(ACIRAnalysisStandaloneTests PRIVATE
+  PYCIRCUIT_ANALYSIS_PROBE=1)
+target_include_directories(ACIRAnalysisStandaloneTests PRIVATE
+  "${PYCIRCUIT_SOURCE_DIR}/lib")
+target_link_libraries(ACIRAnalysisStandaloneTests PRIVATE
+  ACIRAnalysis GTest::gtest_main)
+add_test(NAME ACIRAnalysisStandaloneTests COMMAND ACIRAnalysisStandaloneTests)
+set_tests_properties(ACIRAnalysisStandaloneTests PROPERTIES LABELS "api;gate;nightly")
+
 add_executable(ACIRCoreStandaloneTests LayerProbesTest.cpp)
 target_compile_definitions(ACIRCoreStandaloneTests PRIVATE
   PYCIRCUIT_CORE_PROBE=1)
@@ -123,7 +136,9 @@ set_tests_properties(ACIRHardwareSourceChecksExecution PROPERTIES
   LABELS "api;nightly" TIMEOUT 930)
 
 add_acir_api_test(ACIREnumHardwareAnalysisTests EnumHardwareAnalysisTest.cpp)
+target_link_libraries(ACIREnumHardwareAnalysisTests PRIVATE ACIRAnalysis)
 add_acir_api_test(ACIRFinalSourceUnitsTests FinalSourceUnitsTest.cpp)
+target_link_libraries(ACIRFinalSourceUnitsTests PRIVATE ACIRAnalysis)
 add_acir_api_test(ACIREnumSourceUnitAuthorityTests EnumSourceUnitAuthorityTest.cpp)
 target_link_libraries(ACIREnumSourceUnitAuthorityTests PRIVATE
   ACIRSourceCompiler ACIRTransforms MLIRPass)
