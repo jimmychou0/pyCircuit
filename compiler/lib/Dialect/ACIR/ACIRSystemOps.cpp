@@ -1,6 +1,7 @@
 #include "ACIRSourceContracts.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "pycircuit/Dialect/ACIR/ACIROps.h"
+#include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
 #include "llvm/ADT/STLExtras.h"
 namespace acir::ac {
 namespace {
