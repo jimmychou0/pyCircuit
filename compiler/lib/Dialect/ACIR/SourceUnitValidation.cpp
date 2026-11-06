@@ -213,7 +213,7 @@ FailureOr<SourceUnitStructure> verifyStructure(mlir::ModuleOp unit, bool body,
     else if (bitsWidthFamily)
       result = analysis.verifyBitsSymbolicWidths(operation);
     else if (auto state = dyn_cast<SourceStateOp>(operation))
-      result = detail::verifyLogicalStateSourceBinding(state);
+      result = verifyLogicalStateSourceBinding(state);
     else if (isa<ModuleOp, ModuleImportOp, InstanceOp, SourceExpectOp>(
                  operation))
       result = analysis.verifyModuleDeclaration(operation, bindings);

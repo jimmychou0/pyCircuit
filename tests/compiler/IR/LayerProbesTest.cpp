@@ -60,7 +60,8 @@ std::uintptr_t anchorSum(std::uintptr_t seed, Ts *...rest) {
   // materialized into the object file.
   ASSERT_NE(anchored, 42u) << "unreachable: pinned symbol anchors";
   SUCCEED();
-}} // namespace
+}
+} // namespace
 #elif defined(PYCIRCUIT_ANALYSIS_PROBE)
 // Analysis-layer containment probe: this executable links ONLY the
 // ACIRAnalysis target. Constructing the analysis machinery and running the
