@@ -8,6 +8,7 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "pycircuit/Dialect/ACIR/ACIRDialect.h"
+#include "pycircuit/Dialect/ACIR/TransactionalContracts.h"
 #include "pycircuit/Dialect/GFIR/GFIRDialect.h"
 #include "pycircuit/Dialect/GFIR/GFIROps.h"
 #include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
@@ -242,6 +243,12 @@ protected:
   AnchorArtifactTest() {
     context.loadDialect<ac::ACIRDialect>();
     context.loadDialect<acir::gfir::GFIRDialect>();
+    // The transactional payload closure rides the native verifier through
+    // the staged host (r8 review); attach it for this fixture's contexts.
+    if (auto *dialect = llvm::dyn_cast_or_null<ac::ACIRDialect>(
+            context.getOrLoadDialect("ac")))
+      dialect->addInterface(
+          std::make_unique<ac::StagedTransactionalClosure>(dialect));
   }
   ~AnchorArtifactTest() override {
     if (!temporary.empty())
