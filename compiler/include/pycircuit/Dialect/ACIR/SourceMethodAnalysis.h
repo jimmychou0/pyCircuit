@@ -86,10 +86,6 @@ struct SourceMethodView {
   bool isNativeTerminal() const {
     return isNativeQueueTerminal() || isNativeMemoryTerminal();
   }
-  mlir::FunctionType getFunctionType() const;
-  mlir::ArrayAttr getArgumentNames() const;
-  mlir::ArrayAttr getParameters() const;
-  mlir::ArrayAttr getResultConstraints() const;
   mlir::ArrayAttr getFormalProposals() const {
     if (isNativeTerminal())
       return {};
@@ -104,11 +100,6 @@ struct SourceMethodView {
     return getFunctionType().getNumResults() -
            2 * (proposals ? proposals.size() : 0);
   }
-  mlir::StringAttr getReturnForm() const;
-  mlir::StringAttr getVisibility() const;
-  mlir::DictionaryAttr getDeclaration() const;
-  mlir::DictionaryAttr getGuardLocation() const;
-  mlir::SymbolRefAttr getSymbol() const;
 
 mlir::FunctionType getFunctionType() const {
   if (isNativeMemoryTerminal()) {
