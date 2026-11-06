@@ -32,14 +32,27 @@ HardwareBindings scope(Operation *operation) {
 
 LogicalResult predicate(const HardwareAnalysis &analysis, Value value,
                         const HardwareBindings &bindings, Operation *site,
-                        StringRef description) {
+                        StringRef description, bool requireResolved) {
+  // A legal-but-unbound integer parameter defers only the width-dependent
+  // part of this check; the Bits-carrier grammar stays with the native
+  // verifier (r8 review batch 1: the caller's bindings and resolution
+  // discipline actually reach the moved checks).
+  auto bits = dyn_cast<BitsType>(value.getType());
+  if (!bits)
+    return site->emitOpError() << description << " requires one-bit Bits";
+  if (!isStaticEvaluable(bits.getWidth(), bindings)) {
+    if (!requireResolved && site->getParentOfType<ModuleOp>())
+      return success();
+    return site->emitOpError()
+           << description << " requires a resolved finite width";
+  }
   return stateControlPredicate(analysis, value, bindings, site, description);
 }
 
-FailureOr<Type> selectedPayloadType(Operation *operation, Type root,
+FailureOr<Type> selectedPayloadType(const HardwareAnalysis &analysis,
+                                    const HardwareBindings &bindings,
+                                    Operation *operation, Type root,
                                     ArrayAttr selectors, ValueRange indices) {
-  HardwareAnalysis analysis(operation->getParentOfType<mlir::ModuleOp>());
-  auto bindings = scope(operation);
   auto resolved = analysis.resolveType(root, bindings, operation);
   if (failed(resolved))
     return failure();
@@ -105,7 +118,9 @@ FailureOr<Type> selectedPayloadType(Operation *operation, Type root,
   return current;
 }
 
-FailureOr<Type> selectedStateType(Operation *operation, ArrayAttr selectors,
+FailureOr<Type> selectedStateType(const HardwareAnalysis &analysis,
+                                  const HardwareBindings &bindings,
+                                  Operation *operation, ArrayAttr selectors,
                                   ValueRange indices) {
   auto owner = operation->getParentOfType<ModuleOp>();
   auto name = operation->getAttrOfType<StringAttr>("state");
@@ -126,8 +141,8 @@ FailureOr<Type> selectedStateType(Operation *operation, ArrayAttr selectors,
            << "state requires clock, reset, initial value and one old-Q result";
   if (failed(state.verifyInvariantsImpl()))
     return failure();
-  return selectedPayloadType(operation, state.getQ().getType(), selectors,
-                             indices);
+  return selectedPayloadType(analysis, bindings, operation,
+                             state.getQ().getType(), selectors, indices);
 }
 
 // The guard branch of the moved region() helper: the guard yield must be a
@@ -135,7 +150,8 @@ FailureOr<Type> selectedStateType(Operation *operation, ArrayAttr selectors,
 // shape and yield-type grammar stay with the native region verifier; this
 // re-check keeps direct staged calls safe on partially mutated IR.
 LogicalResult guardYieldPredicate(const HardwareAnalysis &analysis,
-                                  Operation *operation) {
+                                  const HardwareBindings &bindings,
+                                  Operation *operation, bool requireResolved) {
   auto &region = operation->getRegion(0);
   if (!region.hasOneBlock() || region.front().empty() ||
       !isa<YieldOp>(region.front().back()))
@@ -145,8 +161,8 @@ LogicalResult guardYieldPredicate(const HardwareAnalysis &analysis,
   auto &yield = region.front().back();
   if (yield.getNumOperands() != 1)
     return yield.emitOpError() << "guard must yield exactly one predicate";
-  return predicate(analysis, yield.getOperand(0), scope(operation), &yield,
-                   "guard yield");
+  return predicate(analysis, yield.getOperand(0), bindings, &yield,
+                   "guard yield", requireResolved);
 }
 
 } // namespace
@@ -568,17 +584,17 @@ namespace acir::ac {
 LogicalResult HardwareAnalysis::verifyTransactionSurfaceOperation(
     Operation *operation, const HardwareBindings &bindings,
     bool requireResolved) const {
-  // The moved bodies keep the lexical owner-scope shape of the native
-  // verifiers they moved from (the helpers compute scope(operation)
-  // themselves); callers may pass resolved bindings or the same
-  // empty-binding shape the native verifier used.
-  (void)bindings;
-  (void)requireResolved;
+  // The caller's bindings and resolution discipline reach every moved
+  // check (r8 review batch 1): the source stage passes the lexical module
+  // scope with requireResolved=false (definite facts only, legal unbound
+  // parameters defer their width-dependent parts), and the binding tier
+  // passes the actual bindings with requireResolved=true.
   if (auto read = dyn_cast<SourceStateReadOp>(operation)) {
-    if (failed(predicate(*this, read.getPath(), scope(read), read,
-                         "state read path")))
+    if (failed(predicate(*this, read.getPath(), bindings, read,
+                         "state read path", requireResolved)))
       return failure();
-    auto selected = selectedStateType(read, read.getSelectors(), read.getIndices());
+    auto selected = selectedStateType(*this, bindings, read,
+                                      read.getSelectors(), read.getIndices());
     if (failed(selected))
       return failure();
     if (!areEquivalentHardwareTypes(*selected, read.getValue().getType()))
@@ -587,10 +603,11 @@ LogicalResult HardwareAnalysis::verifyTransactionSurfaceOperation(
     return success();
   }
   if (auto write = dyn_cast<SourceStateWriteOp>(operation)) {
-    if (failed(predicate(*this, write.getPath(), scope(write), write,
-                         "state write path")))
+    if (failed(predicate(*this, write.getPath(), bindings, write,
+                         "state write path", requireResolved)))
       return failure();
-    auto selected = selectedStateType(write, write.getSelectors(), write.getIndices());
+    auto selected = selectedStateType(*this, bindings, write,
+                                      write.getSelectors(), write.getIndices());
     if (failed(selected))
       return failure();
     if (!areEquivalentHardwareTypes(*selected, write.getValue().getType()))
@@ -613,16 +630,17 @@ LogicalResult HardwareAnalysis::verifyTransactionSurfaceOperation(
         static_cast<uint64_t>(index.getInt()) >= signature.getNumInputs())
       return formal.emitOpError()
              << "formal write must identify a declared writable input formal";
-    auto selected = selectedPayloadType(
-        formal, signature.getInput(index.getInt()), formal.getSelectors(),
-        formal.getIndices());
+    auto selected = selectedPayloadType(*this, bindings, formal,
+                                        signature.getInput(index.getInt()),
+                                        formal.getSelectors(),
+                                        formal.getIndices());
     if (failed(selected))
       return failure();
     if (!areEquivalentHardwareTypes(*selected, formal.getPayload().getType()))
       return formal.emitOpError()
              << "formal write payload must match selected input formal type";
-    if (failed(predicate(*this, formal.getPath(), scope(formal), formal,
-                         "formal write path")))
+    if (failed(predicate(*this, formal.getPath(), bindings, formal,
+                         "formal write path", requireResolved)))
       return failure();
     return success();
   }
@@ -656,13 +674,19 @@ LogicalResult HardwareAnalysis::verifyTransactionSurfaceOperation(
     SourceMethodView contract{lexicalModule, method, {}};
     if (failed(verifySourceMethodFormalProposals(contract, method)))
       return failure();
-    return guardYieldPredicate(*this, method);
+    return guardYieldPredicate(*this, bindings, method, requireResolved);
   }
   if (auto call = dyn_cast<SourceMethodCallOp>(operation)) {
-    if (failed(predicate(*this, call.getPath(), scope(call), call,
-                         "method call path")))
+    if (failed(predicate(*this, call.getPath(), bindings, call,
+                         "method call path", requireResolved)))
       return failure();
-    auto resolved = resolveSourceMethodCall(call);
+    // The caller's bindings resolve the actuals; the resolver derives the
+    // receiver's bindings from this call site (r8 review batch 1).
+    auto resolved = resolveSourceMethodCall(
+        call, bindings,
+        [&](FlatSymbolRefAttr symbol) {
+          return lookupDefinition(symbol.getValue());
+        });
     if (failed(resolved))
       return failure();
     auto calleeBindings = resolved->bindings;
@@ -672,7 +696,7 @@ LogicalResult HardwareAnalysis::verifyTransactionSurfaceOperation(
       return call.emitOpError() << "method call arity must match signature";
     auto check = [&](Type actual, Type formal) -> LogicalResult {
       auto expected = resolveType(formal, calleeBindings, call);
-      auto supplied = resolveType(actual, scope(call), call);
+      auto supplied = resolveType(actual, bindings, call);
       if (failed(expected) || failed(supplied))
         return failure();
       if (!areEquivalentHardwareTypes(*expected, *supplied))
@@ -705,10 +729,9 @@ LogicalResult HardwareAnalysis::verifyTransactionSurfaceOperation(
         call);
   }
   if (auto branch = dyn_cast<SourceBranchOp>(operation)) {
-    if (failed(predicate(*this, branch.getCondition(), scope(branch), branch,
-                         "source branch condition")))
+    if (failed(predicate(*this, branch.getCondition(), bindings, branch,
+                         "source branch condition", requireResolved)))
       return failure();
-    auto bindings = scope(branch);
     uint64_t work = 0;
     for (Region *arm : {&branch.getThenRegion(), &branch.getElseRegion()}) {
       if (!arm->hasOneBlock() || arm->front().empty() ||
@@ -742,12 +765,10 @@ LogicalResult HardwareAnalysis::verifyTransactionSurfaceOperation(
     return success();
   }
   if (auto transaction = dyn_cast<SourceTransactionOp>(operation)) {
-    auto bindings = scope(transaction);
     if (failed(predicate(*this, transaction.getClk(), bindings, transaction,
-                         "transaction clock")) ||
-        failed(
-            predicate(*this, transaction.getRst(), bindings, transaction,
-                      "transaction reset")))
+                         "transaction clock", requireResolved)) ||
+        failed(predicate(*this, transaction.getRst(), bindings, transaction,
+                         "transaction reset", requireResolved)))
       return failure();
     // The registration-entry structure left the native region verifier at
     // IX (it requires the staged Method resolution cluster); the staged
@@ -756,7 +777,7 @@ LogicalResult HardwareAnalysis::verifyTransactionSurfaceOperation(
     // the native verifier saw.
     if (failed(getSourceRegistrationEntry(transaction)))
       return failure();
-    return guardYieldPredicate(*this, transaction);
+    return guardYieldPredicate(*this, bindings, transaction, requireResolved);
   }
   return operation->emitOpError()
          << "operation is not a transaction surface bound check";
