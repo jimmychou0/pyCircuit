@@ -7,6 +7,7 @@
 // diagnostic.
 #include "pycircuit/Dialect/ACIR/ACIRDialect.h"
 #include "pycircuit/Dialect/ACIR/SourceUnitValidation.h"
+#include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
 #include "pycircuit/Dialect/GFIR/GFIRDialect.h"
 #include "pycircuit/Transforms/Passes.h"
 #include "mlir/IR/Builders.h"
@@ -95,8 +96,8 @@ std::string counter(StringRef owner, StringRef guardRead = "!b8",
                      "(!b1) -> ") +
          guardRead.str() +
          "\n"
-         "      \"ac.yield\"(" + guardYieldValue + ") : (" +
-         guardYieldType + ") -> ()\n"
+         "      \"ac.yield\"(" + guardYieldValue.str() + ") : (" +
+         guardYieldType.str() + ") -> ()\n"
          "    }, {\n"
          "    ^bb0(%value: !bw, %path: !b1):\n"
          "      %old = \"ac.state.read\"(%path) {state = \"count\", "
@@ -324,7 +325,9 @@ TEST_F(TransactionSurfaceTiersTest, NonBitsGuardKeepsTheCanonicalText) {
   ASSERT_TRUE(unit) << diagnostics;
   EXPECT_TRUE(succeeded(mlir::verify(*unit))) << diagnostics;
   ac::HardwareAnalysis analysis(*unit);
-  auto method = *unit->walk([&](ac::SourceMethodOp method) {
+  ac::SourceMethodOp method;
+  unit->walk([&](ac::SourceMethodOp candidate) {
+    method = candidate;
     return mlir::WalkResult::interrupt();
   });
   ASSERT_TRUE(method);
