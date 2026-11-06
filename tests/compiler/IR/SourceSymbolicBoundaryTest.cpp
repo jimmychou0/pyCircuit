@@ -34,8 +34,6 @@ const char *types = R"mlir(
 
 std::string generic() {
   std::string parameters = "[{name = \"N\", type = !ac.math_int}]";
-          ? "[{name = \"N\", type = !ac.math_int, default = #zero}]"
-          : "[{name = \"N\", type = !ac.math_int}]";
   return "\"ac.module\"() ({\n"
          "^bb0(%x: !b8):\n"
          "    %lanes = \"ac.table.splat\"(%x) {shape = [#n]} : (!b8) -> !lanes\n"
