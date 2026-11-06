@@ -6,6 +6,8 @@
 
 namespace acir::ac {
 
+MLIR_DECLARE_EXPLICIT_TYPE_ID(TransactionalClosureHost)
+
 // Host for the transactional payload-closure acceptance (r8 review): the
 // closure is analysis-owned, so the native transactional verifier reaches
 // it through this dialect interface instead of linking the analysis layer.

@@ -32,7 +32,8 @@ namespace acir::ac {
 
 class StagedTransactionalClosure : public TransactionalClosureHost {
 public:
-  using TransactionalClosureHost::TransactionalClosureHost;
+  explicit StagedTransactionalClosure(mlir::Dialect *dialect)
+      : TransactionalClosureHost(dialect) {}
   mlir::LogicalResult
   verifyLinkedWidths(mlir::ModuleOp package) const override;
 };
