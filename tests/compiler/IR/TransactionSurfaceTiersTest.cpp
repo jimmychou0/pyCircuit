@@ -86,6 +86,9 @@ std::string vocabulary(StringRef owner) {
          "!lanes = !ac.table<[#wW], !b8>\n"
          "#counter = {site = {definition = @" + owner.str() +
          ", ast_path = []}, expansion = []}\n"
+         "#entries = {site = {definition = @" + owner.str() +
+         ", ast_path = [{kind = \"index\", value = 2 : i64}]}, expansion = "
+         "[]}\n"
          "#left_instance = {site = {definition = @Root, ast_path = [{kind = "
          "\"index\", value = 1 : i64}]}, expansion = []}\n"
          "#right_instance = {site = {definition = @Root, ast_path = [{kind = "
@@ -126,7 +129,7 @@ std::string counter(StringRef owner, StringRef guardRead = "!b8",
                      "    %blank = \"ac.table.splat\"(%fill) {shape = [#wN]} "
                      ": (!b8) -> !tableN\n"
                      "    %e = \"ac.state\"(%clk, %rst, %blank) "
-                     "{instance_name = \"entries\", occurrence = #counter} : "
+                     "{instance_name = \"entries\", occurrence = #entries} : "
                      "(!b1, !b1, !tableN) -> !tableN\n"
                      "    \"ac.method\"(%yes) ({\n"
                      "    ^bb0(%value: !bw, %path: !b1):\n"
