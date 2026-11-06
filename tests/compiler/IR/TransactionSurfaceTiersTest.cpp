@@ -4,7 +4,10 @@
 // definite payload disagreement is already rejected at that same source
 // stage, the legal actual binding completes routing, and the illegal actual
 // binding is rejected at the routing preparation with the Method-family
-// diagnostic.
+// diagnostic. The same design carries a Table-indexed state: the index is
+// the M-bit truncation of the value formal, so the checked index range is
+// the complete unsigned range of the unbound M and the Table-index proof
+// closes only under a legal binding.
 #include "pycircuit/Dialect/ACIR/ACIRDialect.h"
 #include "pycircuit/Dialect/ACIR/SourceUnitValidation.h"
 #include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
@@ -31,8 +34,8 @@ using namespace mlir;
 // Counter symbol spelling: the qualified source-unit form or the plain
 // routing form. All texts reuse the working IR of the transaction suites
 // (the TransactionEffectsTest / lit transaction-surface fixture), adapted
-// to one scalar Byte state and one Method whose formal payload width is the
-// symbolic parameter W under a fixed-bits constraint.
+// to one scalar Byte state, one Table state and one Method whose formal
+// payload width is the symbolic parameter W under a fixed-bits constraint.
 std::string vocabulary(StringRef owner) {
   std::string origin =
       "origin = {site = {definition = @" + owner.str() +
@@ -99,9 +102,13 @@ std::string vocabulary(StringRef owner) {
          "\"fixed_bits\"}\n";
 }
 
-// The Counter template: one state and one Method. `guardRead` is the guard
-// region's state read result type; the mutated !b1 form makes the definite
-// payload disagreement the source stage owns.
+// The Counter template: two states (one scalar, one Table) and one Method.
+// `guardRead` is the guard region's state read result type; the mutated !b1
+// form makes the definite payload disagreement the source stage owns. The
+// parameters are the value width W, the Table extent N and the index width
+// M; the Method's body truncates the value formal to !bM and addresses the
+// Table with it, so the Method signature and its formal constraint stay the
+// W-shaped contract of the scalar cases.
 std::string counter(StringRef owner, StringRef guardRead = "!b8",
                     StringRef guardYieldType = "!b1",
                     StringRef guardYieldValue = "%path") {
@@ -114,6 +121,13 @@ std::string counter(StringRef owner, StringRef guardRead = "!b8",
                      "    %q = \"ac.state\"(%clk, %rst, %initial) "
                      "{instance_name = \"count\", occurrence = #counter} : "
                      "(!b1, !b1, !b8) -> !b8\n"
+                     "    %fill = \"ac.bits.constant\"() {value = #w1} : () "
+                     "-> !b8\n"
+                     "    %blank = \"ac.table.splat\"(%fill) {shape = [#wN]} "
+                     ": (!b8) -> !tableN\n"
+                     "    %e = \"ac.state\"(%clk, %rst, %blank) "
+                     "{instance_name = \"entries\", occurrence = #counter} : "
+                     "(!b1, !b1, !tableN) -> !tableN\n"
                      "    \"ac.method\"(%yes) ({\n"
                      "    ^bb0(%value: !bw, %path: !b1):\n"
                      "      %current = \"ac.state.read\"(%path) {state = "
@@ -129,6 +143,17 @@ std::string counter(StringRef owner, StringRef guardRead = "!b8",
          "selectors = [], occurrence = #counter} : (!b1) -> !b8\n"
          "      \"ac.state.write\"(%path, %old) {state = \"count\", "
          "selectors = [], occurrence = #counter} : (!b1, !b8) -> ()\n"
+         "      %index = \"ac.bits.resize\"(%value) {mode = \"trunc\"} : "
+         "(!bw) -> !bM\n"
+         "      %cur = \"ac.state.read\"(%path, %index) {state = \"entries\", "
+         "selectors = [{index = 0 : i64}], occurrence = #counter} : "
+         "(!b1, !bM) -> !b8\n"
+         "      %one = \"ac.bits.constant\"() {value = #w1} : () -> !b8\n"
+         "      %next = \"ac.bits.binary\"(%cur, %one) {opcode = \"add\"} : "
+         "(!b8, !b8) -> !b8\n"
+         "      \"ac.state.write\"(%path, %next, %index) {state = \"entries\", "
+         "selectors = [{index = 0 : i64}], occurrence = #counter} : "
+         "(!b1, !b8, !bM) -> ()\n"
          "      \"ac.yield\"(%old) : (!b8) -> ()\n"
          "    }) {sym_name = \"add\", function_type = (!bw) -> !b8, "
          "argument_names = [\"value\"], ac.parameters = [{name = \"value\", "
@@ -141,66 +166,27 @@ std::string counter(StringRef owner, StringRef guardRead = "!b8",
          "  }) {sym_name = \"" +
          owner.str() +
          "\", source_owner = {package = \"\", path = \"transactions.py\"}, "
-         "parameters = [{name = \"W\", type = !ac.math_int}], "
-         "type_parameters = [], function_type = (!b8, !b1, !b1) -> !b8, "
-         "input_names = [\"data\", \"pyc_clk\", \"pyc_rst\"], output_names = "
-         "[\"out\"], ac.domain_inputs = {clock = 1 : i64, reset = 2 : i64}} "
-         ": () -> ()\n";
+         "parameters = [{name = \"W\", type = !ac.math_int}, "
+         "{name = \"N\", type = !ac.math_int}, {name = \"M\", type = "
+         "!ac.math_int}], type_parameters = [], function_type = (!b8, !b1, "
+         "!b1) -> !b8, input_names = [\"data\", \"pyc_clk\", \"pyc_rst\"], "
+         "output_names = [\"out\"], ac.domain_inputs = {clock = 1 : i64, "
+         "reset = 2 : i64}} : () -> ()\n";
 }
 
-// The Root consumer for the table design: the instance signature carries
-// the same table type as the callee, so a signature mismatch can never
-// mask the index check. `binding` supplies the actual parameter binding.
-std::string tableRoot(StringRef bindings, StringRef boundTable) {
-  // The instance result carries the BOUND table spelling: the symbolic
-  // reference inside !tableN names Counter as its owner and would fail the
-  // static-reference owner check when re-verified under Root.
-  auto instance = [&](const char *name, const char *occurrence) {
-    return std::string("    %") + name + " = \"ac.instance\"(%data, %clk, "
-           "%rst) {instance_name = \"" + name + "\", callee = "
-           "@Counter, parameters = [" + bindings.str() + "], "
-           "type_arguments = [], occurrence = " + occurrence + "} : (!b8, "
-           "!b1, !b1) -> " + boundTable.str() + "\n";
-  };
-  return std::string("\"ac.module\"() ({\n"
-                     "^bb0(%data: !b8, %clk: !b1, %rst: !b1):\n"
-                     "    %yes = \"ac.bits.constant\"() {value = #w1} : () "
-                     "-> !b1\n"
-                     "    %idx = \"ac.bits.constant\"() {value = #w3} : () "
-                     "-> !b3\n"
-                     "    %answer = \"ac.transaction\"(%clk, %rst, %yes, "
-                     "%idx) ({\n"
-                     "    ^bb0(%path: !b1, %value: !b3):\n"
-                     "      \"ac.yield\"(%path) : (!b1) -> ()\n"
-                     "    }, {\n"
-                     "    ^bb0(%path: !b1, %value: !b3):\n"
-                     "      %a = \"ac.method.call\"(%path, %value) {callee "
-                     "= @Counter::@add, instance_path = [\"left\"], "
-                     "occurrence = #root} : (!b1, !b3) -> !b8\n"
-                     "      \"ac.yield\"(%a) : (!b8) -> ()\n"
-                     "    }) {name = \"step\", declaration = #root, "
-                     "occurrence = #root, ac.guard_location = #span} : "
-                     "(!b1, !b1, !b1, !b3) -> !b8\n"
-                     "    \"ac.yield\"(%answer) : (!b8) -> ()\n"
-                     "  }) {sym_name = \"Root\", source_owner = {package = "
-                     "\"\", path = \"transactions.py\"}, parameters = [], "
-                     "type_parameters = [], function_type = (!b8, !b1, !b1) "
-                     "-> !b8, input_names = [\"data\", \"pyc_clk\", "
-                     "\"pyc_rst\"], output_names = [\"out\"]} : () -> "
-                     "()\n"
-                     "  \"ac.system\"() {entry = {callee = @Root, "
-                     "parameters = [], type_arguments = []}, domain = "
-                     "\"default\"} : () -> ()\n");
-}
-
-// The Root consumer with two Counter instances (the actual parameter
-// binding each instance supplies) and one transaction calling the Method
-// through both receivers. `binding` is the legal #w8 or the illegal #w0.
-std::string root(StringRef binding) {
+// The Root consumer with two Counter instances and one transaction calling
+// the Method through both receivers. The instance parameters bind the
+// callee's declared W, N and M positionally, so every binding list names all
+// three; the Table cases keep W = #w8 and the extent N = #w8 fixed and
+// change only the index-relevant M binding (#w3 legal, #w4 out of range),
+// while the scalar cases bind a legal extent and index around the W binding
+// under test.
+std::string root(StringRef wBinding, StringRef nBinding, StringRef mBinding) {
   auto instance = [&](const char *name, const char *occurrence) {
     return std::string("    %") + name + " = \"ac.instance\"(%data, %clk, " +
            "%rst) {instance_name = \"" + name + "\", callee = @Counter, " +
-           "parameters = [" + binding.str() + "], type_arguments = [], " +
+           "parameters = [" + wBinding.str() + ", " + nBinding.str() + ", " +
+           mBinding.str() + "], type_arguments = [], " +
            "occurrence = " + occurrence + "} : (!b8, !b1, !b1) -> !b8\n";
   };
   return std::string("\"ac.module\"() ({\n"
@@ -328,9 +314,10 @@ protected:
   std::unique_ptr<ScopedDiagnosticHandler> handler;
 };
 
-// Case 1: the symbolic template (state + Method, no instances) publishes
-// standalone: native verification and the source-stage entry both accept it
-// with the width obligation of the unbound parameter deferred.
+// Case 1: the symbolic template (two states and a Method, no instances)
+// publishes standalone: native verification and the source-stage entry both
+// accept it with the width obligation of the unbound value parameter
+// deferred.
 TEST_F(TransactionSurfaceTiersTest, SymbolicTemplatePublishesAtTheSourceStage) {
   capture();
   auto unit = parseEnvelope(counter("transactions.Counter"));
@@ -359,10 +346,11 @@ TEST_F(TransactionSurfaceTiersTest,
       << diagnostics;
 }
 
-// Case 3: the full design's instances supply the legal W = 8 actual, the
-// symbolic Method constraint closes at eight bits and routing completes.
+// Case 3: the full design's instances supply the legal W = 8 actual (with a
+// legal extent and index binding), the symbolic Method constraint closes at
+// eight bits and routing completes.
 TEST_F(TransactionSurfaceTiersTest, LegalActualBindingCompletesRouting) {
-  auto file = parsePlain(counter("Counter") + root("#w8"));
+  auto file = parsePlain(counter("Counter") + root("#w8", "#w8", "#w3"));
   ASSERT_TRUE(file) << diagnostics;
   EXPECT_TRUE(succeeded(route(*file))) << diagnostics;
 }
@@ -373,7 +361,7 @@ TEST_F(TransactionSurfaceTiersTest, LegalActualBindingCompletesRouting) {
 // Method-family diagnostic ('ac.method' op ...).
 TEST_F(TransactionSurfaceTiersTest,
        IllegalActualBindingIsRejectedAtTheRoutingPreparation) {
-  auto file = parsePlain(counter("Counter") + root("#w0"));
+  auto file = parsePlain(counter("Counter") + root("#w0", "#w8", "#w3"));
   ASSERT_TRUE(file) << diagnostics;
   EXPECT_TRUE(failed(route(*file))) << diagnostics;
   EXPECT_NE(diagnostics.find("hardware static value must be positive and "
@@ -390,7 +378,7 @@ TEST_F(TransactionSurfaceTiersTest,
 // carriers; the canonical width-one rejection stays stateControlPredicate's.
 TEST_F(TransactionSurfaceTiersTest, NonBitsCarrierKeepsTheCanonicalText) {
   capture();
-  auto unit = parsePlain(root("#w8"));
+  auto unit = parsePlain(root("#w8", "#w8", "#w3"));
   ASSERT_TRUE(unit);
   ac::SourceTransactionOp transaction;
   unit->walk([&](mlir::Operation *op) {
@@ -421,63 +409,15 @@ TEST_F(TransactionSurfaceTiersTest, NonBitsCarrierKeepsTheCanonicalText) {
 // source stage checks the carrier, ordinal and Bits index grammar and
 // DEFERS the width evaluation instead of rejecting; an illegal actual
 // binding is rejected at the routing preparation.
-std::string tableCounter(StringRef owner) {
-  return std::string("\"ac.module\"() ({\n"
-                     "^bb0(%data: !b8, %clk: !b1, %rst: !b1):\n"
-                     "    %zero = \"ac.bits.constant\"() {value = #w1} : "
-                     "() -> !b8\n"
-                     "    %initial = \"ac.table.splat\"(%zero) {shape = "
-                     "[#wN]} : (!b8) -> !tableN\n"
-                     "    %q = \"ac.state\"(%clk, %rst, %initial) "
-                     "{instance_name = \"entries\", occurrence = #counter} "
-                     ": (!b1, !b1, !tableN) -> !tableN\n"
-                     "    %yes = \"ac.bits.constant\"() {value = #w1} : () "
-                     "-> !b1\n"
-                     "    \"ac.method\"(%yes) ({\n"
-                     "    ^bb0(%value: !bM, %path: !b1):\n"
-                     "      %old = \"ac.state.read\"(%path, %value) {state = "
-                     "\"entries\", selectors = [{index = 0 : i64}], "
-                     "occurrence = #counter} : (!b1, !bM) -> !b8\n"
-                     "      \"ac.yield\"(%path) : (!b1) -> ()\n"
-                     "    }, {\n"
-                     "    ^bb0(%value: !bM, %path: !b1):\n"
-                     "      %cur = \"ac.state.read\"(%path, %value) {state "
-                     "= \"entries\", selectors = [{index = 0 : i64}], "
-                     "occurrence = #counter} : (!b1, !bM) -> !b8\n"
-                     "      %one = \"ac.bits.constant\"() {value = #w1} : "
-                     "() -> !b8\n"
-                     "      %next = \"ac.bits.binary\"(%cur, %one) "
-                     "{opcode = \"add\"} : (!b8, !b8) -> !b8\n"
-                     "      \"ac.state.write\"(%path, %next, %value) {state "
-                     "= \"entries\", selectors = [{index = 0 : i64}], "
-                     "occurrence = #counter} : (!b1, !b8, !bM) -> ()\n"
-                     "      \"ac.yield\"(%next) : (!b8) -> ()\n"
-                     "    }) {sym_name = \"add\", function_type = (!bM) -> "
-                     "!b8, argument_names = [\"value\"], ac.parameters = "
-                     "[{name = \"value\", binding = "
-                     "\"positional_or_keyword\", constraint = "
-                     "#value_constraintM, default = {present = false}, origin "
-                     "= #counter, location = #span}], ac.result_constraints = "
-                     "[#byte_constraint], ac.return_form = \"single\", "
-                     "ac.guard_location = #span, occurrence = #counter} : "
-                     "(!b1) -> ()\n"
-                     "    \"ac.yield\"(%q) : (!tableN) -> ()\n"
-                     "  }) {sym_name = \"" +
-                     owner.str() +
-                     "\", source_owner = {package = \"\", path = "
-                     "\"transactions.py\"}, parameters = [{name = \"N\", "
-                     "type = !ac.math_int}, {name = \"M\", type = "
-                     "!ac.math_int}], type_parameters = [], function_type = "
-                     "(!b8, !b1, !b1) -> !tableN, input_names = [\"data\", "
-                     "\"pyc_clk\", \"pyc_rst\"], output_names = "
-                     "[\"out\"], ac.domain_inputs = {clock = 1 : i64, "
-                     "reset = 2 : i64}} : () -> ()\n");
-}
 
+// The extended Counter design publishes standalone as a source unit: the
+// Table carrier, selector shape and Bits index grammar admit the design
+// while the unbound extent N and index width M defer their width
+// evaluations.
 TEST_F(TransactionSurfaceTiersTest,
        TableIndexedStateDefersTheWidthAtTheSourceStage) {
   capture();
-  auto unit = parseEnvelope(tableCounter("transactions.Counter"));
+  auto unit = parseEnvelope(counter("transactions.Counter"));
   ASSERT_TRUE(unit) << diagnostics;
   EXPECT_TRUE(succeeded(mlir::verify(*unit))) << diagnostics;
   auto error = [&] { return unit->emitError(); };
@@ -485,25 +425,27 @@ TEST_F(TransactionSurfaceTiersTest,
       << diagnostics;
 }
 
+// The instances bind W = 8 (the scalar payload contract), the extent
+// N = 8 and the index width M = 3: the truncated value formal covers
+// exactly the eight lanes, the instance signature matches the callee, and
+// the routing preparation completes.
 TEST_F(TransactionSurfaceTiersTest,
        TableIndexedStateRoutesWithTheMatchingActualBinding) {
   capture();
-  // W = 3: three bits index the eight-lane table — the signature matches,
-  // the index range fits, and the routing preparation completes.
-  auto unit = parsePlain(tableCounter("Counter") +
-                         tableRoot("#w8, #w3", "!tableN"));
+  auto unit = parsePlain(counter("Counter") + root("#w8", "#w8", "#w3"));
   ASSERT_TRUE(unit) << diagnostics;
   EXPECT_TRUE(succeeded(route(*unit))) << diagnostics;
 }
 
+// Only the index-relevant binding changes (M = #w4): four bits can address
+// sixteen lanes, so the checked index range exceeds the bound extent of
+// eight, and the routing preparation rejects with the index-range check's
+// own text — proving the rejection is the Table index proof and not a
+// payload or signature disagreement.
 TEST_F(TransactionSurfaceTiersTest,
        TableIndexedStateRejectsAnOutOfRangeActualBinding) {
   capture();
-  // W = 4: four bits can address sixteen lanes — the same index grammar
-  // now exceeds the bound extent, and the routing preparation rejects with
-  // the index-range check's own text.
-  auto unit = parsePlain(tableCounter("Counter") +
-                         tableRoot("#w8, #w4", "!tableN"));
+  auto unit = parsePlain(counter("Counter") + root("#w8", "#w8", "#w4"));
   ASSERT_TRUE(unit) << diagnostics;
   EXPECT_TRUE(failed(route(*unit))) << diagnostics;
   EXPECT_NE(diagnostics.find("checked Table index complete unsigned range "
