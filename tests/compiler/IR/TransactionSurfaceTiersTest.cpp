@@ -323,7 +323,6 @@ TEST_F(TransactionSurfaceTiersTest, NonBitsCarrierKeepsTheCanonicalText) {
   auto unit = parsePlain(root("#w8"));
   ASSERT_TRUE(unit);
   ac::SourceTransactionOp transaction;
-  mlir::Value packet;
   unit->walk([&](mlir::Operation *op) {
     if (auto candidate = llvm::dyn_cast<ac::SourceTransactionOp>(op))
       transaction = candidate;
