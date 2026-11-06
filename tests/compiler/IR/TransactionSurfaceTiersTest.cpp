@@ -347,4 +347,69 @@ TEST_F(TransactionSurfaceTiersTest, NonBitsCarrierKeepsTheCanonicalText) {
       << diagnostics;
 }
 
+// Case 6: a Table-indexed state access with a legal unbound parameter — the
+// source stage checks the carrier, ordinal and Bits index grammar and
+// DEFERS the width evaluation instead of rejecting; an illegal actual
+// binding is rejected at the routing preparation.
+std::string tableCounter(StringRef owner) {
+  return std::string("\"ac.module\"() ({\n"
+                     "^bb0(%data: !b8, %clk: !b1, %rst: !b1):\n"
+                     "    %initial = \"ac.table.splat\"(%data) {shape = "
+                     "[#n]} : (!b8) -> !lanes\n"
+                     "    %q = \"ac.state\"(%clk, %rst, %initial) "
+                     "{instance_name = \"entries\", occurrence = #counter} "
+                     ": (!lanes) -> !lanes\n"
+                     "    %yes = \"ac.bits.constant\"() {value = #w1} : () "
+                     "-> !b1\n"
+                     "    \"ac.method\"(%yes) ({\n"
+                     "    ^bb0(%value: !bw, %path: !b1):\n"
+                     "      %old = \"ac.state.read\"(%path, %path) {state = "
+                     "\"entries\", selectors = [{index = 0 : i64}], "
+                     "occurrence = #counter} : (!b1, !bw) -> !b8\n"
+                     "      \"ac.state.write\"(%path, %old, %path) {state = "
+                     "\"entries\", selectors = [{index = 0 : i64}], "
+                     "occurrence = #counter} : (!b1, !bw, !b8) -> ()\n"
+                     "      \"ac.yield\"(%old) : (!b8) -> ()\n"
+                     "    }) {sym_name = \"add\", function_type = (!bw) -> "
+                     "!b8, argument_names = [\"value\"], ac.parameters = "
+                     "[{name = \"value\", binding = "
+                     "\"positional_or_keyword\", constraint = "
+                     "#value_constraint, default = {present = false}, origin "
+                     "= #counter, location = #span}], ac.result_constraints = "
+                     "[#byte_constraint], ac.return_form = \"single\", "
+                     "ac.guard_location = #span, occurrence = #counter} : "
+                     "(!b1) -> ()\n"
+                     "    \"ac.yield\"(%q) : (!lanes) -> ()\n"
+                     "  }) {sym_name = \"" +
+                     owner.str() +
+                     "\", source_owner = {package = \"\", path = "
+                     "\"transactions.py\"}, parameters = [{name = \"W\", "
+                     "type = !ac.math_int}], type_parameters = [], "
+                     "function_type = (!b8, !b1, !b1) -> !lanes, "
+                     "input_names = [\"data\", \"pyc_clk\", \"pyc_rst\"], "
+                     "output_names = [\"out\"], ac.domain_inputs = {clock = "
+                     "1 : i64, reset = 2 : i64}} : () -> ()\n");
+}
+
+TEST_F(TransactionSurfaceTiersTest,
+       TableIndexedStateDefersTheWidthAtTheSourceStage) {
+  capture();
+  auto unit = parseEnvelope(tableCounter("transactions.Counter"));
+  ASSERT_TRUE(unit) << diagnostics;
+  EXPECT_TRUE(succeeded(mlir::verify(*unit))) << diagnostics;
+  auto error = [&] { return unit->emitError(); };
+  EXPECT_TRUE(succeeded(ac::verifySourceBodyStructure(*unit, error)))
+      << diagnostics;
+}
+
+TEST_F(TransactionSurfaceTiersTest,
+       TableIndexedStateRejectsAnIllegalActualBinding) {
+  capture();
+  // The same design instantiated with W = 0: an empty Table extent is
+  // rejected at the routing preparation once the actual binding resolves.
+  auto unit = parsePlain(tableCounter("Counter") + root("#w0"));
+  ASSERT_TRUE(unit) << diagnostics;
+  EXPECT_TRUE(failed(route(*unit))) << diagnostics;
+}
+
 } // namespace
