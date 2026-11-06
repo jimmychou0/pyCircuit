@@ -312,28 +312,33 @@ TEST_F(TransactionSurfaceTiersTest,
       << diagnostics;
 }
 
-// Case 5: the carrier grammar text is canonical — a non-Bits guard yield
-// reaches stateControlPredicate's width-one rejection through the staged
-// surface row (the batch-1 tolerance only defers width-dependent checks on
-// legal Bits carriers).
-TEST_F(TransactionSurfaceTiersTest, NonBitsGuardKeepsTheCanonicalText) {
+// Case 5: the carrier grammar text is canonical — a non-Bits control
+// carrier cannot parse (the ODS constrains control operands to Bits), so
+// the staged row's re-guard is exercised through a directly mutated
+// transaction: the clock operand swapped to the struct-typed packet value.
+// The batch-1 tolerance only defers width-dependent checks on legal Bits
+// carriers; the canonical width-one rejection stays stateControlPredicate's.
+TEST_F(TransactionSurfaceTiersTest, NonBitsCarrierKeepsTheCanonicalText) {
   capture();
-  auto unit = parseEnvelope(counter("transactions.Counter",
-                                    /*guardRead=*/"!b1",
-                                    /*guardYieldType=*/"!bw",
-                                    /*guardYieldValue=*/"%value"));
-  ASSERT_TRUE(unit) << diagnostics;
-  EXPECT_TRUE(succeeded(mlir::verify(*unit))) << diagnostics;
-  ac::HardwareAnalysis analysis(*unit);
-  ac::SourceMethodOp method;
-  unit->walk([&](ac::SourceMethodOp candidate) {
-    method = candidate;
-    return mlir::WalkResult::interrupt();
+  auto unit = parsePlain(root("#w8"));
+  ASSERT_TRUE(unit);
+  ac::SourceTransactionOp transaction;
+  mlir::Value packet;
+  unit->walk([&](mlir::Operation *op) {
+    if (auto candidate = llvm::dyn_cast<ac::SourceTransactionOp>(op))
+      transaction = candidate;
+    if (auto arg = llvm::dyn_cast<mlir::BlockArgument>(op))
+      if (arg.getType() == ac::StructType::get(&context, "Packet"))
+        packet = arg;
   });
-  ASSERT_TRUE(method);
+  ASSERT_TRUE(transaction);
+  ASSERT_TRUE(packet);
+  transaction->setOperand(0, packet);
+  diagnostics.clear();
+  ac::HardwareAnalysis analysis(*unit);
   EXPECT_TRUE(failed(analysis.verifyTransactionSurfaceOperation(
-      method, {}, /*requireResolved=*/false)));
-  EXPECT_NE(diagnostics.find("guard yield requires width-one Bits"),
+      transaction, {}, /*requireResolved=*/false)));
+  EXPECT_NE(diagnostics.find("transaction clock requires width-one Bits"),
             std::string::npos)
       << diagnostics;
 }
