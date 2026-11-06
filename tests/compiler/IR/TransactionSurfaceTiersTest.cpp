@@ -78,7 +78,7 @@ std::string vocabulary(StringRef owner) {
 // payload disagreement the source stage owns.
 std::string counter(StringRef owner, StringRef guardRead = "!b8") {
   return std::string("\"ac.module\"() ({\n"
-                     "^bb0(%clk: !b1, %rst: !b1, %data: !b8):\n"
+                     "^bb0(%data: !b8, %clk: !b1, %rst: !b1):\n"
                      "    %initial = \"ac.bits.constant\"() {value = #w1} : "
                      "() -> !b8\n"
                      "    %yes = \"ac.bits.constant\"() {value = #w1} : () -> "
@@ -113,9 +113,10 @@ std::string counter(StringRef owner, StringRef guardRead = "!b8") {
          owner.str() +
          "\", source_owner = {package = \"\", path = \"transactions.py\"}, "
          "parameters = [{name = \"W\", type = !ac.math_int}], "
-         "type_parameters = [], function_type = (!b1, !b1, !b8) -> !b8, "
-         "input_names = [\"clk\", \"rst\", \"data\"], output_names = "
-         "[\"out\"]} : () -> ()\n";
+         "type_parameters = [], function_type = (!b8, !b1, !b1) -> !b8, "
+         "input_names = [\"data\", \"pyc_clk\", \"pyc_rst\"], output_names = "
+         "[\"out\"], ac.domain_inputs = {clock = 1 : i64, reset = 2 : i64}} "
+         ": () -> ()\n";
 }
 
 // The Root consumer with two Counter instances (the actual parameter
@@ -123,13 +124,13 @@ std::string counter(StringRef owner, StringRef guardRead = "!b8") {
 // through both receivers. `binding` is the legal #w8 or the illegal #w0.
 std::string root(StringRef binding) {
   auto instance = [&](const char *name, const char *occurrence) {
-    return std::string("    %") + name + " = \"ac.instance\"(%clk, %rst, " +
-           "%data) {instance_name = \"" + name + "\", callee = @Counter, " +
+    return std::string("    %") + name + " = \"ac.instance\"(%data, %clk, " +
+           "%rst) {instance_name = \"" + name + "\", callee = @Counter, " +
            "parameters = [" + binding.str() + "], type_arguments = [], " +
-           "occurrence = " + occurrence + "} : (!b1, !b1, !b8) -> !b8\n";
+           "occurrence = " + occurrence + "} : (!b8, !b1, !b1) -> !b8\n";
   };
   return std::string("\"ac.module\"() ({\n"
-                     "^bb0(%clk: !b1, %rst: !b1, %data: !b8):\n"
+                     "^bb0(%data: !b8, %clk: !b1, %rst: !b1):\n"
                      "    %yes = \"ac.bits.constant\"() {value = #w1} : () -> "
                      "!b1\n") +
          instance("left", "#left_instance") +
@@ -151,8 +152,9 @@ std::string root(StringRef binding) {
          "    \"ac.yield\"(%answer) : (!b8) -> ()\n"
          "  }) {sym_name = \"Root\", source_owner = {package = \"\", path = "
          "\"transactions.py\"}, parameters = [], type_parameters = [], "
-         "function_type = (!b1, !b1, !b8) -> !b8, input_names = [\"clk\", "
-         "\"rst\", \"data\"], output_names = [\"answer\"]} : () -> ()\n"
+         "function_type = (!b8, !b1, !b1) -> !b8, input_names = [\"data\", "
+         "\"pyc_clk\", \"pyc_rst\"], output_names = [\"answer\"], "
+         "ac.domain_inputs = {clock = 1 : i64, reset = 2 : i64}} : () -> ()\n"
          "  \"ac.system\"() {entry = {callee = @Root, parameters = [], "
          "type_arguments = []}, domain = \"default\"} : () -> ()\n";
 }
