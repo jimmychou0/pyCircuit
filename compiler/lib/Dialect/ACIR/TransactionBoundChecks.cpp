@@ -14,7 +14,6 @@
 
 #include "mlir/IR/Verifier.h"
 #include "llvm/ADT/PointerUnion.h"
-#include "llvm/Support/raw_ostream.h"
 #include "llvm/ADT/STLExtras.h"
 #include <functional>
 #include <limits>
@@ -605,15 +604,16 @@ LogicalResult HardwareAnalysis::verifyTransactionSurfaceOperation(
                                       read.getSelectors(), read.getIndices());
     if (failed(selected))
       return failure();
-    if (!areEquivalentHardwareTypes(*selected, read.getValue().getType())) {
-      llvm::errs() << "PROBE-MISMATCH selected=" << *selected << " value="
-                   << read.getValue().getType() << " owner="
-                   << (scope.owner ? (scope.owner->getAttrOfType<mlir::StringAttr>("sym_name") ?
-                        scope.owner->getAttrOfType<mlir::StringAttr>("sym_name").getValue().str() : "?") : "null")
-                   << " ints=" << scope.integers.size() << "\n"; // PROBE
+    // Both sides resolve through the caller's bindings: at the binding tier
+    // the selected payload carries the actual extents while the read's SSA
+    // result keeps its template spelling, and the agreement fact compares
+    // the same resolution space on each side (as the Method call row does).
+    auto result = resolveType(read.getValue().getType(), scope, read);
+    if (failed(result))
+      return failure();
+    if (!areEquivalentHardwareTypes(*selected, *result))
       return read.emitOpError()
              << "state read result must match selected payload type";
-    }
     return success();
   }
   if (auto write = dyn_cast<SourceStateWriteOp>(operation)) {
@@ -624,7 +624,10 @@ LogicalResult HardwareAnalysis::verifyTransactionSurfaceOperation(
                                       write.getSelectors(), write.getIndices());
     if (failed(selected))
       return failure();
-    if (!areEquivalentHardwareTypes(*selected, write.getValue().getType()))
+    auto value = resolveType(write.getValue().getType(), scope, write);
+    if (failed(value))
+      return failure();
+    if (!areEquivalentHardwareTypes(*selected, *value))
       return write.emitOpError()
              << "state write value must match selected payload type";
     // The selected Table index obligations remain the dispatcher's existing
@@ -650,7 +653,10 @@ LogicalResult HardwareAnalysis::verifyTransactionSurfaceOperation(
                                         formal.getIndices());
     if (failed(selected))
       return failure();
-    if (!areEquivalentHardwareTypes(*selected, formal.getPayload().getType()))
+    auto payload = resolveType(formal.getPayload().getType(), scope, formal);
+    if (failed(payload))
+      return failure();
+    if (!areEquivalentHardwareTypes(*selected, *payload))
       return formal.emitOpError()
              << "formal write payload must match selected input formal type";
     if (failed(predicate(*this, formal.getPath(), scope, formal,
