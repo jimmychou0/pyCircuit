@@ -127,10 +127,12 @@ std::string root(StringRef binding) {
            "occurrence = " + occurrence + "} : (!b1, !b1, !b8) -> !b8\n";
   };
   return std::string("\"ac.module\"() ({\n"
-                     "^bb0(%clk: !b1, %rst: !b1, %data: !b8):\n") +
+                     "^bb0(%clk: !b1, %rst: !b1, %data: !b8):\n"
+                     "    %yes = \"ac.bits.constant\"() {value = #w1} : () -> "
+                     "!b1\n") +
          instance("left", "#left_instance") +
          instance("right", "#right_instance") +
-         "    %answer = \"ac.transaction\"(%clk, %rst, %rst, %data) ({\n"
+         "    %answer = \"ac.transaction\"(%clk, %rst, %yes, %data) ({\n"
          "    ^bb0(%path: !b1, %value: !b8):\n"
          "      \"ac.yield\"(%path) : (!b1) -> ()\n"
          "    }, {\n"
@@ -290,6 +292,7 @@ TEST_F(TransactionSurfaceTiersTest,
   auto file = parsePlain(counter("Counter") + root("#w0"));
   ASSERT_TRUE(file) << diagnostics;
   EXPECT_TRUE(failed(route(*file))) << diagnostics;
+  SUCCEED() << "route diagnostics: " << diagnostics;
   EXPECT_NE(diagnostics.find("hardware static value must be positive and "
                              "fit u64"),
             std::string::npos)
