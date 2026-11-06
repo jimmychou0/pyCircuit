@@ -56,8 +56,17 @@ FailureOr<Type> selectedPayloadType(const HardwareAnalysis &analysis,
                                     bool requireResolved, Operation *operation,
                                     Type root, ArrayAttr selectors,
                                     ValueRange indices) {
+  // A legal unbound integer parameter defers the whole width-dependent
+  // selection: when any SSA index carries an unresolved width, or the root
+  // cannot resolve, the source stage runs the grammar-only branch on the
+  // raw carriers (r8 follow-up batch 1).
+  bool indexWidthsDeferred = false;
+  for (Value index : indices)
+    if (auto bits = dyn_cast<BitsType>(index.getType()))
+      if (!analysis.isStaticEvaluable(bits.getWidth(), bindings))
+        indexWidthsDeferred = true;
   auto resolved = analysis.resolveType(root, bindings, operation);
-  if (failed(resolved)) {
+  if (failed(resolved) || (indexWidthsDeferred && !requireResolved)) {
     if (requireResolved)
       return failure();
     // Source stage: check the definite facts on the raw carriers and defer
