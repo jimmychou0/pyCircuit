@@ -15,6 +15,7 @@
 #include "mlir/IR/Verifier.h"
 #include "llvm/ADT/PointerUnion.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/Support/raw_ostream.h"
 #include <functional>
 #include <limits>
 #include <type_traits>
@@ -584,6 +585,10 @@ namespace acir::ac {
 LogicalResult HardwareAnalysis::verifyTransactionSurfaceOperation(
     Operation *operation, const HardwareBindings &bindings,
     bool requireResolved) const {
+  // PROBE
+  llvm::errs() << "PROBE-DISP " << operation->getName().getStringRef().str()
+               << " resolved=" << requireResolved
+               << " owner=" << (bindings.owner ? "set" : "null") << "\n";
   // The caller's bindings and resolution discipline reach every moved
   // check (r8 review batch 1): the source stage passes the lexical module
   // scope with requireResolved=false (definite facts only, legal unbound
