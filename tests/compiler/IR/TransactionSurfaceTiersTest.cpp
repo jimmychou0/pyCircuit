@@ -124,6 +124,45 @@ std::string counter(StringRef owner, StringRef guardRead = "!b8",
          ": () -> ()\n";
 }
 
+// The Root consumer for the table design: the instance signature carries
+// the same table type as the callee, so a signature mismatch can never
+// mask the index check. `binding` supplies the actual parameter binding.
+std::string tableRoot(StringRef binding) {
+  auto instance = [&](const char *name, const char *occurrence) {
+    return std::string("    %") + name + " = \"ac.instance\"(%data, %clk, "
+           "%rst) {instance_name = \"" + name + "\", callee = "
+           "@transactions.Counter, parameters = [" + binding.str() + "], "
+           "type_arguments = [], occurrence = " + occurrence + "} : (!b8, "
+           "!b1, !b1) -> !lanes\n";
+  };
+  return std::string("\"ac.module\"() ({\n"
+                     "^bb0(%data: !b8, %clk: !b1, %rst: !b1):\n"
+                     "    %yes = \"ac.bits.constant\"() {value = #w1} : () "
+                     "-> !b1\n") +
+         instance("left", "#left_instance") +
+         instance("right", "#right_instance") +
+         "    %answer = \"ac.transaction\"(%clk, %rst, %yes, %data) ({\n"
+         "    ^bb0(%path: !b1, %value: !bw):\n"
+         "      \"ac.yield\"(%path) : (!b1) -> ()\n"
+         "    }, {\n"
+         "    ^bb0(%path: !b1, %value: !bw):\n"
+         "      %a = \"ac.method.call\"(%path, %value) {callee = "
+         "@transactions.Counter::@add, instance_path = [\"left\"], "
+         "occurrence = #root} : (!b1, !bw) -> !b8\n"
+         "      \"ac.yield\"(%a) : (!b8) -> ()\n"
+         "    }) {name = \"step\", declaration = #root, occurrence = "
+         "#root, ac.guard_location = #span} : (!b1, !b1, !b1, !bw) -> "
+         "!b8\n"
+         "    \"ac.yield\"(%answer) : (!lanes) -> ()\n"
+         "  }) {sym_name = \"Root\", source_owner = {package = \"\", path "
+         "= \"transactions.py\"}, parameters = [], type_parameters = [], "
+         "function_type = (!b8, !b1, !b1) -> !lanes, input_names = "
+         "[\"data\", \"pyc_clk\", \"pyc_rst\"], output_names = "
+         "[\"out\"]} : () -> ()\n"
+         "  \"ac.system\"() {entry = {callee = @Root, parameters = [], "
+         "type_arguments = []}, domain = \"default\"} : () -> ()\n";
+}
+
 // The Root consumer with two Counter instances (the actual parameter
 // binding each instance supplies) and one transaction calling the Method
 // through both receivers. `binding` is the legal #w8 or the illegal #w0.
@@ -415,13 +454,28 @@ TEST_F(TransactionSurfaceTiersTest,
 }
 
 TEST_F(TransactionSurfaceTiersTest,
-       TableIndexedStateRejectsAnIllegalActualBinding) {
+       TableIndexedStateRoutesWithTheMatchingActualBinding) {
   capture();
-  // The same design instantiated with W = 0: an empty Table extent is
-  // rejected at the routing preparation once the actual binding resolves.
-  auto unit = parsePlain(tableCounter("Counter") + root("#w0"));
+  // W = 3: three bits index the eight-lane table — the signature matches,
+  // the index range fits, and the routing preparation completes.
+  auto unit = parsePlain(tableCounter("Counter") + tableRoot("#w3"));
+  ASSERT_TRUE(unit) << diagnostics;
+  EXPECT_TRUE(succeeded(route(*unit))) << diagnostics;
+}
+
+TEST_F(TransactionSurfaceTiersTest,
+       TableIndexedStateRejectsAnOutOfRangeActualBinding) {
+  capture();
+  // W = 4: four bits can address sixteen lanes — the same index grammar
+  // now exceeds the bound extent, and the routing preparation rejects with
+  // the index-range check's own text.
+  auto unit = parsePlain(tableCounter("Counter") + tableRoot("#w4"));
   ASSERT_TRUE(unit) << diagnostics;
   EXPECT_TRUE(failed(route(*unit))) << diagnostics;
+  EXPECT_NE(diagnostics.find("checked Table index complete unsigned range "
+                             "is not proven within bound extent"),
+            std::string::npos)
+      << diagnostics;
 }
 
 } // namespace
