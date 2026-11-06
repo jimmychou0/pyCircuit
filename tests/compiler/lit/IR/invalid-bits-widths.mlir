@@ -1,7 +1,7 @@
 // RUN: %pycircuit_opt %s --split-input-file --ac-verify-hardware --verify-diagnostics
-// The symbolic-width equivalence rejections moved to the staged tiers (r3
-// ACIRBitsOps row); the pinned messages are the bound-tier texts from the
-// resolved dispatch.
+// The symbolic-width mismatches are definite facts: since the r8 review
+// the source walk checks them with the pre-split native texts, and the
+// binding tier still owns the resolved-width obligations.
 #w5 = #ac.static_expr<{kind = "literal", location = {path = "top.py", line = 1 : i64, column = 1 : i64, end_line = 1 : i64, end_column = 2 : i64}, origin = {site = {definition = @top, ast_path = []}, expansion = []}, value = {kind = "integer", value = #ac.math_int<5>}}>
 !b5 = !ac.bits<#w5>
 #w8 = #ac.static_expr<{kind = "literal", location = {path = "top.py", line = 1 : i64, column = 1 : i64, end_line = 1 : i64, end_column = 2 : i64}, origin = {site = {definition = @top, ast_path = []}, expansion = []}, value = {kind = "integer", value = #ac.math_int<8>}}>
@@ -11,7 +11,7 @@
 module {
   "ac.module"() ({
   ^bb0(%a: !b5, %b: !b8):
-    // expected-error @+1 {{bound bit operands and result must have equal widths}}
+    // expected-error @+1 {{operands and result must have the same symbolic width}}
     %bad = "ac.bits.binary"(%a, %b) {opcode = "xor"} : (!b5, !b8) -> !b5
     "ac.yield"(%bad) : (!b5) -> ()
   }) {sym_name = "top", source_owner = {package = "", path = "top.py"}, parameters = [], type_parameters = [], function_type = (!b5, !b8) -> !b5, input_names = ["a", "b"], output_names = ["result"]} : () -> ()
@@ -27,7 +27,7 @@ module {
 module {
   "ac.module"() ({
   ^bb0(%lhs: !b1, %rhs: !b8):
-    // expected-error @+1 {{bound comparison requires equal operands and width-one result}}
+    // expected-error @+1 {{comparison operands must have the same width}}
     %bad = "ac.bits.compare"(%lhs, %rhs) {predicate = "case_eq"} : (!b1, !b8) -> !b1
     "ac.yield"(%bad) : (!b1) -> ()
   }) {sym_name = "top", source_owner = {package = "", path = "case_eq.py"}, parameters = [], type_parameters = [], function_type = (!b1, !b8) -> !b1, input_names = ["lhs", "rhs"], output_names = ["result"]} : () -> ()
