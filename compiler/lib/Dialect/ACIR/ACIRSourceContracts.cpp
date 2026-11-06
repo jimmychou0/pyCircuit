@@ -258,14 +258,5 @@ LogicalResult verifySite(DictionaryAttr value, EmitError emitError) {
   return success();
 }
 
-DictionaryAttr declarationSourceOwner(Operation *operation) {
-  if (auto module = dyn_cast_or_null<ModuleOp>(operation))
-    return module.getSourceOwner();
-  if (auto imported = dyn_cast_or_null<ModuleImportOp>(operation))
-    return imported.getSourceOwner();
-  return operation ? operation->getAttrOfType<DictionaryAttr>("ac.source_owner")
-                   : DictionaryAttr();
-}
-
 } // namespace detail
 } // namespace acir::ac

@@ -293,11 +293,25 @@ LogicalResult verifySourceReferenceParameters(Operation *module) {
 }
 
 // ---------------------------------------------------------------------------
+// Declaration source-owner resolution (declared in ACIRSourceContracts.h;
+// the namespace grammar, the staged unit validation and the compiler layer
+// share it; defined here because it resolves the module/import accessors).
+namespace detail {
+DictionaryAttr declarationSourceOwner(Operation *operation) {
+  if (auto module = dyn_cast_or_null<ModuleOp>(operation))
+    return module.getSourceOwner();
+  if (auto imported = dyn_cast_or_null<ModuleImportOp>(operation))
+    return imported.getSourceOwner();
+  return operation ? operation->getAttrOfType<DictionaryAttr>("ac.source_owner")
+                   : DictionaryAttr();
+}
+} // namespace detail
+
 // Observation grammar (B2 step-2 design r7 row): the native verifiers keep
 // structure/spec/identity; the source-placement path-width predicate runs
 // from the staged dispatcher row and the check-plan tier after the ops
 // archive stopped referencing the analysis target.
-namespace acir::ac::detail {
+namespace detail {
 // Only statement arms extend a callable body. Other region owners (including
 // guards and pure helpers) never acquire source-effect placement by ancestry.
 Operation *sourceEffectCallable(Operation *operation) {
@@ -441,5 +455,5 @@ LogicalResult verifyModuleObservationIdentities(Operation *rawDefinition) {
   }
   return success();
 }
-} // namespace acir::ac::detail
+} // namespace detail
 } // namespace acir::ac
