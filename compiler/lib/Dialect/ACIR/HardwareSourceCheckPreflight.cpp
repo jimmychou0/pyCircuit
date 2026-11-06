@@ -1457,6 +1457,26 @@ private:
             return failure();
         }
       }
+      // Retained definitions keep their lexically-definite semantic checks
+      // independent of instance bindings (r8 review fix): the tolerant
+      // family entries re-run over every retained definition, so an
+      // uninstantiated module cannot bypass the original rejection boundary.
+      auto lexical = definition.walk([&](Operation *op) {
+        LogicalResult result = success();
+        if (isa<EnumCreateOp, EnumToBitsOp, EnumFromBitsOp>(op))
+          result = analysis.verifyEnumValueOperation(op, local);
+        else if (isa<CollectionOp, TableCreateOp, TableSplatOp, TableMapOp,
+                    TableViewOp, TableIndexOp, TableReadOp, TableGetOp,
+                    TableMatchOp, TableChooseOp, TableFoldOp, ValueMergeOp>(op))
+          result = analysis.verifyCollectionOperation(op, local);
+        else if (isa<StructCreateOp, StructGetOp>(op))
+          result = analysis.verifyStructOperation(op, local);
+        if (failed(result))
+          return WalkResult::interrupt();
+        return WalkResult::advance();
+      });
+      if (lexical.wasInterrupted())
+        return failure();
       auto sampling = catalogSampling(definition, local, bindings);
       if (failed(sampling))
         return failure();

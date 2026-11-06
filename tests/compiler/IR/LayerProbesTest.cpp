@@ -20,35 +20,47 @@
 #include "pycircuit/Dialect/ACIR/SourceIdentifier.h"
 #include "IR/StateDeclarationContracts.h"
 namespace {
-TEST(ACIRCoreStandalone, ReferencesEveryCoreUnit) {
+// Force the linker to see a reference to every pinned symbol: the pinned
+// addresses feed an unprovable runtime branch, so no reference can be
+// folded away regardless of optimization level (a bare `(void)&f;` can).
+std::uintptr_t anchorSum(std::uintptr_t seed) { return seed; }
+template <typename... Ts>
+std::uintptr_t anchorSum(std::uintptr_t seed, Ts *...rest) {
+  return seed + anchorSum(reinterpret_cast<std::uintptr_t>(rest)...);
+}
   // ACIRCoreDefs: generated attribute classes and their registration
   // (the generated typedef `get` anchors here too).
-  (void)&acir::ac::MathIntAttr::get;
-  (void)&acir::ac::BitsType::get;
   // ACIRPacketTypes: out-of-line custom type verifies and the shape
   // schema (not re-emitted by the generated classes).
-  (void)&acir::ac::detail::shapeSchema;
   // ACIRIdentityContracts: occurrence grammar and its memo.
-  (void)&acir::ac::detail::verifyOccurrence;
   // ACIRSourceContracts: source site/occurrence contract leaves.
-  (void)&acir::ac::detail::verifySite;
   // SourceStaticValueContracts: closed static-value grammar.
-  (void)&acir::ac::detail::verifyStaticValueStructure;
   // ACIRStaticContracts: static expression tree verification.
-  (void)&acir::ac::StaticExprAttr::verify;
   // SourceAttributeContracts: source domain/type-expr attr verifiers.
-  (void)&acir::ac::SourceDomainAttr::verify;
   // SourceSyntaxSiteContracts: lexical path grammar.
-  (void)&acir::ac::detail::verifyLexicalPath;
   // SourceValueSemantics: value opcode grammar.
-  (void)&acir::ac::detail::parseValueOpcode;
   // StateDeclarationContracts: declaration placement contracts.
-  (void)&acir::ac::verifyRoutedLogicalStatePlacement;
   // SourceIdentifier: Python identifier grammar leaf.
-  (void)&acir::ac::detail::verifyPythonAstIdentifier;
+  auto anchored = anchorSum(
+      0u,
+      &acir::ac::MathIntAttr::get,
+      &acir::ac::BitsType::get,
+      &acir::ac::detail::shapeSchema,
+      &acir::ac::detail::verifyOccurrence,
+      &acir::ac::detail::verifySite,
+      &acir::ac::detail::verifyStaticValueStructure,
+      &acir::ac::StaticExprAttr::verify,
+      &acir::ac::SourceDomainAttr::verify,
+      &acir::ac::detail::verifyLexicalPath,
+      &acir::ac::detail::parseValueOpcode,
+      &acir::ac::verifyRoutedLogicalStatePlacement,
+      &acir::ac::detail::verifyPythonAstIdentifier);
+  // A nonempty set of aligned function addresses cannot plausibly sum to
+  // exactly 42; the branch is not provably dead, so every reference is
+  // materialized into the object file.
+  ASSERT_NE(anchored, 42u) << "unreachable: pinned symbol anchors";
   SUCCEED();
-}
-} // namespace
+}} // namespace
 #elif defined(PYCIRCUIT_ANALYSIS_PROBE)
 // Analysis-layer containment probe: this executable links ONLY the
 // ACIRAnalysis target. Constructing the analysis machinery and running the

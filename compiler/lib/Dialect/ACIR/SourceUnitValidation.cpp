@@ -1,4 +1,5 @@
 #include "pycircuit/Dialect/ACIR/SourceUnitValidation.h"
+#include "pycircuit/Analysis/LogicalStateValidation.h"
 #include "pycircuit/Dialect/ACIR/SourceHelperAnalysis.h"
 #include "ACIRSourceContracts.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -180,54 +181,55 @@ FailureOr<SourceUnitStructure> verifyStructure(mlir::ModuleOp unit, bool body,
   // Skip bodies with any retained transaction surface (state, Methods,
   // transactions or rule bodies): their semantic checks run during the
   // routing preparation instead; the walk here covers only plain modules.
-  bool transactions = false;
-  unit.walk([&](Operation *operation) {
-    transactions |= isa<SourceStateOp, SourceStateReadOp,
-                        SourceStateWriteOp, SourceMethodOp,
-                        SourceMethodCallOp, SourceTransactionOp>(operation);
-    if (auto module = dyn_cast<ac::ModuleOp>(operation))
-      for (Operation &child : module.getBody().front())
-        if (isa<RuleOp>(child))
-          transactions = true;
-  });
-  if (!transactions) {
-    HardwareAnalysis analysis(unit);
-    HardwareBindings bindings;
-    auto semanticWalk = unit.walk([&](Operation *operation) {
-      bool enumFamily = isa<EnumCreateOp, EnumToBitsOp, EnumFromBitsOp>(operation);
-      bool collectionFamily = isa<CollectionOp, TableCreateOp, TableSplatOp,
-          TableMapOp, TableViewOp, TableIndexOp, TableReadOp, TableGetOp,
-          TableMatchOp, TableChooseOp, TableFoldOp, ValueMergeOp>(operation);
-      bool structFamily =
-          isa<StructOp, StructCreateOp, StructGetOp>(operation);
-      bool bitsWidthFamily = isa<BitsUnaryOp, BitsBinaryOp, BitsCompareOp,
-                                 BitsSelectOp>(operation);
-      LogicalResult result = success();
-      if (enumFamily)
-        result = analysis.verifyEnumValueOperation(operation, bindings);
-      else if (collectionFamily)
-        result = analysis.verifyCollectionOperation(operation, bindings);
-      else if (structFamily)
-        result = analysis.verifyStructOperation(operation, bindings);
-      else if (bitsWidthFamily)
-        result = analysis.verifyBitsSymbolicWidths(operation);
-      else if (isa<ModuleOp, ModuleImportOp, InstanceOp, SourceExpectOp>(
-                   operation))
-        result = analysis.verifyModuleDeclaration(operation, bindings);
-      else if (auto pred = dyn_cast<SourcePredicateOp>(operation)) {
-        auto width = analysis.getPackedWidth(pred.getInput().getType(),
-                                             bindings, pred);
-        if (failed(width) || *width != 1)
-          result = pred.emitOpError()
-                   << "source SCF predicate requires width-one Bits";
-      }
-      if (failed(result))
-        return WalkResult::interrupt();
+  // The semantic walk is per operation (r8 review fix): a unit retaining a
+  // transaction surface no longer skips the checks of its other operations.
+  // Definite facts are checked everywhere — including inside method and
+  // rule regions — while the surface's own resolution-dependent obligations
+  // stay deferred to the routing preparation, and state declarations run
+  // their source binding checks (clock/reset widths, payload constraint,
+  // initializer closure) exactly as the pre-split native verifier did.
+  HardwareAnalysis analysis(unit);
+  HardwareBindings bindings;
+  auto semanticWalk = unit.walk([&](Operation *operation) {
+    if (isa<SourceStateReadOp, SourceStateWriteOp, SourceFormalWriteOp,
+            SourceMethodOp, SourceMethodCallOp, SourceBranchOp,
+            SourceTransactionOp>(operation))
       return WalkResult::advance();
-    });
-    if (semanticWalk.wasInterrupted())
-      return failure();
-  }
+    bool enumFamily = isa<EnumCreateOp, EnumToBitsOp, EnumFromBitsOp>(operation);
+    bool collectionFamily = isa<CollectionOp, TableCreateOp, TableSplatOp,
+        TableMapOp, TableViewOp, TableIndexOp, TableReadOp, TableGetOp,
+        TableMatchOp, TableChooseOp, TableFoldOp, ValueMergeOp>(operation);
+    bool structFamily =
+        isa<StructOp, StructCreateOp, StructGetOp>(operation);
+    bool bitsWidthFamily = isa<BitsUnaryOp, BitsBinaryOp, BitsCompareOp,
+                               BitsSelectOp>(operation);
+    LogicalResult result = success();
+    if (enumFamily)
+      result = analysis.verifyEnumValueOperation(operation, bindings);
+    else if (collectionFamily)
+      result = analysis.verifyCollectionOperation(operation, bindings);
+    else if (structFamily)
+      result = analysis.verifyStructOperation(operation, bindings);
+    else if (bitsWidthFamily)
+      result = analysis.verifyBitsSymbolicWidths(operation);
+    else if (auto state = dyn_cast<SourceStateOp>(operation))
+      result = detail::verifyLogicalStateSourceBinding(state);
+    else if (isa<ModuleOp, ModuleImportOp, InstanceOp, SourceExpectOp>(
+                 operation))
+      result = analysis.verifyModuleDeclaration(operation, bindings);
+    else if (auto pred = dyn_cast<SourcePredicateOp>(operation)) {
+      auto width = analysis.getPackedWidth(pred.getInput().getType(),
+                                           bindings, pred);
+      if (failed(width) || *width != 1)
+        result = pred.emitOpError()
+                 << "source SCF predicate requires width-one Bits";
+    }
+    if (failed(result))
+      return WalkResult::interrupt();
+    return WalkResult::advance();
+  });
+  if (semanticWalk.wasInterrupted())
+    return failure();
   auto kind = unit->getAttrOfType<StringAttr>("ac.unit_kind");
   if (body && (!kind || (kind.getValue() != "implementation" &&
                          kind.getValue() != "declarations")))
