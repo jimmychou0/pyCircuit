@@ -11,7 +11,9 @@ function(add_acir_api_test target)
   endif()
   add_executable(${target} ${API_TEST_UNPARSED_ARGUMENTS})
   target_include_directories(${target} PRIVATE "${PYCIRCUIT_SOURCE_DIR}/lib")
-  target_link_libraries(${target} PRIVATE ACIRDialect MLIRParser MLIRFuncDialect GTest::gtest_main)
+  # API tests exercise staged behavior; the dedicated layer-containment
+  # probes (ACIROps/ACIRAnalysis/GFIRStandalone) own the link-line checks.
+  target_link_libraries(${target} PRIVATE ACIRDialect ACIRAnalysis MLIRParser MLIRFuncDialect GTest::gtest_main)
   if(NOT API_TEST_FILTER)
     set(API_TEST_FILTER "*")
   endif()
