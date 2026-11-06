@@ -111,6 +111,9 @@ target_compile_definitions(ACIRQueueContractsTests PRIVATE
 add_dependencies(ACIRQueueContractsTests pycircuit-link pycircuit-emit)
 add_acir_api_test(ACIRTableDependencySummaryTests TableDependencySummaryTest.cpp)
 add_acir_api_test(ACIRSourceSymbolicBoundaryTests SourceSymbolicBoundaryTest.cpp)
+add_acir_api_test(ACIRTransactionSurfaceTiersTests TransactionSurfaceTiersTest.cpp)
+target_link_libraries(ACIRTransactionSurfaceTiersTests PRIVATE
+  ACIRTransforms MLIRPass)
 add_acir_api_test(ACIRHardwareSourceChecksTests
   GUARD "${CMAKE_CURRENT_SOURCE_DIR}/run_source_checks_guarded.py"
   FILTER "-HardwareSourceChecksExecution.*"
@@ -234,8 +237,9 @@ add_custom_target(check-pycircuit
     ACIRFixedUnsignedDivRemLoweringTests
     ACIRSourceInterfacePassTests
     ACIRRecordProjectionSimplificationTests
-    ACIRQueueContractsTests
-    ACIRTransactionEffectsTests
+  ACIRQueueContractsTests
+  ACIRTransactionEffectsTests
+  ACIRTransactionSurfaceTiersTests
     ACIRTableDependencySummaryTests
     ACIRHardwareSourceChecksTests
     ACIREnumHardwareAnalysisTests
