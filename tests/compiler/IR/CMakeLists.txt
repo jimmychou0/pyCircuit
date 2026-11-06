@@ -110,6 +110,7 @@ target_compile_definitions(ACIRQueueContractsTests PRIVATE
   PYCIRCUIT_TEST_EMITTER="$<TARGET_FILE:pycircuit-emit>")
 add_dependencies(ACIRQueueContractsTests pycircuit-link pycircuit-emit)
 add_acir_api_test(ACIRTableDependencySummaryTests TableDependencySummaryTest.cpp)
+add_acir_api_test(ACIRSourceSymbolicBoundaryTests SourceSymbolicBoundaryTest.cpp)
 add_acir_api_test(ACIRHardwareSourceChecksTests
   GUARD "${CMAKE_CURRENT_SOURCE_DIR}/run_source_checks_guarded.py"
   FILTER "-HardwareSourceChecksExecution.*"
