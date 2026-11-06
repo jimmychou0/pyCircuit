@@ -26,9 +26,9 @@ namespace {
 // addresses feed an unprovable runtime branch, so no reference can be
 // folded away regardless of optimization level (a bare `(void)&f;` can).
 std::uintptr_t anchorSum(std::uintptr_t seed) { return seed; }
-template <typename... Ts>
-std::uintptr_t anchorSum(std::uintptr_t seed, Ts *...rest) {
-  return seed + anchorSum(reinterpret_cast<std::uintptr_t>(rest)...);
+template <typename T, typename... Ts>
+std::uintptr_t anchorSum(std::uintptr_t seed, T *head, Ts *...rest) {
+  return anchorSum(seed + reinterpret_cast<std::uintptr_t>(head), rest...);
 }
 TEST(ACIRCoreStandalone, ReferencesEveryCoreUnit) {
   // One pinned symbol per core member TU (r9 §4); the anchorSum call
