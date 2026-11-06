@@ -1,6 +1,7 @@
 #ifndef PYCIRCUIT_DIALECT_ACIR_SOURCEMETHODANALYSIS_H
 #define PYCIRCUIT_DIALECT_ACIR_SOURCEMETHODANALYSIS_H
 
+#include "mlir/IR/SymbolTable.h"
 #include "pycircuit/Dialect/ACIR/ACIROps.h"
 #include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
 #include "llvm/ADT/DenseMap.h"
@@ -108,6 +109,175 @@ struct SourceMethodView {
   mlir::DictionaryAttr getDeclaration() const;
   mlir::DictionaryAttr getGuardLocation() const;
   mlir::SymbolRefAttr getSymbol() const;
+
+FunctionType getFunctionType() const {
+  if (isNativeMemoryTerminal()) {
+    auto signature = cast<FunctionType>(module->getAttrOfType<TypeAttr>("function_type").getValue());
+    auto kind = module->getAttrOfType<StringAttr>("primitive_kind").getValue();
+    unsigned address = kind == "byte_mem" ? 2 : 3 + 2 * nativeMemoryPort;
+    unsigned write = kind == "byte_mem" ? 3 : kind == "sync_mem_dp" ? 6 : 4;
+    SmallVector<Type> inputs, results;
+    if (nativeMemoryAction == NativeMemoryAction::Request ||
+        nativeMemoryAction == NativeMemoryAction::Read)
+      inputs.push_back(signature.getInput(address));
+    else if (nativeMemoryAction == NativeMemoryAction::Write)
+      for (unsigned ordinal : {write + 1, write + 2, write + 3})
+        inputs.push_back(signature.getInput(ordinal));
+    if (nativeMemoryAction == NativeMemoryAction::Result ||
+        nativeMemoryAction == NativeMemoryAction::Read)
+      results.push_back(signature.getResult(nativeMemoryPort));
+    return FunctionType::get(module->getContext(), inputs, results);
+  }
+  if (isNativeQueueTerminal()) {
+    auto moduleType = cast<FunctionType>(
+        module->getAttrOfType<TypeAttr>("function_type").getValue());
+    Type formalPayload = moduleType.getInput(3);
+    SmallVector<Type> inputs, results;
+    (nativeQueueAction == NativeQueueAction::Push ? inputs : results)
+        .push_back(formalPayload);
+    return FunctionType::get(module->getContext(), inputs, results);
+  }
+  return definition ? cast<FunctionType>(
+                          definition->getAttrOfType<TypeAttr>("function_type")
+                              .getValue())
+                    : cast<FunctionType>(
+                          row.getAs<TypeAttr>("function_type").getValue());
+}
+ArrayAttr getArgumentNames() const {
+  if (isNativeMemoryTerminal()) {
+    Builder builder(module->getContext());
+    if (nativeMemoryAction == NativeMemoryAction::Result) return builder.getArrayAttr({});
+    if (nativeMemoryAction == NativeMemoryAction::Write)
+      return builder.getStrArrayAttr({"address", "value", "mask"});
+    return builder.getStrArrayAttr({"address"});
+  }
+  if (isNativeQueueTerminal()) {
+    Builder builder(module->getContext());
+    return nativeQueueAction == NativeQueueAction::Push
+               ? builder.getArrayAttr({builder.getStringAttr("value")})
+               : builder.getArrayAttr({});
+  }
+  return definition ? definition->getAttrOfType<ArrayAttr>("argument_names")
+                    : row.getAs<ArrayAttr>("argument_names");
+}
+ArrayAttr getParameters() const {
+  if (isNativeMemoryTerminal()) {
+    Builder builder(module->getContext());
+    auto signature = getFunctionType();
+    auto names = getArgumentNames();
+    SmallVector<Attribute> parameters;
+    for (auto [ordinal, type] : llvm::enumerate(signature.getInputs())) {
+      Attribute constraint = nativeMemoryAction == NativeMemoryAction::Write && ordinal == 1
+          ? nativeMemoryPayloadConstraint
+          : builder.getDictionaryAttr({
+              builder.getNamedAttr("kind", builder.getStringAttr("hardware")),
+              builder.getNamedAttr("type", TypeAttr::get(type)),
+              builder.getNamedAttr("source_kind", builder.getStringAttr("fixed_bits"))});
+      parameters.push_back(builder.getDictionaryAttr({
+          builder.getNamedAttr("name", names[ordinal]),
+          builder.getNamedAttr("binding", builder.getStringAttr("positional_or_keyword")),
+          builder.getNamedAttr("constraint", constraint),
+          builder.getNamedAttr("default", builder.getDictionaryAttr({
+              builder.getNamedAttr("present", builder.getBoolAttr(false))}))}));
+    }
+    return builder.getArrayAttr(parameters);
+  }
+  if (isNativeQueueTerminal()) {
+    Builder builder(module->getContext());
+    if (nativeQueueAction != NativeQueueAction::Push)
+      return builder.getArrayAttr({});
+    return builder.getArrayAttr({builder.getDictionaryAttr({
+        builder.getNamedAttr("name", builder.getStringAttr("value")),
+        builder.getNamedAttr("binding",
+                             builder.getStringAttr("positional_or_keyword")),
+        builder.getNamedAttr("constraint", nativeQueuePayloadConstraint),
+        builder.getNamedAttr(
+            "default",
+            builder.getDictionaryAttr({builder.getNamedAttr(
+                "present", builder.getBoolAttr(false))}))})});
+  }
+  return definition ? definition->getAttrOfType<ArrayAttr>("ac.parameters")
+                    : row.getAs<ArrayAttr>("ac.parameters");
+}
+ArrayAttr getResultConstraints() const {
+  if (isNativeMemoryTerminal()) {
+    Builder builder(module->getContext());
+    return getFunctionType().getNumResults()
+        ? builder.getArrayAttr({nativeMemoryPayloadConstraint}) : builder.getArrayAttr({});
+  }
+  if (isNativeQueueTerminal()) {
+    Builder builder(module->getContext());
+    return nativeQueueAction == NativeQueueAction::Push
+               ? builder.getArrayAttr({})
+               : builder.getArrayAttr({nativeQueuePayloadConstraint});
+  }
+  return definition
+             ? definition->getAttrOfType<ArrayAttr>("ac.result_constraints")
+             : row.getAs<ArrayAttr>("ac.result_constraints");
+}
+StringAttr getReturnForm() const {
+  if (isNativeMemoryTerminal())
+    return StringAttr::get(module->getContext(), getFunctionType().getNumResults() ? "single" : "none");
+  if (isNativeQueueTerminal())
+    return StringAttr::get(module->getContext(),
+                           nativeQueueAction == NativeQueueAction::Push
+                               ? "none"
+                               : "single");
+  return definition ? definition->getAttrOfType<StringAttr>("ac.return_form")
+                    : row.getAs<StringAttr>("ac.return_form");
+}
+StringAttr getVisibility() const {
+  if (isNativeTerminal())
+    return StringAttr::get(module->getContext(), "public");
+  return definition ? definition->getAttrOfType<StringAttr>("sym_visibility")
+                    : row.getAs<StringAttr>("visibility");
+}
+DictionaryAttr getDeclaration() const {
+  if (isNativeMemoryTerminal())
+    return nativeMemoryInstance ? nativeMemoryInstance->getAttrOfType<DictionaryAttr>("occurrence")
+        : nativeMemoryOwnerRow.getAs<DictionaryAttr>("occurrence");
+  if (isNativeQueueTerminal())
+    return nativeQueueInstance
+               ? nativeQueueInstance->getAttrOfType<DictionaryAttr>(
+                     "occurrence")
+                               : nativeQueueOwnerRow.getAs<DictionaryAttr>(
+                                     "occurrence");
+  return definition ? definition->getAttrOfType<DictionaryAttr>("occurrence")
+                    : row.getAs<DictionaryAttr>("declaration");
+}
+DictionaryAttr getGuardLocation() const {
+  if (isNativeTerminal())
+    return {};
+  return definition
+             ? definition->getAttrOfType<DictionaryAttr>("ac.guard_location")
+             : row.getAs<DictionaryAttr>("guard_location");
+}
+SymbolRefAttr getSymbol() const {
+  if (isNativeMemoryTerminal()) {
+    std::string name = nativeMemoryAction == NativeMemoryAction::Request ? "request" :
+        nativeMemoryAction == NativeMemoryAction::Result ? "result" :
+        nativeMemoryAction == NativeMemoryAction::Read ? "read" : "write";
+    if (nativeMemoryAction == NativeMemoryAction::Request || nativeMemoryAction == NativeMemoryAction::Result)
+      name += std::to_string(nativeMemoryPort);
+    return SymbolRefAttr::get(module->getContext(), SymbolTable::getSymbolName(module).getValue(),
+        {FlatSymbolRefAttr::get(module->getContext(), name)});
+  }
+  if (isNativeQueueTerminal()) {
+    StringRef name = nativeQueueAction == NativeQueueAction::Push
+                         ? "push"
+                         : nativeQueueAction == NativeQueueAction::Pop ? "pop"
+                                                                       : "peek";
+    return SymbolRefAttr::get(module->getContext(),
+                              SymbolTable::getSymbolName(module).getValue(),
+                              {FlatSymbolRefAttr::get(module->getContext(),
+                                                     name)});
+  }
+  auto name = definition ? definition->getAttrOfType<StringAttr>("sym_name")
+                         : row.getAs<StringAttr>("name");
+  return SymbolRefAttr::get(module->getContext(),
+                            SymbolTable::getSymbolName(module).getValue(),
+                            {FlatSymbolRefAttr::get(name)});
+}
 };
 
 /// Check the optional writable-formal mapping and its physical result suffix.
