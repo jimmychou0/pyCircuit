@@ -61,12 +61,6 @@ FailureOr<Type> selectedPayloadType(const HardwareAnalysis &analysis,
   // defers, and then just the width evaluation — the carrier, ordinal,
   // field-name and element-type facts still descend and still reach the
   // caller's comparison (r8 table-layering review).
-  bool indexWidthsDeferred = false;
-  for (Value index : indices)
-    if (auto bits = dyn_cast<BitsType>(index.getType()))
-      if (!analysis.isStaticEvaluable(bits.getWidth(), bindings))
-        indexWidthsDeferred = true;
-  bool deferWidths = indexWidthsDeferred && !requireResolved;
   auto resolved = analysis.resolveType(root, bindings, operation);
   if (failed(resolved))
     return failure();
@@ -112,15 +106,26 @@ FailureOr<Type> selectedPayloadType(const HardwareAnalysis &analysis,
     if (!isa<BitsType>(indices[nextIndex].getType()))
       return operation->emitOpError() << "state index must have resolved Bits "
                                          "type";
-    if (!deferWidths) {
-      auto indexWidth = analysis.getPackedWidth(indices[nextIndex].getType(),
-                                                bindings, operation);
-      if (failed(indexWidth))
-        return failure();
-      if (failed(detail::verifySourceTemplateType(analysis, table, bindings,
-                                                  operation)))
+    // Per-index deferral (r8 table-layering review): an unbound parameter
+    // defers only THAT index's width evaluation. The Table template
+    // verification always runs — it tolerates symbolic extents and still
+    // checks the evaluable subexpressions.
+    // The Table template verification always runs — it tolerates symbolic
+    // extents and still checks the evaluable subexpressions. The index
+    // width evaluation defers per index: a width that cannot statically
+    // evaluate on a source-stage site is a legal unbound parameter, while
+    // an evaluable-but-failing expression is illegal and rejects.
+    auto indexWidth = analysis.getPackedWidth(indices[nextIndex].getType(),
+                                              bindings, operation);
+    if (failed(indexWidth)) {
+      auto indexCarrier = cast<BitsType>(indices[nextIndex].getType());
+      if (requireResolved || !operation->getParentOfType<ModuleOp>() ||
+          analysis.isStaticEvaluable(indexCarrier.getWidth(), bindings))
         return failure();
     }
+    if (failed(detail::verifySourceTemplateType(analysis, table, bindings,
+                                                operation)))
+      return failure();
     ++nextIndex;
     if (table.getShape().size() == 1)
       current = table.getElementType();
