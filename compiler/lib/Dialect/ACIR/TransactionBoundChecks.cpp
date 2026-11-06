@@ -56,77 +56,20 @@ FailureOr<Type> selectedPayloadType(const HardwareAnalysis &analysis,
                                     bool requireResolved, Operation *operation,
                                     Type root, ArrayAttr selectors,
                                     ValueRange indices) {
-  // A legal unbound integer parameter defers the whole width-dependent
-  // selection: when any SSA index carries an unresolved width, or the root
-  // cannot resolve, the source stage runs the grammar-only branch on the
-  // raw carriers (r8 follow-up batch 1).
+  // A genuine resolution failure (a malformed reference) stays a failure in
+  // every tier; only the width dependence on a legal unbound parameter
+  // defers, and then just the width evaluation — the carrier, ordinal,
+  // field-name and element-type facts still descend and still reach the
+  // caller's comparison (r8 table-layering review).
   bool indexWidthsDeferred = false;
   for (Value index : indices)
     if (auto bits = dyn_cast<BitsType>(index.getType()))
       if (!analysis.isStaticEvaluable(bits.getWidth(), bindings))
         indexWidthsDeferred = true;
+  bool deferWidths = indexWidthsDeferred && !requireResolved;
   auto resolved = analysis.resolveType(root, bindings, operation);
-  if (failed(resolved) || (indexWidthsDeferred && !requireResolved)) {
-    if (requireResolved)
-      return failure();
-    // Source stage: check the definite facts on the raw carriers and defer
-    // the width evaluation (r8 follow-up: a legal unbound parameter must
-    // not reject the operation before its binding exists). A null carried
-    // type tells the caller to skip the resolved comparison; the binding
-    // tier re-runs the full resolution.
-    Type current = root;
-    unsigned nextIndex = 0;
-    for (Attribute raw : selectors) {
-      auto selector = dyn_cast<DictionaryAttr>(raw);
-      if (!selector || selector.size() != 1)
-        return operation->emitOpError()
-               << "state selector requires exactly field or index";
-      if (auto field = selector.getAs<StringAttr>("field")) {
-        auto record = dyn_cast<StructType>(current);
-        auto declaration = record ? analysis.lookupStruct(record) : StructOp();
-        if (!declaration)
-          return operation->emitOpError()
-                 << "state field selector requires a nominal struct";
-        Type selected;
-        for (Attribute rawField : declaration.getFields()) {
-          auto item = cast<DictionaryAttr>(rawField);
-          if (item.getAs<StringAttr>("name") == field) {
-            selected = item.getAs<TypeAttr>("type").getValue();
-            break;
-          }
-        }
-        if (!selected)
-          return operation->emitOpError()
-                 << "unknown state field '" << field.getValue() << "'";
-        current = selected;
-        continue;
-      }
-      auto ordinal = selector.getAs<IntegerAttr>("index");
-      auto table = dyn_cast<TableType>(current);
-      if (!ordinal || !ordinal.getType().isSignlessInteger(64) ||
-          ordinal.getValue().isNegative() ||
-          ordinal.getValue().getZExtValue() != nextIndex ||
-          nextIndex >= indices.size() || !table || table.getShape().empty())
-        return operation->emitOpError()
-               << "state index selector requires a Table and sequential i64 "
-                  "SSA index ordinal";
-      if (!isa<BitsType>(indices[nextIndex].getType()))
-        return operation->emitOpError() << "state index must have Bits type";
-      ++nextIndex;
-      if (table.getShape().size() == 1)
-        current = table.getElementType();
-      else
-        current = TableType::get(
-            operation->getContext(),
-            ArrayAttr::get(operation->getContext(),
-                           table.getShape().getValue().drop_front()),
-            table.getElementType());
-    }
-    if (nextIndex != indices.size())
-      return operation->emitOpError()
-             << "state selector index count must match SSA indices exactly";
-    return FailureOr<Type>(Type());
-  }
+  if (failed(resolved))
+    return failure();
   Type current = *resolved;
   unsigned nextIndex = 0;
   for (Attribute raw : selectors) {
@@ -166,13 +109,18 @@ FailureOr<Type> selectedPayloadType(const HardwareAnalysis &analysis,
       return operation->emitOpError()
              << "state index selector requires a Table and sequential i64 "
                 "SSA index ordinal";
-    auto indexWidth = analysis.getPackedWidth(indices[nextIndex].getType(),
-                                              bindings, operation);
-    if (!isa<BitsType>(indices[nextIndex].getType()) || failed(indexWidth))
+    if (!isa<BitsType>(indices[nextIndex].getType()))
       return operation->emitOpError() << "state index must have resolved Bits "
                                          "type";
-    if (failed(detail::verifySourceTemplateType(analysis, table, bindings, operation)))
-      return failure();
+    if (!deferWidths) {
+      auto indexWidth = analysis.getPackedWidth(indices[nextIndex].getType(),
+                                                bindings, operation);
+      if (failed(indexWidth))
+        return failure();
+      if (failed(detail::verifySourceTemplateType(analysis, table, bindings,
+                                                  operation)))
+        return failure();
+    }
     ++nextIndex;
     if (table.getShape().size() == 1)
       current = table.getElementType();
@@ -188,7 +136,6 @@ FailureOr<Type> selectedPayloadType(const HardwareAnalysis &analysis,
            << "state selector index count must match SSA indices exactly";
   return current;
 }
-
 FailureOr<Type> selectedStateType(const HardwareAnalysis &analysis,
                                   const HardwareBindings &bindings,
                                   bool requireResolved, Operation *operation,
@@ -685,7 +632,7 @@ LogicalResult HardwareAnalysis::verifyTransactionSurfaceOperation(
     auto result = resolveType(read.getValue().getType(), scope, read);
     if (failed(result))
       return failure();
-    if (*selected && !areEquivalentHardwareTypes(*selected, *result))
+    if (!areEquivalentHardwareTypes(*selected, *result))
       return read.emitOpError()
              << "state read result must match selected payload type";
     return success();
@@ -702,7 +649,7 @@ LogicalResult HardwareAnalysis::verifyTransactionSurfaceOperation(
     auto value = resolveType(write.getValue().getType(), scope, write);
     if (failed(value))
       return failure();
-    if (*selected && !areEquivalentHardwareTypes(*selected, *value))
+    if (!areEquivalentHardwareTypes(*selected, *value))
       return write.emitOpError()
              << "state write value must match selected payload type";
     // The selected Table index obligations remain the dispatcher's existing
@@ -731,7 +678,7 @@ LogicalResult HardwareAnalysis::verifyTransactionSurfaceOperation(
     auto payload = resolveType(formal.getPayload().getType(), scope, formal);
     if (failed(payload))
       return failure();
-    if (*selected && !areEquivalentHardwareTypes(*selected, *payload))
+    if (!areEquivalentHardwareTypes(*selected, *payload))
       return formal.emitOpError()
              << "formal write payload must match selected input formal type";
     if (failed(predicate(*this, formal.getPath(), scope, formal,
