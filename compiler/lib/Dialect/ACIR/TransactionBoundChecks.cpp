@@ -596,15 +596,22 @@ LogicalResult HardwareAnalysis::verifyTransactionSurfaceOperation(
   // passes the actual bindings with requireResolved=true.
   if (auto read = dyn_cast<SourceStateReadOp>(operation)) {
     if (failed(predicate(*this, read.getPath(), bindings, read,
-                         "state read path", requireResolved)))
+                         "state read path", requireResolved))) {
+      llvm::errs() << "PROBE-READ predicate failed\n"; // PROBE
       return failure();
+    }
     auto selected = selectedStateType(*this, bindings, read,
                                       read.getSelectors(), read.getIndices());
-    if (failed(selected))
+    if (failed(selected)) {
+      llvm::errs() << "PROBE-READ selected failed\n"; // PROBE
       return failure();
-    if (!areEquivalentHardwareTypes(*selected, read.getValue().getType()))
+    }
+    if (!areEquivalentHardwareTypes(*selected, read.getValue().getType())) {
+      llvm::errs() << "PROBE-READ mismatch selected=" << *selected
+                   << " value=" << read.getValue().getType() << "\n"; // PROBE
       return read.emitOpError()
              << "state read result must match selected payload type";
+    }
     return success();
   }
   if (auto write = dyn_cast<SourceStateWriteOp>(operation)) {
