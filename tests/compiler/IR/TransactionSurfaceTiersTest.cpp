@@ -93,7 +93,9 @@ std::string vocabulary(StringRef owner) {
          "i64, end_line = 1 : i64, end_column = 2 : i64}\n"
          "#byte_constraint = {kind = \"hardware\", type = !b8, source_kind = "
          "\"fixed_bits\"}\n"
-         "#value_constraint = {kind = \"hardware\", type = !bM, source_kind = "
+         "#value_constraint = {kind = \"hardware\", type = !bw, source_kind = "
+         "\"fixed_bits\"}\n";
+         "#value_constraintM = {kind = \"hardware\", type = !bM, source_kind = "
          "\"fixed_bits\"}\n";
 }
 
@@ -454,7 +456,7 @@ std::string tableCounter(StringRef owner) {
                      "!b8, argument_names = [\"value\"], ac.parameters = "
                      "[{name = \"value\", binding = "
                      "\"positional_or_keyword\", constraint = "
-                     "#value_constraint, default = {present = false}, origin "
+                     "#value_constraintM, default = {present = false}, origin "
                      "= #counter, location = #span}], ac.result_constraints = "
                      "[#byte_constraint], ac.return_form = \"single\", "
                      "ac.guard_location = #span, occurrence = #counter} : "
