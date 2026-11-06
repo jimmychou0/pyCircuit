@@ -107,10 +107,11 @@ function(_pyc_link_closure target out)
             string(REGEX REPLACE "\\$<" "\n" remainder "${remainder}")
             string(REGEX REPLACE ">" "\n" remainder "${remainder}")
           endwhile()
-          # Tokens exclude colons: a leading ":Target" or "LINK_ONLY:Target"
-          # fragment must never be taken for the target itself (r8 review
-          # follow-up).
-          string(REGEX MATCHALL "[A-Za-z0-9_.-]+" names "${remainder}")
+          # Tokens keep namespace separators (::) inside a target name but
+          # split on single colons, so a "LINK_ONLY:X" or ":X" fragment can
+          # never pass as the target itself while a "ns::X" dependency stays
+          # one name (r8 review batch 3).
+          string(REGEX MATCHALL "[A-Za-z0-9_.-]+(::[A-Za-z0-9_.-]+)*" names "${remainder}")
           foreach(name IN LISTS names)
             if(TARGET "${name}")
               get_target_property(_pyc_dep_aliased "${name}" ALIASED_TARGET)
@@ -118,6 +119,24 @@ function(_pyc_link_closure target out)
                 set(name "${_pyc_dep_aliased}")
               endif()
               list(APPEND pending "${name}")
+            endif()
+          endforeach()
+          # A layer target mentioned inside an entry that did not resolve to
+          # a dependency must not slip through silently (r8 review batch 3).
+          foreach(_pyc_layer IN ITEMS GFIRDialect ACIRDialect ACIRAnalysis ACIRCore)
+            if("${entry}" MATCHES "(^|[^A-Za-z0-9_:.${_pyc_layer}])${_pyc_layer}([^A-Za-z0-9_:.]|$)")
+              set(_pyc_resolved 0)
+              foreach(name IN LISTS names)
+                if(name MATCHES "${_pyc_layer}")
+                  set(_pyc_resolved 1)
+                endif()
+              endforeach()
+              if(NOT _pyc_resolved)
+                message(WARNING
+                  "layering walk: ${head} carries '${entry}' which mentions "
+                  "layer target ${_pyc_layer} but resolved no dependency for "
+                  "it; inspect this expression manually")
+              endif()
             endif()
           endforeach()
         endforeach()
