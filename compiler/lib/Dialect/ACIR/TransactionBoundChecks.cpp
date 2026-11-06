@@ -40,7 +40,7 @@ LogicalResult predicate(const HardwareAnalysis &analysis, Value value,
   auto bits = dyn_cast<BitsType>(value.getType());
   if (!bits)
     return site->emitOpError() << description << " requires one-bit Bits";
-  if (!isStaticEvaluable(bits.getWidth(), bindings)) {
+  if (!analysis.isStaticEvaluable(bits.getWidth(), bindings)) {
     if (!requireResolved && site->getParentOfType<ModuleOp>())
       return success();
     return site->emitOpError()
