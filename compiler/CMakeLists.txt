@@ -80,25 +80,31 @@ function(_pyc_link_closure target out)
       continue()
     endif()
     get_target_property(iface "${head}" INTERFACE_LINK_LIBRARIES)
-    if(iface)
-      foreach(entry IN LISTS iface)
-        # Generator expressions may carry real target names
-        # ($<LINK_ONLY:ACIRDialect>, $<BUILD_INTERFACE:x>); strip the
-        # wrappers and examine every remaining token so hidden forbidden
-        # edges cannot survive inside an expression.
-        string(REGEX REPLACE "\\$<[^:]*:" "\n" tokens "${entry}")
-        string(REGEX REPLACE ">" "\n" tokens "${tokens}")
-        foreach(token IN LISTS tokens)
-          string(STRIP "${token}" token)
-          if(NOT token MATCHES "^\\$<.*")
-            string(REGEX MATCHALL "[A-Za-z0-9_.:-]+" names "${token}")
-            foreach(name IN LISTS names)
-              list(APPEND pending "${name}")
-            endforeach()
-          endif()
+    # The seed target's own private link line is examined too (IX): a
+    # forbidden edge must not survive as a non-interface dependency of the
+    # layer target itself.
+    get_target_property(priv "${head}" LINK_LIBRARIES)
+    foreach(entries "${iface}" "${priv}")
+      if(entries)
+        foreach(entry IN LISTS entries)
+          # Generator expressions may carry real target names
+          # ($<LINK_ONLY:ACIRDialect>, $<BUILD_INTERFACE:x>); strip the
+          # wrappers and examine every remaining token so hidden forbidden
+          # edges cannot survive inside an expression.
+          string(REGEX REPLACE "\\$<[^:]*:" "\n" tokens "${entry}")
+          string(REGEX REPLACE ">" "\n" tokens "${tokens}")
+          foreach(token IN LISTS tokens)
+            string(STRIP "${token}" token)
+            if(NOT token MATCHES "^\\$<.*")
+              string(REGEX MATCHALL "[A-Za-z0-9_.:-]+" names "${token}")
+              foreach(name IN LISTS names)
+                list(APPEND pending "${name}")
+              endforeach()
+            endif()
+          endforeach()
         endforeach()
-      endforeach()
-    endif()
+      endif()
+    endforeach()
   endwhile()
   set("${out}" "${acc}" PARENT_SCOPE)
 endfunction()

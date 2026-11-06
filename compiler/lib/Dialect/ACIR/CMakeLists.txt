@@ -41,41 +41,10 @@ add_acir_library(ACIRDialect SOURCES
   ACIRStaticEvaluation.cpp
   SourceStaticRecordConstructors.cpp
   SourceStaticDomains.cpp
-  "${PYCIRCUIT_SOURCE_DIR}/lib/Analysis/LogicalStateValidation.cpp"
-  HardwareAnalysis.cpp
-  HardwareAnalysisDependencies.cpp
-  HardwareAnalysisValidation.cpp
-  HardwareDependencySerialization.cpp
-  HardwarePhysicalProjection.cpp
-  HardwarePhysicalState.cpp
-  HardwareQueueResources.cpp
-  HardwareSampledAdmission.cpp
-  HardwareSourceCheckPreflight.cpp
-  HardwareSourceChecks.cpp
-  HardwareValueAvailability.cpp
-  HardwareWorkPartition.cpp
-  PackageVerification.cpp
-  SourceHelperAnalysis.cpp
-  SourceMethodAnalysis.cpp
-  SourceMethodResolution.cpp
-  SourceTransactionStateAnalysis.cpp
-  SourceTransactionSummary.cpp
   TransactionalContracts.cpp
-  TransactionalLinkedChecks.cpp
   ACIRModuleContracts.cpp
   EntryBoundary.cpp
-  EntryBoundaryEnvelope.cpp
-  CollectionAnalysis.cpp
-  EnumAnalysis.cpp
-  StructBoundChecks.cpp
-  QueueBoundChecks.cpp
-  BitsBoundChecks.cpp
-  ModuleDefinitionBoundChecks.cpp
-  TransactionBoundChecks.cpp
-  SourceUnitValidation.cpp
-  FinalSourceUnitValidation.cpp
   SourceNamespaceValidation.cpp
-  HardwareGrantProof.cpp
   ACIRTransactionOps.cpp
   ACIRModuleOps.cpp
   ACIRQueueOps.cpp
@@ -91,7 +60,6 @@ add_acir_library(ACIRDialect SOURCES
   ACIRNumericProofOps.cpp
   ACIRRegistration.cpp
   SourceEffects.cpp
-  SourceRegistrationEntry.cpp
 )
 add_dependencies(ACIRDialect
   ACIRDialectIncGen
@@ -114,5 +82,71 @@ target_include_directories(ACIRDialect PUBLIC
   "$<INSTALL_INTERFACE:include>"
 )
 target_include_directories(ACIRDialect PRIVATE
+  "${PYCIRCUIT_SOURCE_DIR}/lib"
+)
+
+# ACIRAnalysis: the staged hardware/source analysis above the operations
+# archive (B2 step-2 design r3 §4 MOVE-WHOLE rows, adjusted at IX for the
+# current TU set). It links ACIRDialect because its members drive the
+# generated verifiers (verifyInvariantsImpl, custom verify bodies) and the
+# shared grammar helpers homed in the operations TUs; the reverse edge
+# (ACIRDialect referencing analysis symbols) is forbidden and enforced by
+# pycircuit_verify_layering and the two layer probes.
+add_acir_library(ACIRAnalysis SOURCES
+  HardwareAnalysis.cpp
+  HardwareAnalysisDependencies.cpp
+  HardwareAnalysisValidation.cpp
+  HardwareDependencySerialization.cpp
+  HardwarePhysicalProjection.cpp
+  HardwarePhysicalState.cpp
+  HardwareQueueResources.cpp
+  HardwareSampledAdmission.cpp
+  HardwareSourceCheckPreflight.cpp
+  HardwareSourceChecks.cpp
+  HardwareValueAvailability.cpp
+  HardwareWorkPartition.cpp
+  PackageVerification.cpp
+  SourceHelperAnalysis.cpp
+  SourceMethodAnalysis.cpp
+  SourceMethodResolution.cpp
+  SourceTransactionStateAnalysis.cpp
+  SourceTransactionSummary.cpp
+  CollectionAnalysis.cpp
+  EnumAnalysis.cpp
+  StructBoundChecks.cpp
+  QueueBoundChecks.cpp
+  BitsBoundChecks.cpp
+  ModuleDefinitionBoundChecks.cpp
+  TransactionBoundChecks.cpp
+  TransactionalLinkedChecks.cpp
+  EntryBoundaryEnvelope.cpp
+  SourceUnitValidation.cpp
+  FinalSourceUnitValidation.cpp
+  SourceRegistrationEntry.cpp
+  HardwareGrantProof.cpp
+  "${PYCIRCUIT_SOURCE_DIR}/lib/Analysis/LogicalStateValidation.cpp"
+)
+add_dependencies(ACIRAnalysis
+  ACIRDialectIncGen
+  ACIRAttributesIncGen
+  ACIRTypesIncGen
+  ACIROpsIncGen
+)
+target_link_libraries(ACIRAnalysis PUBLIC
+  ACIRCore
+  ACIRDialect
+  PycircuitStateInterfaces
+  LLVMCore
+  MLIRArithDialect
+  MLIRFuncDialect
+  MLIRSCFDialect
+  MLIRSideEffectInterfaces
+)
+target_include_directories(ACIRAnalysis PUBLIC
+  "$<BUILD_INTERFACE:${PYCIRCUIT_SOURCE_DIR}/include>"
+  "$<BUILD_INTERFACE:${PYCIRCUIT_BINARY_DIR}/include>"
+  "$<INSTALL_INTERFACE:include>"
+)
+target_include_directories(ACIRAnalysis PRIVATE
   "${PYCIRCUIT_SOURCE_DIR}/lib"
 )

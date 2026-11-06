@@ -2,6 +2,7 @@ add_executable(pycircuit-source-unit source-unit.cpp)
 target_link_libraries(pycircuit-source-unit PRIVATE
   pycircuit_project_options
   ACIRDialect
+  ACIRAnalysis
   ACIRSourceCompiler
   MLIRArithDialect
   MLIRFuncDialect
@@ -13,6 +14,7 @@ add_executable(pycircuit-link link.cpp)
 target_link_libraries(pycircuit-link PRIVATE
   pycircuit_project_options
   ACIRDialect
+  ACIRAnalysis
   GFIRDialect
   ACIRSourceCompiler
   MLIRArithDialect
@@ -26,6 +28,7 @@ add_executable(pycircuit-emit emit.cpp)
 target_link_libraries(pycircuit-emit PRIVATE
   pycircuit_project_options
   ACIRDialect
+  ACIRAnalysis
   GFIRDialect
   ACIRCodegen
   MLIRArithDialect
@@ -38,6 +41,7 @@ add_executable(pycircuit-opt opt.cpp)
 target_link_libraries(pycircuit-opt PRIVATE
   pycircuit_project_options
   ACIRDialect
+  ACIRAnalysis
   GFIRDialect
   ACIRSourceCompiler
   ACIRTransforms
