@@ -135,14 +135,26 @@ function(_pyc_link_closure target out)
     # layer target itself. Missing properties and false-constant values
     # (e.g. an entry named OFF) are handled explicitly — a truthiness test
     # would silently drop a real dependency line (r8 review follow-up).
-    set(ifaceEntries "")
-    set(privEntries "")
+    # get_target_property returns the link line as a CMake list, so a
+    # semicolon inside $<BUILD_INTERFACE:A;B> arrives as a list separator:
+    # re-join the raw entries with ';' and run ONE depth-aware split over
+    # the whole line (r8 review follow-up).
+    set(ifaceRaw "")
+    set(privRaw "")
     if(NOT iface STREQUAL "iface-NOTFOUND" AND NOT iface STREQUAL "")
-      _pyc_split_link_entries("${iface}" ifaceEntries)
+      foreach(raw IN LISTS iface)
+        string(APPEND ifaceRaw "${raw};")
+      endforeach()
     endif()
     if(NOT priv STREQUAL "priv-NOTFOUND" AND NOT priv STREQUAL "")
-      _pyc_split_link_entries("${priv}" privEntries)
+      foreach(raw IN LISTS priv)
+        string(APPEND privRaw "${raw};")
+      endforeach()
     endif()
+    set(ifaceEntries "")
+    set(privEntries "")
+    _pyc_split_link_entries("${ifaceRaw}" ifaceEntries)
+    _pyc_split_link_entries("${privRaw}" privEntries)
     foreach(entries "${ifaceEntries}" "${privEntries}")
       foreach(entry IN LISTS entries)
           # Generator expressions may carry real target names
