@@ -18,11 +18,8 @@ EnumOp HardwareAnalysis::lookupEnum(EnumType type) const {
 
 FailureOr<EnumDefinitionView>
 HardwareAnalysis::resolveEnum(EnumType type, Operation *site) const {
-  auto declaration = lookupEnum(type);
-  if (!declaration)
-    return site->emitOpError() << "cannot resolve nominal enum declaration '"
-                               << type.getName().getValue() << "'";
-  return validateEnumDeclaration(declaration, site);
+  return detail::resolveNominalEnum(
+      type, site, [this](StringRef name) { return lookupDefinition(name); });
 }
 
 LogicalResult

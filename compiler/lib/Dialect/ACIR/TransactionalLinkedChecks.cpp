@@ -1,21 +1,71 @@
-// Staged width-closure entry for transactional resource packages (B2 step-2
-// design r3 row). The enum/struct/table and symbolic-Bits payload width
-// checks moved verbatim out of the native verifyTransactionalPackage walk:
-// they require HardwareAnalysis (resolveEnum/lookupStruct/getTableSize move
-// analysis-side), so the native hook keeps only the TypeID-free grammar and
-// the literal-Bits carrier width (verifyLiteralWidthResolves). This TU joins
-// ACIRAnalysis at IX; the compiler-layer transition hook calls the entry
-// declared in TransactionalContracts.h.
+// The transactional closed-payload width verification (r8 review): the
+// enum/struct/table and symbolic-Bits payload width checks over one package
+// under an empty binding context. The shared packed-width core
+// (HardwarePackedWidth.cpp, this target) runs through the closed resolver
+// below, so the native transactional verifier tail calls this entry directly
+// and no analysis-layer symbol participates.
 #include "pycircuit/Dialect/ACIR/ACIRDialect.h"
+#include "pycircuit/Dialect/ACIR/HardwarePackedWidth.h"
 #include "pycircuit/Dialect/ACIR/TransactionalContracts.h"
-#include "pycircuit/Dialect/ACIR/TransactionalClosureHost.h"
-#include "ACIRSourceContracts.h"
-#include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
+#include "Dialect/ACIR/ACIRSourceContracts.h"
+#include "llvm/ADT/StringMap.h"
 #include <functional>
 
 using namespace mlir;
 namespace acir::ac {
 namespace {
+// The closed resolver: the same package walked under an empty binding
+// context, so every width must close from its own declarations and literals.
+// Package symbols are the top-level declarations, collected exactly like the
+// analysis symbol map.
+class ClosedPayloadResolver : public detail::PackedWidthResolver {
+public:
+  explicit ClosedPayloadResolver(mlir::ModuleOp package) : package(package) {
+    if (!package || package->getNumRegions() != 1 ||
+        !package->getRegion(0).hasOneBlock())
+      return;
+    for (Operation &op : *package.getBody())
+      if (auto name = op.getAttrOfType<StringAttr>("sym_name"))
+        symbols.try_emplace(name.getValue(), &op);
+  }
+  mlir::ModuleOp getPackage() const override { return package; }
+  Operation *lookupDefinition(StringRef name) const override {
+    auto found = symbols.find(name);
+    return found == symbols.end() ? nullptr : found->second;
+  }
+  StructOp lookupStruct(StructType type) const override {
+    return dyn_cast_or_null<StructOp>(
+        lookupDefinition(type.getName().getValue()));
+  }
+  FailureOr<EnumDefinitionView> resolveEnum(EnumType type,
+                                            Operation *site) const override {
+    return detail::resolveNominalEnum(
+        type, site, [this](StringRef name) { return lookupDefinition(name); });
+  }
+  FailureOr<Attribute> evaluateStatic(StaticExprAttr expression,
+                                      const HardwareBindings &bindings,
+                                      Operation *site) const override {
+    return detail::evaluateHardwareStatic(*this, expression, bindings, site);
+  }
+  FailureOr<Type> resolveType(Type type, const HardwareBindings &bindings,
+                              Operation *site) const override {
+    return detail::resolveHardwareType(*this, type, bindings, site);
+  }
+  FailureOr<uint64_t> getPackedWidth(Type type,
+                                     const HardwareBindings &bindings,
+                                     Operation *site) const override {
+    return detail::packedHardwareWidth(*this, type, bindings, site);
+  }
+  llvm::SmallVector<std::pair<Attribute, Operation *>> &
+  activeStatic() const override {
+    return active;
+  }
+
+private:
+  mlir::ModuleOp package;
+  llvm::StringMap<Operation *> symbols;
+  mutable llvm::SmallVector<std::pair<Attribute, Operation *>> active;
+};
 Type payload(Type type) {
   if (auto t = dyn_cast<PrimitiveType>(type)) return t.getPayload();
   if (auto t = dyn_cast<StateType>(type)) return t.getPayload();
@@ -29,9 +79,9 @@ FunctionType signature(Operation *op) {
 } // namespace
 
 LogicalResult verifyTransactionalLinkedPackage(mlir::ModuleOp package) {
-  HardwareAnalysis analysis(package);
-  // The moved width-closure half of the native checkType lambda, verbatim:
-  // scope and packed-width rejections keep their exact sites and texts. The
+  ClosedPayloadResolver resolver(package);
+  // The moved width-closure half of the native checkType lambda: scope and
+  // packed-width rejections keep their exact sites and texts. The
   // literal-Bits carrier width subset stays with the native hook, so a
   // literal width that passed there re-resolves here without a duplicate
   // diagnostic; the concrete-payload and module-reference guards re-run so a
@@ -45,7 +95,7 @@ LogicalResult verifyTransactionalLinkedPackage(mlir::ModuleOp package) {
     HardwareBindings bindings;
     bindings.owner = isa<ModuleOp, ModuleImportOp>(site) ? site : site->getParentOfType<ModuleOp>().getOperation();
     if (bindings.owner && failed(detail::verifyHardwareTypeScope(type, bindings.owner))) return failure();
-    return success(succeeded(analysis.getPackedWidth(type, bindings, site)));
+    return success(succeeded(detail::packedHardwareWidth(resolver, type, bindings, site)));
   };
   auto fail = package.walk([&](Operation *op) {
     if (op == package.getOperation()) return WalkResult::advance();
@@ -58,19 +108,5 @@ LogicalResult verifyTransactionalLinkedPackage(mlir::ModuleOp package) {
     return WalkResult::advance();
   });
   return failure(fail.wasInterrupted());
-}
-} // namespace acir::ac
-
-namespace acir::ac {
-mlir::LogicalResult StagedTransactionalClosure::verifyLinkedWidths(
-    mlir::ModuleOp package) const {
-  return verifyTransactionalLinkedPackage(package);
-}
-
-void attachStagedTransactionalClosure(mlir::DialectRegistry &registry) {
-  registry.addExtension(+[](mlir::MLIRContext *context, ACIRDialect *dialect) {
-    dialect->addInterface(
-        std::make_unique<StagedTransactionalClosure>(dialect));
-  });
 }
 } // namespace acir::ac

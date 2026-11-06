@@ -5,6 +5,7 @@
 // members after the IX reroute severed the native staged calls
 // (CollectionLocalVerifies.cpp keeps only local grammar).
 #include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
+#include "AnalysisResolver.h"
 #include "ACIRSourceContracts.h"
 #include "pycircuit/Dialect/ACIR/ACIROps.h"
 
@@ -38,12 +39,6 @@ bool equivalentTypes(TypeRange lhs, TypeRange rhs) {
     if (!areEquivalentHardwareTypes(left, right))
       return false;
   return true;
-}
-uint64_t product(ArrayRef<uint64_t> shape) {
-  uint64_t n = 1;
-  for (auto x : shape)
-    n *= x;
-  return n;
 }
 uint64_t indexWidth(uint64_t n) {
   return std::max<uint64_t>(1, llvm::APInt(64, n - 1).getActiveBits());
@@ -229,7 +224,7 @@ viewShape(const HardwareAnalysis &a, StringRef kind, DictionaryAttr p,
     auto shape = a.resolveShape(cast<ArrayAttr>(p.get("shape")), b, site);
     if (failed(shape))
       return failure();
-    if (product(*shape) != product(in))
+    if (detail::shapeProduct(*shape) != detail::shapeProduct(in))
       return site->emitOpError() << "reshape must preserve element count";
     return *shape;
   }
@@ -289,43 +284,18 @@ viewShape(const HardwareAnalysis &a, StringRef kind, DictionaryAttr p,
 
 FailureOr<SmallVector<uint64_t>> HardwareAnalysis::resolveShape(
     ArrayAttr shape, const HardwareBindings &bindings, Operation *site) const {
-  if (failed(detail::shapeSchema(shape, [&] { return site->emitOpError(); })))
-    return failure();
-  SmallVector<uint64_t> result;
-  uint64_t n = 1;
-  for (auto raw : shape) {
-    auto value = evaluateStatic(cast<StaticExprAttr>(raw), bindings, site);
-    if (failed(value))
-      return failure();
-    auto integer = dyn_cast<MathIntAttr>(*value);
-    if (!integer)
-      return site->emitOpError() << "table extent requires integer";
-    llvm::APSInt v(integer.getCanonicalValue());
-    if (v.isNegative() || v.isZero() || v.getActiveBits() > 63)
-      return site->emitOpError()
-             << "table extent must be positive and fit signed 64 bits";
-    uint64_t extent = v.getZExtValue();
-    if (n > uint64_t(std::numeric_limits<int64_t>::max()) / extent)
-      return site->emitOpError()
-             << "table element count exceeds signed 64 bits";
-    n *= extent;
-    result.push_back(extent);
-  }
-  return result;
+  return detail::resolveHardwareShape(AnalysisResolver(*this), shape, bindings,
+                                      site);
 }
 FailureOr<SmallVector<uint64_t>> HardwareAnalysis::getTableShape(
     TableType table, const HardwareBindings &bindings, Operation *site) const {
-  auto resolved = resolveType(table, bindings, site);
-  if (failed(resolved))
-    return failure();
-  return resolveShape(cast<TableType>(*resolved).getShape(), bindings, site);
+  return detail::hardwareTableShape(AnalysisResolver(*this), table, bindings,
+                                    site);
 }
 FailureOr<uint64_t> HardwareAnalysis::getTableSize(
     TableType table, const HardwareBindings &bindings, Operation *site) const {
-  auto shape = getTableShape(table, bindings, site);
-  if (failed(shape))
-    return failure();
-  return product(*shape);
+  return detail::hardwareTableSize(AnalysisResolver(*this), table, bindings,
+                                   site);
 }
 FailureOr<uint64_t>
 HardwareAnalysis::getViewSourceOrdinal(TableViewOp view, uint64_t ordinal,
@@ -334,7 +304,7 @@ HardwareAnalysis::getViewSourceOrdinal(TableViewOp view, uint64_t ordinal,
   auto out = getTableShape(view.getResult().getType(), bindings, view);
   if (failed(in) || failed(out))
     return failure();
-  if (ordinal >= product(*out))
+  if (ordinal >= detail::shapeProduct(*out))
     return view.emitOpError() << "view output ordinal out of range";
   SmallVector<uint64_t> coords(out->size()), source(in->size());
   for (size_t i = out->size(); i-- > 0;) {
@@ -574,7 +544,7 @@ HardwareAnalysis::verifyCollectionOperation(Operation *op,
         return error() << "table.map ordinal requires bits";
       if (requireResolved || isStaticEvaluable(map.getShape(), bindings)) {
         auto s = resolveShape(map.getShape(), bindings, op);
-        if (failed(s) || failed(width(ordinal, indexWidth(product(*s)))))
+        if (failed(s) || failed(width(ordinal, indexWidth(detail::shapeProduct(*s)))))
           return failure();
       }
     }
@@ -607,7 +577,7 @@ HardwareAnalysis::verifyCollectionOperation(Operation *op,
     if (requireResolved || isStaticEvaluable(index.getShape(), bindings)) {
       auto s = resolveShape(index.getShape(), bindings, op);
       if (failed(s) ||
-          failed(width(index.getResult().getType(), countWidth(product(*s)))))
+          failed(width(index.getResult().getType(), countWidth(detail::shapeProduct(*s)))))
         return failure();
     }
   } else if (auto read = dyn_cast<TableReadOp>(op)) {

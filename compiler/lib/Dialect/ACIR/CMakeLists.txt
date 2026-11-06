@@ -42,6 +42,8 @@ add_acir_library(ACIRDialect SOURCES
   SourceStaticRecordConstructors.cpp
   SourceStaticDomains.cpp
   TransactionalContracts.cpp
+  HardwarePackedWidth.cpp
+  TransactionalLinkedChecks.cpp
   ACIRModuleContracts.cpp
   EntryBoundary.cpp
   SourceNamespaceValidation.cpp
@@ -118,7 +120,6 @@ add_acir_library(ACIRAnalysis SOURCES
   BitsBoundChecks.cpp
   ModuleDefinitionBoundChecks.cpp
   TransactionBoundChecks.cpp
-  TransactionalLinkedChecks.cpp
   EntryBoundaryEnvelope.cpp
   SourceUnitValidation.cpp
   FinalSourceUnitValidation.cpp

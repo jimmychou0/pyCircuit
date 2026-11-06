@@ -1,5 +1,4 @@
 #include "pycircuit/Dialect/ACIR/TransactionalContracts.h"
-#include "pycircuit/Dialect/ACIR/TransactionalClosureHost.h"
 #include "ACIRSourceContracts.h"
 #include "IR/StateDeclarationContracts.h"
 #include "pycircuit/Dialect/ACIR/SourceEffects.h"
@@ -391,10 +390,8 @@ LogicalResult verifyTransactionalPackage(mlir::ModuleOp package) {
   // r3 row): version/shape/stage pairing above, the analysis-free
   // linked-primitive rejection, the module-reference declaration lookup, the
   // concrete-payload grammar and the literal-Bits carrier width. The
-  // enum/struct/table and symbolic-Bits payload widths require
-  // HardwareAnalysis and run from the staged entry at the analysis-side
-  // acceptance (the hardware source-check preflight plan build); the native
-  // hook never references the analysis target.
+  // enum/struct/table and symbolic-Bits payload widths run from the shared
+  // packed-width core (this target) at the tail of this walk.
   std::function<LogicalResult(Type, Operation *)> checkType = [&](Type type, Operation *site) -> LogicalResult {
     if (linked && isa<PrimitiveType>(type))
       return site->emitOpError("linked package cannot retain primitive resources");
@@ -527,18 +524,9 @@ LogicalResult verifyTransactionalPackage(mlir::ModuleOp package) {
   for (Operation &declaration : *package.getBody())
     if (isa<ModuleOp, ModuleImportOp>(declaration) && failed(summarize(&declaration))) return failure();
 
-  // The payload-closure half is analysis-owned (r8 review): the registered
-  // host runs it as part of the supported structural verification entry;
-  // without a host the closure cannot run and the package is rejected.
-  auto *dialect = package->getContext()->getLoadedDialect("ac");
-  auto *host = dialect
-                   ? dialect->getRegisteredInterface<TransactionalClosureHost>()
-                   : nullptr;
-  if (!host)
-    return package.emitOpError()
-           << "transactional payload closure requires the staged acceptance "
-              "host";
-  return host->verifyLinkedWidths(package);
-  return success();
+  // The payload-closure half is dialect-owned (r8 review): the staged
+  // width-closure TU joins this target, so the supported structural
+  // verification entry runs the complete closure directly.
+  return verifyTransactionalLinkedPackage(package);
 }
 } // namespace acir::ac

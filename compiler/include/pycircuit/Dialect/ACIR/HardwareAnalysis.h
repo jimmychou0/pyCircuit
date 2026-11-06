@@ -3,6 +3,7 @@
 
 #include "mlir/IR/BuiltinOps.h"
 #include "pycircuit/Dialect/ACIR/HardwareAnalysisContext.h"
+#include "pycircuit/Dialect/ACIR/HardwarePackedWidth.h"
 #include "pycircuit/Dialect/ACIR/ACIROps.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
@@ -211,19 +212,22 @@ struct ModuleAnalysis {
 };
 
 /// All facts refer to the one verified module package and its original SSA.
-class HardwareAnalysis {
+/// The class is the binding-aware PackedWidthResolver: the packed-width core
+/// runs through these members, and the shared core lives in
+/// HardwarePackedWidth.cpp (r8 review).
+class HardwareAnalysis : public detail::PackedWidthResolver {
 public:
   explicit HardwareAnalysis(mlir::ModuleOp package);
   explicit HardwareAnalysis(mlir::Operation *operation)
       : HardwareAnalysis(mlir::cast<mlir::ModuleOp>(operation)) {}
-  mlir::ModuleOp getPackage() const { return package; }
+  mlir::ModuleOp getPackage() const override { return package; }
   llvm::SmallVector<ModuleOp> getDefinitions() const;
   llvm::SmallVector<StructOp> getStructs() const;
-  mlir::Operation *lookupDefinition(llvm::StringRef name) const;
-  StructOp lookupStruct(StructType type) const;
+  mlir::Operation *lookupDefinition(llvm::StringRef name) const override;
+  StructOp lookupStruct(StructType type) const override;
   EnumOp lookupEnum(EnumType type) const;
   mlir::FailureOr<EnumDefinitionView> resolveEnum(EnumType type,
-                                                  mlir::Operation *site) const;
+                                                  mlir::Operation *site) const override;
   mlir::Operation *resolveCallee(InstanceOp instance) const;
   mlir::Operation *resolveCallee(CollectionOp collection) const;
   mlir::FailureOr<llvm::SmallVector<uint64_t>>
@@ -241,7 +245,7 @@ public:
   llvm::StringRef getPrimitiveKind(mlir::Operation *definition) const;
   mlir::FailureOr<mlir::Attribute>
   evaluateStatic(StaticExprAttr expression, const HardwareBindings &bindings,
-                 mlir::Operation *site) const;
+                 mlir::Operation *site) const override;
   /// Substitute static actuals without changing immutable source provenance.
   mlir::Attribute substituteAttribute(mlir::Attribute attribute,
                                       const HardwareBindings &bindings) const;
@@ -249,10 +253,15 @@ public:
                          const HardwareBindings &bindings) const;
   mlir::FailureOr<mlir::Type> resolveType(mlir::Type type,
                                           const HardwareBindings &bindings,
-                                          mlir::Operation *site) const;
+                                          mlir::Operation *site) const override;
   mlir::FailureOr<uint64_t> getPackedWidth(mlir::Type type,
                                            const HardwareBindings &bindings,
-                                           mlir::Operation *site) const;
+                                           mlir::Operation *site) const override;
+  /// The resolver's shared demanded-expression cycle guard (r8 review).
+  llvm::SmallVector<std::pair<mlir::Attribute, mlir::Operation *>> &
+  activeStatic() const override {
+    return demandedStatic;
+  }
   /// Shape-only paths retain opaque type formals and symbolic bit widths.
   mlir::FailureOr<llvm::SmallVector<FieldPath>> getFieldPaths(
       mlir::Type type, const HardwareBindings &bindings, mlir::Operation *site,
@@ -360,7 +369,7 @@ private:
   llvm::SmallVector<StructOp> structures;
   mutable llvm::DenseMap<mlir::Type, llvm::SmallVector<PackedLeaf>> layouts;
   mutable llvm::SmallVector<std::pair<mlir::Attribute, mlir::Operation *>>
-      activeStatic;
+      demandedStatic;
 };
 
 /// Verify common hardware shape, binding, dependency and execution contracts.

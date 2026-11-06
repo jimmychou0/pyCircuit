@@ -3,7 +3,6 @@
 #include "ACIRSourceContracts.h"
 #include "HardwareSampledAdmission.h"
 #include "pycircuit/Analysis/LogicalStateValidation.h"
-#include "pycircuit/Dialect/ACIR/TransactionalContracts.h"
 #include "mlir/IR/Verifier.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/ScopeExit.h"
@@ -52,14 +51,6 @@ public:
       if (failed(rawPreflight()))
         return failure();
     }
-    // Transactional resource packages never reach the legacy routed/final
-    // stage check below; their staged width closure (the family-7
-    // verifyTransactionalLinkedPackage entry) runs here so the
-    // linked-package acceptance keeps its tier and diagnostic texts after
-    // the native hook stopped referencing the analysis target.
-    if (package->hasAttr("ac.transactional") &&
-        failed(verifyTransactionalLinkedPackage(package)))
-      return failure();
     if (failed(verifyHardwarePackageStage(analysis, profile))) return failure();
     {
       NativeSourceCheckScope native(analysis, validation, budget, nativeChecks);

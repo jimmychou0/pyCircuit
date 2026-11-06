@@ -1,9 +1,7 @@
 #ifndef PYCIRCUIT_DIALECT_ACIR_TRANSACTIONALCONTRACTS_H
 #define PYCIRCUIT_DIALECT_ACIR_TRANSACTIONALCONTRACTS_H
-#include "pycircuit/Dialect/ACIR/TransactionalClosureHost.h"
-#include "mlir/IR/DialectRegistry.h"
-#include "pycircuit/Dialect/ACIR/ACIROps.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "pycircuit/Dialect/ACIR/ACIROps.h"
 namespace acir::ac {
 // Presence selects this contract; malformed markers never select old semantics.
 bool isTransactionalPackage(mlir::Operation *operation);
@@ -11,34 +9,13 @@ bool isLinkedTransactionalPackage(mlir::Operation *operation);
 bool transactionalTypesEqual(mlir::Type lhs, mlir::Type rhs);
 // V2 verifies resource/instance structure only. It is not execution admission.
 mlir::LogicalResult verifyTransactionalPackage(mlir::ModuleOp package);
-// Staged width-closure entry over the same package walk (B2 step-2 design r3
-// row): the enum/struct/table and symbolic-Bits payload widths that require
-// HardwareAnalysis live here, declared reachable from the compiler layer for
-// the unlinked→linked transition acceptance. The analysis-side acceptance
-// (the hardware source-check preflight plan build) invokes it for packages
-// carrying ac.transactional; the pipeline transition flow will call the same
-// entry when it exists.
+// The payload-closure walk over the same package (B2 step-2 design r3 row):
+// the enum/struct/table and symbolic-Bits payload widths under an empty
+// binding context, run by the shared packed-width core from this dialect
+// target. The native verifyTransactionalPackage tail calls it directly; it
+// remains the staged linked-package acceptance entry.
 mlir::LogicalResult verifyTransactionalLinkedPackage(mlir::ModuleOp package);
 mlir::LogicalResult verifyTransactionalOperation(mlir::Operation *operation);
 mlir::LogicalResult verifyTransactionalRegions(mlir::Operation *operation);
 } // namespace acir::ac
 #endif
-
-// Dialect-extension implementation of the staged transactional payload
-// closure (r8 review). Register it on the tool's dialect registry so the
-// native transactional verifier reaches the analysis-owned closure:
-//   dialects.addExtension<acir::ac::StagedTransactionalClosure>();
-namespace acir::ac {
-
-class StagedTransactionalClosure : public TransactionalClosureHost {
-public:
-  explicit StagedTransactionalClosure(mlir::Dialect *dialect)
-      : TransactionalClosureHost(dialect) {}
-  mlir::LogicalResult
-  verifyLinkedWidths(mlir::ModuleOp package) const override;
-};
-
-/// Register the staged closure host as an ac-dialect extension so the
-/// native transactional verifier reaches the analysis-owned closure.
-void attachStagedTransactionalClosure(mlir::DialectRegistry &registry);
-} // namespace acir::ac

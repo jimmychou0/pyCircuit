@@ -5,6 +5,4 @@
 // Explicit interface identity for the grammar-cache host, emitted in the
 // shared interfaces target (B2 step-2 design r9 host hardening).
 #include "pycircuit/Dialect/ACIR/GrammarCacheHost.h"
-#include "pycircuit/Dialect/ACIR/TransactionalClosureHost.h"
 MLIR_DEFINE_EXPLICIT_TYPE_ID(::acir::ac::GrammarCacheHost)
-MLIR_DEFINE_EXPLICIT_TYPE_ID(::acir::ac::TransactionalClosureHost)
