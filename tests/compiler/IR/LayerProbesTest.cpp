@@ -4,6 +4,8 @@
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/MLIRContext.h"
 
+#include <cstdint>
+
 #include "gtest/gtest.h"
 
 #if defined(PYCIRCUIT_CORE_PROBE)
