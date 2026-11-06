@@ -191,10 +191,16 @@ FailureOr<SourceUnitStructure> verifyStructure(mlir::ModuleOp unit, bool body,
   HardwareAnalysis analysis(unit);
   HardwareBindings bindings;
   auto semanticWalk = unit.walk([&](Operation *operation) {
-    if (isa<SourceStateReadOp, SourceStateWriteOp, SourceFormalWriteOp,
+    // Transaction-surface operations keep their DEFINITE facts at the
+    // source stage (r8 review follow-up): the tolerant dual-mode entry
+    // checks placement-lexical agreements such as the read result against
+    // the selected state payload without requiring actual bindings; the
+    // resolution-dependent obligations stay deferred to the routing
+    // preparation (requireResolved=false).
+    bool surfaceControl =
+        isa<SourceStateReadOp, SourceStateWriteOp, SourceFormalWriteOp,
             SourceMethodOp, SourceMethodCallOp, SourceBranchOp,
-            SourceTransactionOp>(operation))
-      return WalkResult::advance();
+            SourceTransactionOp>(operation);
     // The family entries expect the enclosing module's scope: pre-split
     // each native wrapper bound the parent module as the owner (r8 review
     // fix follow-up — an empty owner scope rejects legal symbolic reads).
@@ -209,7 +215,9 @@ FailureOr<SourceUnitStructure> verifyStructure(mlir::ModuleOp unit, bool body,
     bool bitsWidthFamily = isa<BitsUnaryOp, BitsBinaryOp, BitsCompareOp,
                                BitsSelectOp>(operation);
     LogicalResult result = success();
-    if (enumFamily)
+    if (surfaceControl)
+      result = analysis.verifyTransactionSurfaceOperation(operation, local);
+    else if (enumFamily)
       result = analysis.verifyEnumValueOperation(operation, local);
     else if (collectionFamily)
       result = analysis.verifyCollectionOperation(operation, local);

@@ -1,4 +1,5 @@
 #include "pycircuit/Dialect/ACIR/ACIRDialect.h"
+#include "pycircuit/Dialect/ACIR/TransactionalContracts.h"
 #include "pycircuit/Dialect/GFIR/GFIRDialect.h"
 #include "pycircuit/Transforms/Passes.h"
 #include "Compiler/SourceRuleWrites.h"
@@ -15,6 +16,9 @@ int main(int argc, char **argv) {
   dialects.insert<acir::ac::ACIRDialect, acir::gfir::GFIRDialect,
                   mlir::arith::ArithDialect, mlir::func::FuncDialect,
                   mlir::scf::SCFDialect>();
+  // The staged transactional payload closure rides the native verifier
+  // through this dialect extension (r8 review).
+  dialects.addExtension<acir::ac::StagedTransactionalClosure>();
   acir::registerACIRPasses();
   acir::compiler::detail::registerSourceCompilerPasses();
   acir::compiler::detail::registerSourceBindingsPass();

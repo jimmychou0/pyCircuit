@@ -1471,6 +1471,8 @@ private:
           result = analysis.verifyCollectionOperation(op, local);
         else if (isa<StructCreateOp, StructGetOp>(op))
           result = analysis.verifyStructOperation(op, local);
+        else if (isa<BitsUnaryOp, BitsBinaryOp, BitsCompareOp, BitsSelectOp>(op))
+          result = analysis.verifyBitsSymbolicWidths(op);
         if (failed(result))
           return WalkResult::interrupt();
         return WalkResult::advance();

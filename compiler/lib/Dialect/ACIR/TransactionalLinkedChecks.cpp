@@ -7,6 +7,7 @@
 // ACIRAnalysis at IX; the compiler-layer transition hook calls the entry
 // declared in TransactionalContracts.h.
 #include "pycircuit/Dialect/ACIR/TransactionalContracts.h"
+#include "pycircuit/Dialect/ACIR/TransactionalClosureHost.h"
 #include "ACIRSourceContracts.h"
 #include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
 #include <functional>
@@ -58,3 +59,8 @@ LogicalResult verifyTransactionalLinkedPackage(mlir::ModuleOp package) {
   return failure(fail.wasInterrupted());
 }
 } // namespace acir::ac
+
+mlir::LogicalResult StagedTransactionalClosure::verifyLinkedWidths(
+    mlir::ModuleOp package) const {
+  return verifyTransactionalLinkedPackage(package);
+}

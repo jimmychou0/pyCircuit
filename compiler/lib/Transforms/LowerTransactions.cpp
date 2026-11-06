@@ -8562,13 +8562,6 @@ public:
   }
   void runOnOperation() final {
     auto input = getOperation();
-    // The transactional resource path owns its payload-closure acceptance
-    // (r8 review fix): the legacy hardware preflight rejects transactional
-    // packages outright, so the staged closure entry runs here — the same
-    // tier that previously carried it inside the native walk.
-    if (input->hasAttr("ac.transactional") &&
-        failed(ac::verifyTransactionalLinkedPackage(input)))
-      return signalPassFailure();
     if (auto stage = input->getAttrOfType<StringAttr>("ac.stage");
         stage && stage.getValue() == "routed") {
       if (failed(ac::verifyRoutedPackage(input))) signalPassFailure();

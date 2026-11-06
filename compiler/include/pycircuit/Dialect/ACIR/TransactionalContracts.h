@@ -21,3 +21,14 @@ mlir::LogicalResult verifyTransactionalOperation(mlir::Operation *operation);
 mlir::LogicalResult verifyTransactionalRegions(mlir::Operation *operation);
 } // namespace acir::ac
 #endif
+
+// Dialect-extension implementation of the staged transactional payload
+// closure (r8 review). Register it on the tool's dialect registry so the
+// native transactional verifier reaches the analysis-owned closure:
+//   dialects.addExtension<acir::ac::StagedTransactionalClosure>();
+class StagedTransactionalClosure : public TransactionalClosureHost {
+public:
+  using TransactionalClosureHost::TransactionalClosureHost;
+  mlir::LogicalResult
+  verifyLinkedWidths(mlir::ModuleOp package) const override;
+};

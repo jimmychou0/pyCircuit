@@ -1,4 +1,5 @@
 #include "pycircuit/Dialect/ACIR/TransactionalContracts.h"
+#include "pycircuit/Dialect/ACIR/TransactionalClosureHost.h"
 #include "ACIRSourceContracts.h"
 #include "IR/StateDeclarationContracts.h"
 #include "pycircuit/Dialect/ACIR/SourceEffects.h"
@@ -378,6 +379,19 @@ LogicalResult verifyTransactionalPackage(mlir::ModuleOp package) {
     return WalkResult::advance();
   });
   if (fail.wasInterrupted()) return failure();
+  // The payload-closure half is analysis-owned (r8 review): the registered
+  // host runs it as part of the supported structural verification entry;
+  // without a host the closure cannot run and the package is rejected.
+  auto *dialect = llvm::dyn_cast_or_null<ACIRDialect>(
+      package->getContext()->getLoadedDialect("ac"));
+  auto *host = dialect
+                   ? dialect->getRegisteredInterface<TransactionalClosureHost>()
+                   : nullptr;
+  if (!host)
+    return package.emitOpError()
+           << "transactional payload closure requires the staged acceptance "
+              "host";
+  return host->verifyLinkedWidths(package);
   llvm::StringSet<> symbols;
   for (Operation &op : *package.getBody()) {
     if (!isa<ModuleOp, ModuleImportOp, StructOp, EnumOp>(op))

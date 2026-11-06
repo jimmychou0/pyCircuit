@@ -107,7 +107,10 @@ function(_pyc_link_closure target out)
             string(REGEX REPLACE "\\$<" "\n" remainder "${remainder}")
             string(REGEX REPLACE ">" "\n" remainder "${remainder}")
           endwhile()
-          string(REGEX MATCHALL "[A-Za-z0-9_.:-]+" names "${remainder}")
+          # Tokens exclude colons: a leading ":Target" or "LINK_ONLY:Target"
+          # fragment must never be taken for the target itself (r8 review
+          # follow-up).
+          string(REGEX MATCHALL "[A-Za-z0-9_.-]+" names "${remainder}")
           foreach(name IN LISTS names)
             if(TARGET "${name}")
               get_target_property(_pyc_dep_aliased "${name}" ALIASED_TARGET)
