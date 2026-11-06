@@ -12,8 +12,10 @@ mlir::LogicalResult verifyTransactionalPackage(mlir::ModuleOp package);
 // Staged width-closure entry over the same package walk (B2 step-2 design r3
 // row): the enum/struct/table and symbolic-Bits payload widths that require
 // HardwareAnalysis live here, declared reachable from the compiler layer for
-// the unlinked→linked transition acceptance. The native hook invokes it after
-// its TypeID-free grammar and literal-Bits carrier-width subsets.
+// the unlinked→linked transition acceptance. The analysis-side acceptance
+// (the hardware source-check preflight plan build) invokes it for packages
+// carrying ac.transactional; the pipeline transition flow will call the same
+// entry when it exists.
 mlir::LogicalResult verifyTransactionalLinkedPackage(mlir::ModuleOp package);
 mlir::LogicalResult verifyTransactionalOperation(mlir::Operation *operation);
 mlir::LogicalResult verifyTransactionalRegions(mlir::Operation *operation);

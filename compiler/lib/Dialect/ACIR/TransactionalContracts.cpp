@@ -391,7 +391,9 @@ LogicalResult verifyTransactionalPackage(mlir::ModuleOp package) {
   // linked-primitive rejection, the module-reference declaration lookup, the
   // concrete-payload grammar and the literal-Bits carrier width. The
   // enum/struct/table and symbolic-Bits payload widths require
-  // HardwareAnalysis and run from the staged entry invoked below.
+  // HardwareAnalysis and run from the staged entry at the analysis-side
+  // acceptance (the hardware source-check preflight plan build); the native
+  // hook never references the analysis target.
   std::function<LogicalResult(Type, Operation *)> checkType = [&](Type type, Operation *site) -> LogicalResult {
     if (linked && isa<PrimitiveType>(type))
       return site->emitOpError("linked package cannot retain primitive resources");
@@ -523,6 +525,6 @@ LogicalResult verifyTransactionalPackage(mlir::ModuleOp package) {
   };
   for (Operation &declaration : *package.getBody())
     if (isa<ModuleOp, ModuleImportOp>(declaration) && failed(summarize(&declaration))) return failure();
-  return verifyTransactionalLinkedPackage(package);
+  return success();
 }
 } // namespace acir::ac
