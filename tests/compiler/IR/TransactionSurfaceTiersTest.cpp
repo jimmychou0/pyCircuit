@@ -109,9 +109,10 @@ std::string vocabulary(StringRef owner) {
 // `guardRead` is the guard region's state read result type; the mutated !b1
 // form makes the definite payload disagreement the source stage owns. The
 // parameters are the value width W, the Table extent N and the index width
-// M; the Method's body truncates the value formal to !bM and addresses the
-// Table with it, so the Method signature and its formal constraint stay the
-// W-shaped contract of the scalar cases.
+// M; the Method's body truncates the value formal to !bM, reads the Table
+// whole-owner and selects the lane with it, and writes the lane back
+// through the indexed state write. The Method signature and its formal
+// constraint stay the W-shaped contract of the scalar cases.
 std::string counter(StringRef owner, StringRef guardRead = "!b8",
                     StringRef guardYieldType = "!b1",
                     StringRef guardYieldValue = "%path") {
@@ -148,11 +149,12 @@ std::string counter(StringRef owner, StringRef guardRead = "!b8",
          "selectors = [], occurrence = #counter} : (!b1, !b8) -> ()\n"
          "      %index = \"ac.bits.resize\"(%value) {mode = \"trunc\"} : "
          "(!bw) -> !bM\n"
-         "      %cur = \"ac.state.read\"(%path, %index) {state = \"entries\", "
-         "selectors = [{index = 0 : i64}], occurrence = #counter} : "
-         "(!b1, !bM) -> !b8\n"
+         "      %table = \"ac.state.read\"(%path) {state = \"entries\", "
+         "selectors = [], occurrence = #counter} : (!b1) -> !tableN\n"
+         "      %cur = \"ac.table.get\"(%table, %index) : (!tableN, !bM) -> "
+         "(!b8, !b1)\n"
          "      %one = \"ac.bits.constant\"() {value = #w1} : () -> !b8\n"
-         "      %next = \"ac.bits.binary\"(%cur, %one) {opcode = \"add\"} : "
+         "      %next = \"ac.bits.binary\"(%cur#0, %one) {opcode = \"add\"} : "
          "(!b8, !b8) -> !b8\n"
          "      \"ac.state.write\"(%path, %next, %index) {state = \"entries\", "
          "selectors = [{index = 0 : i64}], occurrence = #counter} : "
