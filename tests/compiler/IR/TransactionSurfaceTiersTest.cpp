@@ -51,7 +51,6 @@ std::string vocabulary(StringRef owner) {
          "\"integer\", value = #ac.math_int<4>}, " +
          origin +
          "}>\n"
-         "}>\n"
          "#w8 = #ac.static_expr<{kind = \"literal\", value = {kind = "
          "\"integer\", value = #ac.math_int<8>}, " +
          origin +
