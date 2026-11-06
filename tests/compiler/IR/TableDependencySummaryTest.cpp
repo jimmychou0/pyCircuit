@@ -319,14 +319,23 @@ TEST_F(TableDependencySummaryTest,
   ac::HardwareBindings bindings;
   bindings.owner = module;
   EXPECT_TRUE(failed(analysis.verifyInstance(instance, bindings)));
+  // The view payload agreement moved to the staged collection entry (r3
+  // rows); the native verification is grammar-only, so the malformed shape
+  // is rejected there instead of at parse-time verification.
   auto malformed = parse(R"mlir(
     "ac.module"() ({
     ^bb0(%input: !t3):
       %out = "ac.table.view"(%input) {kind = "reshape", parameters = {shape = [#w2]}} : (!t3) -> !t2
       "ac.yield"(%out) : (!t2) -> ()
     }) {sym_name = "unit.BadView", source_owner = {package = "", path = "unit.py"}, parameters = [], type_parameters = [], function_type = (!t3) -> !t2, input_names = ["input"], output_names = ["out"]} : () -> ()
-  )mlir");
-  EXPECT_FALSE(malformed);
+  )mlir", /*verify=*/false);
+  ASSERT_TRUE(malformed);
+  ac::HardwareAnalysis malformedAnalysis(*malformed);
+  auto badView = *malformed->walk([&](ac::TableViewOp view) {
+    return mlir::WalkResult::interrupt();
+  });
+  EXPECT_TRUE(failed(malformedAnalysis.verifyCollectionOperation(
+      &badView, {}, /*requireResolved=*/true)));
 }
 
 TEST_F(TableDependencySummaryTest,
