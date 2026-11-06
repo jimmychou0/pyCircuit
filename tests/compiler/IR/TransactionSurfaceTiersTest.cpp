@@ -369,7 +369,7 @@ std::string tableCounter(StringRef owner) {
                      "occurrence = #counter} : (!b1, !bw) -> !b8\n"
                      "      \"ac.state.write\"(%path, %old, %value) {state = "
                      "\"entries\", selectors = [{index = 0 : i64}], "
-                     "occurrence = #counter} : (!b1, !bw, !b8) -> ()\n"
+                     "occurrence = #counter} : (!b1, !b8, !bw) -> ()\n"
                      "      \"ac.yield\"(%old) : (!b8) -> ()\n"
                      "    }) {sym_name = \"add\", function_type = (!bw) -> "
                      "!b8, argument_names = [\"value\"], ac.parameters = "
