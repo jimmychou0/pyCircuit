@@ -77,13 +77,8 @@ std::string vocabulary(StringRef owner) {
          "!b1 = !ac.bits<#w1>\n"
          "!b8 = !ac.bits<#w8>\n"
          "!bw = !ac.bits<#wW>\n"
-         "!bN = !ac.bits<#wN>\n"
          "!bM = !ac.bits<#wM>\n"
          "!tableN = !ac.table<[#wN], !b8>\n"
-         "!b3 = !ac.bits<#w3>\n"
-         "!table3 = !ac.table<[#w3], !b8>\n"
-         "!table4 = !ac.table<[#w4], !b8>\n"
-         "!lanes = !ac.table<[#wW], !b8>\n"
          "#counter = {site = {definition = @" + owner.str() +
          ", ast_path = []}, expansion = []}\n"
          "#entries = {site = {definition = @" + owner.str() +
@@ -100,8 +95,6 @@ std::string vocabulary(StringRef owner) {
          "#byte_constraint = {kind = \"hardware\", type = !b8, source_kind = "
          "\"fixed_bits\"}\n"
          "#value_constraint = {kind = \"hardware\", type = !bw, source_kind = "
-         "\"fixed_bits\"}\n"
-         "#value_constraintM = {kind = \"hardware\", type = !bM, source_kind = "
          "\"fixed_bits\"}\n";
 }
 
