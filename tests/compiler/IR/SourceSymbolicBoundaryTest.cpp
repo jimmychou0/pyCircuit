@@ -20,16 +20,20 @@ namespace ac = acir::ac;
 using namespace mlir;
 
 const char *types = R"mlir(
+#w2 = #ac.static_expr<{kind = "literal", location = {path = "unit.py", line = 1 : i64, column = 1 : i64, end_line = 1 : i64, end_column = 2 : i64}, origin = {site = {definition = @unit.Top, ast_path = []}, expansion = []}, value = {kind = "integer", value = #ac.math_int<2>}}>
+#w3 = #ac.static_expr<{kind = "literal", location = {path = "unit.py", line = 1 : i64, column = 1 : i64, end_line = 1 : i64, end_column = 2 : i64}, origin = {site = {definition = @unit.Top, ast_path = []}, expansion = []}, value = {kind = "integer", value = #ac.math_int<3>}}>
 #w8 = #ac.static_expr<{kind = "literal", location = {path = "unit.py", line = 1 : i64, column = 1 : i64, end_line = 1 : i64, end_column = 2 : i64}, origin = {site = {definition = @unit.Generic, ast_path = []}, expansion = []}, value = {kind = "integer", value = #ac.math_int<8>}}>
+#one = #ac.static_expr<{kind = "literal", location = {path = "unit.py", line = 1 : i64, column = 1 : i64, end_line = 1 : i64, end_column = 2 : i64}, origin = {site = {definition = @unit.Top, ast_path = []}, expansion = []}, value = {kind = "integer", value = #ac.math_int<1>}}>
 #n = #ac.static_expr<{kind = "reference", location = {path = "unit.py", line = 1 : i64, column = 1 : i64, end_line = 1 : i64, end_column = 2 : i64}, origin = {site = {definition = @unit.Generic, ast_path = []}, expansion = []}, ref = {kind = "parameter", owner = @unit.Generic, name = "N"}}>
-#zero = #ac.static_expr<{kind = "literal", location = {path = "unit.py", line = 1 : i64, column = 1 : i64, end_line = 1 : i64, end_column = 2 : i64}, origin = {site = {definition = @unit.Generic, ast_path = []}, expansion = []}, value = {kind = "integer", value = #ac.math_int<0>}}>
+#three = #ac.static_expr<{kind = "literal", location = {path = "unit.py", line = 1 : i64, column = 1 : i64, end_line = 1 : i64, end_column = 2 : i64}, origin = {site = {definition = @unit.Top, ast_path = []}, expansion = []}, value = {kind = "integer", value = #ac.math_int<3>}}>
 !b8 = !ac.bits<#w8>
 !lanes = !ac.table<[#n], !b8>
+!two = !ac.table<[#w2], !b8>
+!three_lanes = !ac.table<[#w3], !b8>
 )mlir";
 
-std::string generic(bool boundDefault) {
-  std::string parameters =
-      boundDefault
+std::string generic() {
+  std::string parameters = "[{name = \"N\", type = !ac.math_int}]";
           ? "[{name = \"N\", type = !ac.math_int, default = #zero}]"
           : "[{name = \"N\", type = !ac.math_int}]";
   return "\"ac.module\"() ({\n"
@@ -41,6 +45,26 @@ std::string generic(bool boundDefault) {
          parameters +
          ", type_parameters = [], function_type = (!b8) -> !lanes, "
          "input_names = [\"x\"], output_names = [\"lanes\"]} : () -> ()\n";
+}
+
+std::string top(bool illegalBinding) {
+  // The actual binding supplies N = 3; the illegal variant declares the
+  // two-lane wire type, so the binding tier rejects the instance wire
+  // against the bound callee signature.
+  std::string resultType = illegalBinding ? "!two" : "!three_lanes";
+  return "\"ac.module\"() ({\n"
+         "^bb0():\n"
+         "    %one = \"ac.bits.constant\"() {value = #one} : () -> !b8\n"
+         "    %lanes = \"ac.instance\"(%one) {instance_name = \"g\", callee = "
+         "@unit.Generic, parameters = [#three], type_arguments = [], "
+         "occurrence = {site = {definition = @unit.Top, ast_path = []}, "
+         "expansion = []}} : (!b8) -> " +
+         resultType +
+         "\n    \"ac.yield\"(%lanes) : (" + resultType + ") -> ()\n"
+         "  }) {sym_name = \"unit.Top\", source_owner = {package = \"\", path "
+         "= \"unit.py\"}, parameters = [], type_parameters = [], "
+         "function_type = () -> " + resultType +
+         ", input_names = [], output_names = [\"lanes\"]} : () -> ()\n";
 }
 
 class SourceSymbolicBoundaryTest : public ::testing::Test {
@@ -117,7 +141,7 @@ TEST_F(SourceSymbolicBoundaryTest,
     error.print(stream);
     return success();
   });
-  auto unit = parse(generic(/*boundDefault=*/false));
+  auto unit = parse(generic());
   ASSERT_TRUE(unit) << diagnostics;
   ASSERT_TRUE(succeeded(mlir::verify(*unit))) << diagnostics;
   auto error = [&] { return unit->emitError(); };
@@ -135,16 +159,16 @@ TEST_F(SourceSymbolicBoundaryTest,
     error.print(stream);
     return success();
   });
-  auto unit = parse(generic(/*boundDefault=*/true));
+  auto unit = parse(generic() + top(/*illegalBinding=*/true));
   ASSERT_TRUE(unit) << diagnostics;
   ASSERT_TRUE(succeeded(mlir::verify(*unit))) << diagnostics;
   auto error = [&] { return unit->emitError(); };
-  // The default supplies the actual binding, so the same design resolves to
-  // a zero table extent and the collection entry rejects it with the
-  // family's pinned diagnostic.
+  // The instance supplies the actual parameter binding and declares a wire
+  // type that disagrees with the bound callee signature, so the binding
+  // tier rejects it with the instance family's pinned diagnostic.
   EXPECT_TRUE(failed(ac::verifySourceBodyStructure(*unit, error)));
-  EXPECT_NE(diagnostics.find("hardware static value must be positive and fit "
-                             "u64"),
+  EXPECT_NE(diagnostics.find("instance wire type does not match bound "
+                             "callee signature"),
             std::string::npos)
       << diagnostics;
 }
