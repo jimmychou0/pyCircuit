@@ -421,6 +421,10 @@ TEST_F(TransactionSurfaceTiersTest,
   auto error = [&] { return unit->emitError(); };
   EXPECT_TRUE(succeeded(ac::verifySourceBodyStructure(*unit, error)))
       << diagnostics;
+  // Deferral is silent: a legal unbound index width must not emit the
+  // evaluator's unresolved-expression diagnostic on its way to success.
+  EXPECT_TRUE(diagnostics.empty())
+      << "deferred index widths must not emit diagnostics: " << diagnostics;
 }
 
 // The instances bind W = 8 (the scalar payload contract), the extent

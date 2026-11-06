@@ -112,15 +112,18 @@ FailureOr<Type> selectedPayloadType(const HardwareAnalysis &analysis,
     // checks the evaluable subexpressions.
     // The Table template verification always runs — it tolerates symbolic
     // extents and still checks the evaluable subexpressions. The index
-    // width evaluation defers per index: a width that cannot statically
-    // evaluate on a source-stage site is a legal unbound parameter, while
-    // an evaluable-but-failing expression is illegal and rejects.
-    auto indexWidth = analysis.getPackedWidth(indices[nextIndex].getType(),
-                                              bindings, operation);
-    if (failed(indexWidth)) {
-      auto indexCarrier = cast<BitsType>(indices[nextIndex].getType());
-      if (requireResolved || !operation->getParentOfType<ModuleOp>() ||
-          analysis.isStaticEvaluable(indexCarrier.getWidth(), bindings))
+    // width evaluation defers per index: decide evaluability FIRST so a
+    // legal unbound parameter never reaches the evaluator (which would
+    // emit "unresolved hardware static expression" before the deferral),
+    // while an evaluable-but-failing expression is illegal and rejects.
+    auto indexCarrier = cast<BitsType>(indices[nextIndex].getType());
+    bool widthEvaluable =
+        analysis.isStaticEvaluable(indexCarrier.getWidth(), bindings);
+    if (widthEvaluable || requireResolved ||
+        !operation->getParentOfType<ModuleOp>()) {
+      auto indexWidth = analysis.getPackedWidth(indices[nextIndex].getType(),
+                                                bindings, operation);
+      if (failed(indexWidth))
         return failure();
     }
     if (failed(detail::verifySourceTemplateType(analysis, table, bindings,
