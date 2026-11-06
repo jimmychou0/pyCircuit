@@ -602,18 +602,21 @@ LogicalResult HardwareAnalysis::verifyTransactionSurfaceOperation(
     if (failed(predicate(*this, read.getPath(), scope, read,
                          "state read path", requireResolved)))
       return failure();
-    auto selected = selectedStateType(*this, scope, read,
-                                      read.getSelectors(), read.getIndices());
+    auto selected =
+        selectedStateType(*this, scope, requireResolved, read,
+                          read.getSelectors(), read.getIndices());
     if (failed(selected))
       return failure();
     // Both sides resolve through the caller's bindings: at the binding tier
     // the selected payload carries the actual extents while the read's SSA
     // result keeps its template spelling, and the agreement fact compares
     // the same resolution space on each side (as the Method call row does).
+    // A deferred source-stage selection (legal unbound parameter) skips the
+    // comparison; the binding tier re-runs it.
     auto result = resolveType(read.getValue().getType(), scope, read);
     if (failed(result))
       return failure();
-    if (!areEquivalentHardwareTypes(*selected, *result))
+    if (*selected && !areEquivalentHardwareTypes(*selected, *result))
       return read.emitOpError()
              << "state read result must match selected payload type";
     return success();
@@ -622,14 +625,15 @@ LogicalResult HardwareAnalysis::verifyTransactionSurfaceOperation(
     if (failed(predicate(*this, write.getPath(), scope, write,
                          "state write path", requireResolved)))
       return failure();
-    auto selected = selectedStateType(*this, scope, write,
-                                      write.getSelectors(), write.getIndices());
+    auto selected = selectedStateType(*this, scope, requireResolved, write,
+                                      write.getSelectors(),
+                                      write.getIndices());
     if (failed(selected))
       return failure();
     auto value = resolveType(write.getValue().getType(), scope, write);
     if (failed(value))
       return failure();
-    if (!areEquivalentHardwareTypes(*selected, *value))
+    if (*selected && !areEquivalentHardwareTypes(*selected, *value))
       return write.emitOpError()
              << "state write value must match selected payload type";
     // The selected Table index obligations remain the dispatcher's existing
@@ -649,16 +653,16 @@ LogicalResult HardwareAnalysis::verifyTransactionSurfaceOperation(
         static_cast<uint64_t>(index.getInt()) >= signature.getNumInputs())
       return formal.emitOpError()
              << "formal write must identify a declared writable input formal";
-    auto selected = selectedPayloadType(*this, scope, formal,
-                                        signature.getInput(index.getInt()),
-                                        formal.getSelectors(),
-                                        formal.getIndices());
+    auto selected =
+        selectedPayloadType(*this, scope, requireResolved, formal,
+                            signature.getInput(index.getInt()),
+                            formal.getSelectors(), formal.getIndices());
     if (failed(selected))
       return failure();
     auto payload = resolveType(formal.getPayload().getType(), scope, formal);
     if (failed(payload))
       return failure();
-    if (!areEquivalentHardwareTypes(*selected, *payload))
+    if (*selected && !areEquivalentHardwareTypes(*selected, *payload))
       return formal.emitOpError()
              << "formal write payload must match selected input formal type";
     if (failed(predicate(*this, formal.getPath(), scope, formal,
