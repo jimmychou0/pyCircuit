@@ -295,13 +295,13 @@ TEST_F(TransactionSurfaceTiersTest, LegalActualBindingCompletesRouting) {
 
 // Case 4: the illegal W = 0 actual leaves the Method parameter constraint's
 // symbolic width without a legal finite resolution, and the routing
-// preparation rejects the design with the Method-family diagnostic.
+// preparation rejects the design at the bound Method payload with the
+// Method-family diagnostic ('ac.method' op ...).
 TEST_F(TransactionSurfaceTiersTest,
        IllegalActualBindingIsRejectedAtTheRoutingPreparation) {
   auto file = parsePlain(counter("Counter") + root("#w0"));
   ASSERT_TRUE(file) << diagnostics;
   EXPECT_TRUE(failed(route(*file))) << diagnostics;
-  llvm::errs() << "route diagnostics: " << diagnostics << "\n";
   EXPECT_NE(diagnostics.find("hardware static value must be positive and "
                              "fit u64"),
             std::string::npos)
