@@ -324,12 +324,13 @@ TEST_F(TransactionSurfaceTiersTest, NonBitsCarrierKeepsTheCanonicalText) {
   ASSERT_TRUE(unit);
   ac::SourceTransactionOp transaction;
   mlir::Value packet;
+  auto packetType = ac::StructType::get(&context, mlir::StringAttr::get(&context, "Packet"));
   unit->walk([&](mlir::Operation *op) {
     if (auto candidate = llvm::dyn_cast<ac::SourceTransactionOp>(op))
       transaction = candidate;
-    if (auto arg = llvm::dyn_cast<mlir::BlockArgument>(op))
-      if (arg.getType() == ac::StructType::get(&context, "Packet"))
-        packet = arg;
+    for (mlir::Value operand : op->getOperands())
+      if (operand.getType() == packetType)
+        packet = operand;
   });
   ASSERT_TRUE(transaction);
   ASSERT_TRUE(packet);
