@@ -65,6 +65,48 @@ endif()
 # target's transitive INTERFACE_LINK_LIBRARIES at configure time and fail
 # on forbidden edges. Generator-expression values are stripped; ALIAS
 # targets resolve; a visited set guards cycles.
+function(_pyc_split_link_entries raw out)
+  # Split a link line into entries at semicolons OUTSIDE generator
+  # expressions (r8 review follow-up): a list argument inside
+  # $<BUILD_INTERFACE:A;B> must stay one entry, or the halves read as
+  # unbalanced expressions.
+  set(result "")
+  set(current "")
+  set(depth 0)
+  string(LENGTH "${raw}" rawLength)
+  set(scan 0)
+  while(scan LESS rawLength)
+    string(SUBSTRING "${raw}" ${scan} 2 pair)
+    string(SUBSTRING "${raw}" ${scan} 1 char)
+    if(pair STREQUAL "$<")
+      math(EXPR depth "${depth} + 1")
+      string(APPEND current "$<")
+      math(EXPR scan "${scan} + 2")
+      continue()
+    endif()
+    if(char STREQUAL ">" AND depth GREATER 0)
+      math(EXPR depth "${depth} - 1")
+      string(APPEND current ">")
+      math(EXPR scan "${scan} + 1")
+      continue()
+    endif()
+    if(char STREQUAL ";" AND depth EQUAL 0)
+      if(NOT current STREQUAL "")
+        list(APPEND result "${current}")
+      endif()
+      set(current "")
+      math(EXPR scan "${scan} + 1")
+      continue()
+    endif()
+    string(APPEND current "${char}")
+    math(EXPR scan "${scan} + 1")
+  endwhile()
+  if(NOT current STREQUAL "")
+    list(APPEND result "${current}")
+  endif()
+  set(${out} "${result}" PARENT_SCOPE)
+endfunction()
+
 function(_pyc_link_closure target out)
   set(acc "")
   set(pending "${target}")
@@ -90,11 +132,19 @@ function(_pyc_link_closure target out)
     get_target_property(iface "${head}" INTERFACE_LINK_LIBRARIES)
     # The seed target's own private link line is examined too (IX): a
     # forbidden edge must not survive as a non-interface dependency of the
-    # layer target itself.
-    get_target_property(priv "${head}" LINK_LIBRARIES)
-    foreach(entries "${iface}" "${priv}")
-      if(entries)
-        foreach(entry IN LISTS entries)
+    # layer target itself. Missing properties and false-constant values
+    # (e.g. an entry named OFF) are handled explicitly — a truthiness test
+    # would silently drop a real dependency line (r8 review follow-up).
+    set(ifaceEntries "")
+    set(privEntries "")
+    if(NOT iface STREQUAL "iface-NOTFOUND" AND NOT iface STREQUAL "")
+      _pyc_split_link_entries("${iface}" ifaceEntries)
+    endif()
+    if(NOT priv STREQUAL "priv-NOTFOUND" AND NOT priv STREQUAL "")
+      _pyc_split_link_entries("${priv}" privEntries)
+    endif()
+    foreach(entries "${ifaceEntries}" "${privEntries}")
+      foreach(entry IN LISTS entries)
           # Generator expressions may carry real target names
           # ($<LINK_ONLY:ACIRDialect>, $<BUILD_INTERFACE:x>); strip the
           # wrappers and examine every remaining token so hidden forbidden
