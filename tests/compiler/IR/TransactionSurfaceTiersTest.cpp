@@ -76,7 +76,9 @@ std::string vocabulary(StringRef owner) {
 // The Counter template: one state and one Method. `guardRead` is the guard
 // region's state read result type; the mutated !b1 form makes the definite
 // payload disagreement the source stage owns.
-std::string counter(StringRef owner, StringRef guardRead = "!b8") {
+std::string counter(StringRef owner, StringRef guardRead = "!b8",
+                    StringRef guardYieldType = "!b1",
+                    StringRef guardYieldValue = "%path") {
   return std::string("\"ac.module\"() ({\n"
                      "^bb0(%data: !b8, %clk: !b1, %rst: !b1):\n"
                      "    %initial = \"ac.bits.constant\"() {value = #w1} : "
@@ -93,7 +95,8 @@ std::string counter(StringRef owner, StringRef guardRead = "!b8") {
                      "(!b1) -> ") +
          guardRead.str() +
          "\n"
-         "      \"ac.yield\"(%path) : (!b1) -> ()\n"
+         "      \"ac.yield\"(" + guardYieldValue + ") : (" +
+         guardYieldType + ") -> ()\n"
          "    }, {\n"
          "    ^bb0(%value: !bw, %path: !b1):\n"
          "      %old = \"ac.state.read\"(%path) {state = \"count\", "
@@ -304,6 +307,30 @@ TEST_F(TransactionSurfaceTiersTest,
   EXPECT_TRUE(failed(route(*file))) << diagnostics;
   EXPECT_NE(diagnostics.find("hardware static value must be positive and "
                              "fit u64"),
+            std::string::npos)
+      << diagnostics;
+}
+
+// Case 5: the carrier grammar text is canonical — a non-Bits guard yield
+// reaches stateControlPredicate's width-one rejection through the staged
+// surface row (the batch-1 tolerance only defers width-dependent checks on
+// legal Bits carriers).
+TEST_F(TransactionSurfaceTiersTest, NonBitsGuardKeepsTheCanonicalText) {
+  capture();
+  auto unit = parseEnvelope(counter("transactions.Counter",
+                                    /*guardRead=*/"!b1",
+                                    /*guardYieldType=*/"!bw",
+                                    /*guardYieldValue=*/"%value"));
+  ASSERT_TRUE(unit) << diagnostics;
+  EXPECT_TRUE(succeeded(mlir::verify(*unit))) << diagnostics;
+  ac::HardwareAnalysis analysis(*unit);
+  auto method = *unit->walk([&](ac::SourceMethodOp method) {
+    return mlir::WalkResult::interrupt();
+  });
+  ASSERT_TRUE(method);
+  EXPECT_TRUE(failed(analysis.verifyTransactionSurfaceOperation(
+      method, {}, /*requireResolved=*/false)));
+  EXPECT_NE(diagnostics.find("guard yield requires width-one Bits"),
             std::string::npos)
       << diagnostics;
 }

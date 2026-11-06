@@ -37,14 +37,16 @@ LogicalResult predicate(const HardwareAnalysis &analysis, Value value,
   // part of this check; the Bits-carrier grammar stays with the native
   // verifier (r8 review batch 1: the caller's bindings and resolution
   // discipline actually reach the moved checks).
-  auto bits = dyn_cast<BitsType>(value.getType());
-  if (!bits)
-    return site->emitOpError() << description << " requires one-bit Bits";
-  if (!analysis.isStaticEvaluable(bits.getWidth(), bindings)) {
-    if (!requireResolved && site->getParentOfType<ModuleOp>())
-      return success();
-    return site->emitOpError()
-           << description << " requires a resolved finite width";
+  // The carrier grammar — including the canonical width-one rejection
+  // text — stays with stateControlPredicate; only the width-dependence on
+  // a legal unbound parameter defers here.
+  if (auto bits = dyn_cast<BitsType>(value.getType())) {
+    if (!analysis.isStaticEvaluable(bits.getWidth(), bindings)) {
+      if (!requireResolved && site->getParentOfType<ModuleOp>())
+        return success();
+      return site->emitOpError()
+             << description << " requires a resolved finite width";
+    }
   }
   return stateControlPredicate(analysis, value, bindings, site, description);
 }
