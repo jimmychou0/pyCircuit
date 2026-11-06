@@ -183,7 +183,6 @@ protected:
   }
   void rejectStaged(mlir::ModuleOp file, llvm::StringRef reason) {
     EXPECT_TRUE(mlir::failed(capture([&] { return stagedTransactions(file); })));
-    llvm::errs() << "PROBE rejectStaged: [" << diagnostics << "]\n";
     EXPECT_NE(diagnostics.find(reason.str()), std::string::npos) << diagnostics;
   }
   void rejectStateBinding(mlir::ModuleOp file, llvm::StringRef reason) {
@@ -213,7 +212,6 @@ protected:
   }
   void rejectsStagedContract(mlir::ModuleOp file) {
     EXPECT_TRUE(mlir::failed(capture([&] { return stagedTransactions(file); })));
-    llvm::errs() << "PROBE contract: [" << diagnostics << "]\n";
     EXPECT_FALSE(diagnostics.empty());
   }
   template <typename Effect>
