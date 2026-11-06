@@ -327,14 +327,17 @@ TEST_F(TransactionSurfaceTiersTest, NonBitsCarrierKeepsTheCanonicalText) {
   unit->walk([&](mlir::Operation *op) {
     if (auto candidate = llvm::dyn_cast<ac::SourceTransactionOp>(op))
       transaction = candidate;
-    if (auto module = llvm::dyn_cast<ac::ModuleOp>(op))
-      if (module.getSymName() == "Root")
-        for (mlir::Value argument : module.getBody().getArguments())
-          if (!llvm::isa<ac::BitsType>(argument.getType()))
-            packet = argument;
   });
   ASSERT_TRUE(transaction);
-  ASSERT_TRUE(packet);
+  // The design's carriers are all Bits; add a struct block argument to the
+  // root and swap it in as the transaction clock (ODS would reject it at
+  // verification, which is exactly why only the direct staged call reaches
+  // the canonical carrier text).
+  auto *rootModule = transaction->getParentOp();
+  mlir::Value packet = rootModule->getRegion(0).front().addArgument(
+      ac::StructType::get(&context,
+                          mlir::StringAttr::get(&context, "Packet")),
+      transaction.getLoc());
   transaction->setOperand(0, packet);
   diagnostics.clear();
   ac::HardwareAnalysis analysis(*unit);
