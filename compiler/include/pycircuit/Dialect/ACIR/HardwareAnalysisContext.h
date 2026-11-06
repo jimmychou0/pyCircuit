@@ -41,5 +41,16 @@ struct EnumDefinitionView {
   mlir::StringAttr encoding;
   llvm::SmallVector<EnumMember> members;
 };
+
+/// Source physical prefix and final-only compiler-generated port suffix.
+/// (Shared with the packed-width core's leaf records; the layout paths are
+/// plain lexical field names, independent of any occurrence binding.)
+using FieldPath = llvm::SmallVector<mlir::StringAttr>;
+struct PackedLeaf {
+  FieldPath path;
+  mlir::Type type;
+  uint64_t low = 0;
+  uint64_t width = 0;
+};
 } // namespace acir::ac
 #endif
