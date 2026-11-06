@@ -195,6 +195,11 @@ FailureOr<SourceUnitStructure> verifyStructure(mlir::ModuleOp unit, bool body,
             SourceMethodOp, SourceMethodCallOp, SourceBranchOp,
             SourceTransactionOp>(operation))
       return WalkResult::advance();
+    // The family entries expect the enclosing module's scope: pre-split
+    // each native wrapper bound the parent module as the owner (r8 review
+    // fix follow-up — an empty owner scope rejects legal symbolic reads).
+    HardwareBindings local = bindings;
+    local.owner = operation->getParentOfType<ModuleOp>();
     bool enumFamily = isa<EnumCreateOp, EnumToBitsOp, EnumFromBitsOp>(operation);
     bool collectionFamily = isa<CollectionOp, TableCreateOp, TableSplatOp,
         TableMapOp, TableViewOp, TableIndexOp, TableReadOp, TableGetOp,
@@ -205,11 +210,11 @@ FailureOr<SourceUnitStructure> verifyStructure(mlir::ModuleOp unit, bool body,
                                BitsSelectOp>(operation);
     LogicalResult result = success();
     if (enumFamily)
-      result = analysis.verifyEnumValueOperation(operation, bindings);
+      result = analysis.verifyEnumValueOperation(operation, local);
     else if (collectionFamily)
-      result = analysis.verifyCollectionOperation(operation, bindings);
+      result = analysis.verifyCollectionOperation(operation, local);
     else if (structFamily)
-      result = analysis.verifyStructOperation(operation, bindings);
+      result = analysis.verifyStructOperation(operation, local);
     else if (bitsWidthFamily)
       result = analysis.verifyBitsSymbolicWidths(operation);
     else if (auto state = dyn_cast<SourceStateOp>(operation))
@@ -219,16 +224,13 @@ FailureOr<SourceUnitStructure> verifyStructure(mlir::ModuleOp unit, bool body,
       result = analysis.verifyModuleDeclaration(operation, bindings);
     else if (auto pred = dyn_cast<SourcePredicateOp>(operation)) {
       auto width = analysis.getPackedWidth(pred.getInput().getType(),
-                                           bindings, pred);
+                                           local, pred);
       if (failed(width) || *width != 1)
         result = pred.emitOpError()
                  << "source SCF predicate requires width-one Bits";
     }
-    if (failed(result)) {
-      operation->emitOpError() << "TEMPWALKROW "
-                               << operation->getName().getStringRef();
+    if (failed(result))
       return WalkResult::interrupt();
-    }
     return WalkResult::advance();
   });
   if (semanticWalk.wasInterrupted())
