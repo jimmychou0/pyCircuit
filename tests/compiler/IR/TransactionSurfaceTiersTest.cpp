@@ -171,8 +171,7 @@ std::string tableRoot(StringRef binding, StringRef boundTable) {
          "    \"ac.yield\"(%answer) : (!b8) -> ()\n"
          "  }) {sym_name = \"Root\", source_owner = {package = \"\", path "
          "= \"transactions.py\"}, parameters = [], type_parameters = [], "
-         "function_type = (!b8, !b1, !b1) -> " + boundTable.str() +
-         ", input_names = "
+         "function_type = (!b8, !b1, !b1) -> !b8, input_names = "
          "[\"data\", \"pyc_clk\", \"pyc_rst\"], output_names = "
          "[\"out\"]} : () -> ()\n"
          "  \"ac.system\"() {entry = {callee = @Root, parameters = [], "
