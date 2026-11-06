@@ -183,7 +183,7 @@ function(_pyc_link_closure target out)
             # string transforms, unknown operators — cannot be resolved
             # statically and fails the configure with the exact target and
             # expression.
-            if(op MATCHES "\$<")
+            if(op MATCHES "\\$<")
               # The operator position is itself a nested condition genex
               # ($<$<TARGET_EXISTS:x>:y>): drop it and keep the result.
               set(replacement "${body}")
