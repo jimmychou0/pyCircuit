@@ -172,13 +172,8 @@ struct HardwarePhysicalProjection {
   ModuleOp root;
   unsigned clockInput = 0, resetInput = 0;
 };
-using FieldPath = llvm::SmallVector<mlir::StringAttr>;
-struct PackedLeaf {
-  FieldPath path;
-  mlir::Type type;
-  uint64_t low = 0;
-  uint64_t width = 0;
-};
+/// Field paths and packed leaf records moved to HardwareAnalysisContext.h:
+/// the shared packed-width core (r8 review) uses the same value types.
 struct PortEndpoint {
   unsigned port = 0;
   FieldPath path;
