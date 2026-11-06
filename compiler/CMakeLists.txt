@@ -99,13 +99,98 @@ function(_pyc_link_closure target out)
           # ($<LINK_ONLY:ACIRDialect>, $<BUILD_INTERFACE:x>); strip the
           # wrappers and examine every remaining token so hidden forbidden
           # edges cannot survive inside an expression.
-          # Unwrap nested generator expressions repeatedly so a target
-          # hidden inside $<$<CONFIG:Debug>:X> is still attributed (r8
-          # review fix).
+          # Reduce generator expressions STRUCTURALLY (r8 review batch 3
+          # follow-up): an expression is $<OP:BODY> with OP ending at the
+          # first depth-0 colon. Condition operators (CONFIG, TARGET_EXISTS,
+          # ...) do not link their arguments — only the BODY is the
+          # conditionally linked result; LINK_ONLY/BUILD_INTERFACE/
+          # INSTALL_INTERFACE carry their whole argument as content; and a
+          # TARGET_PROPERTY (or any other value-producing operator) cannot
+          # be resolved statically, so the configure fails with the exact
+          # target and expression instead of silently missing the edge.
           set(remainder "${entry}")
           while(remainder MATCHES "\\$<")
-            string(REGEX REPLACE "\\$<" "\n" remainder "${remainder}")
-            string(REGEX REPLACE ">" "\n" remainder "${remainder}")
+            string(FIND "${remainder}" "$<" openAt)
+            string(LENGTH "${remainder}" remainderLength)
+            string(SUBSTRING "${remainder}" 2 -1 afterOpen)
+            set(depth 1)
+            set(cursor 2)
+            set(closeAt -1)
+            string(LENGTH "${afterOpen}" scanLength)
+            set(scan 0)
+            while(scan LESS scanLength)
+              string(SUBSTRING "${afterOpen}" ${scan} 2 pair)
+              string(SUBSTRING "${afterOpen}" ${scan} 1 char)
+              if(pair STREQUAL "$<")
+                math(EXPR depth "${depth} + 1")
+                math(EXPR scan "${scan} + 2")
+                continue()
+              endif()
+              if(char STREQUAL ">")
+                math(EXPR depth "${depth} - 1")
+                if(depth EQUAL 0)
+                  math(EXPR closeAt "${cursor} + ${scan}")
+                  break()
+                endif()
+              endif()
+              math(EXPR scan "${scan} + 1")
+            endwhile()
+            if(closeAt EQUAL -1)
+              message(FATAL_ERROR
+                "layering walk: ${head} carries the unbalanced generator "
+                "expression '${entry}'")
+            endif()
+            math(EXPR innerStart 2)
+            math(EXPR innerLength "${closeAt} - 2")
+            string(SUBSTRING "${remainder}" 2 ${innerLength} inner)
+            # Split the inner text at the first depth-0 colon.
+            set(iDepth 1)
+            set(splitAt -1)
+            string(LENGTH "${inner}" innerLength2)
+            set(scan 0)
+            while(scan LESS innerLength2)
+              string(SUBSTRING "${inner}" ${scan} 2 pair)
+              string(SUBSTRING "${inner}" ${scan} 1 char)
+              if(pair STREQUAL "$<")
+                math(EXPR iDepth "${iDepth} + 1")
+                math(EXPR scan "${scan} + 2")
+                continue()
+              endif()
+              if(char STREQUAL ">")
+                math(EXPR iDepth "${iDepth} - 1")
+              endif()
+              if(char STREQUAL ":" AND iDepth EQUAL 1)
+                set(splitAt ${scan})
+                break()
+              endif()
+              math(EXPR scan "${scan} + 1")
+            endwhile()
+            if(splitAt EQUAL -1)
+              set(op "${inner}")
+              set(body "")
+            else()
+              string(SUBSTRING "${inner}" 0 ${splitAt} op)
+              math(EXPR bodyStart "${splitAt} + 1")
+              math(EXPR bodyLength "${innerLength2} - ${bodyStart}")
+              string(SUBSTRING "${inner}" ${bodyStart} ${bodyLength} body)
+            endif()
+            if(op MATCHES "^TARGET_PROPERTY")
+              message(FATAL_ERROR
+                "layering walk: ${head} carries '${entry}' whose "
+                "TARGET_PROPERTY result cannot be resolved statically; "
+                "replace it on a layer link line")
+            endif()
+            if(NOT op MATCHES "^(LINK_ONLY|BUILD_INTERFACE|INSTALL_INTERFACE)$")
+              # A condition: drop the condition text, keep only the result.
+              set(replacement "${body}")
+            else()
+              set(replacement "${inner}")
+            endif()
+            string(LENGTH "${remainder}" tailLength)
+            math(EXPR tailStart "${closeAt} + 1")
+            math(EXPR tailLength "${tailLength} - ${tailStart}")
+            string(SUBSTRING "${remainder}" ${tailStart} ${tailLength} tail)
+            set(remainder "${replacement} ${tail}")
           endwhile()
           # Tokens keep namespace separators (::) inside a target name but
           # split on single colons, so a "LINK_ONLY:X" or ":X" fragment can
