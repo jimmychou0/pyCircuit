@@ -58,6 +58,7 @@ std::string vocabulary(StringRef owner) {
          "!b1 = !ac.bits<#w1>\n"
          "!b8 = !ac.bits<#w8>\n"
          "!bw = !ac.bits<#wW>\n"
+         "!lanes = !ac.table<[#wW], !b8>\n"
          "#counter = {site = {definition = @" + owner.str() +
          ", ast_path = []}, expansion = []}\n"
          "#left_instance = {site = {definition = @Root, ast_path = [{kind = "
@@ -355,7 +356,7 @@ std::string tableCounter(StringRef owner) {
   return std::string("\"ac.module\"() ({\n"
                      "^bb0(%data: !b8, %clk: !b1, %rst: !b1):\n"
                      "    %initial = \"ac.table.splat\"(%data) {shape = "
-                     "[#n]} : (!b8) -> !lanes\n"
+                     "[#wW]} : (!b8) -> !lanes\n"
                      "    %q = \"ac.state\"(%clk, %rst, %initial) "
                      "{instance_name = \"entries\", occurrence = #counter} "
                      ": (!lanes) -> !lanes\n"
