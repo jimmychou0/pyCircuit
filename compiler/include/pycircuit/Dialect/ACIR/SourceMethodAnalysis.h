@@ -103,11 +103,11 @@ struct SourceMethodView {
 
 mlir::FunctionType getFunctionType() const {
   if (isNativeMemoryTerminal()) {
-    auto signature = cast<mlir::FunctionType>(module->getAttrOfType<TypeAttr>("function_type").getValue());
+    auto signature = cast<mlir::FunctionType>(module->getAttrOfType<mlir::TypeAttr>("function_type").getValue());
     auto kind = module->getAttrOfType<mlir::StringAttr>("primitive_kind").getValue();
     unsigned address = kind == "byte_mem" ? 2 : 3 + 2 * nativeMemoryPort;
     unsigned write = kind == "byte_mem" ? 3 : kind == "sync_mem_dp" ? 6 : 4;
-    SmallVector<Type> inputs, results;
+    llvm::SmallVector<Type> inputs, results;
     if (nativeMemoryAction == NativeMemoryAction::Request ||
         nativeMemoryAction == NativeMemoryAction::Read)
       inputs.push_back(signature.getInput(address));
@@ -117,22 +117,22 @@ mlir::FunctionType getFunctionType() const {
     if (nativeMemoryAction == NativeMemoryAction::Result ||
         nativeMemoryAction == NativeMemoryAction::Read)
       results.push_back(signature.getResult(nativeMemoryPort));
-    return FunctionType::get(module->getContext(), inputs, results);
+    return mlir::FunctionType::get(module->getContext(), inputs, results);
   }
   if (isNativeQueueTerminal()) {
     auto moduleType = cast<mlir::FunctionType>(
-        module->getAttrOfType<TypeAttr>("function_type").getValue());
-    Type formalPayload = moduleType.getInput(3);
-    SmallVector<Type> inputs, results;
+        module->getAttrOfType<mlir::TypeAttr>("function_type").getValue());
+    mlir::Type formalPayload = moduleType.getInput(3);
+    llvm::SmallVector<Type> inputs, results;
     (nativeQueueAction == NativeQueueAction::Push ? inputs : results)
         .push_back(formalPayload);
-    return FunctionType::get(module->getContext(), inputs, results);
+    return mlir::FunctionType::get(module->getContext(), inputs, results);
   }
   return definition ? cast<mlir::FunctionType>(
-                          definition->getAttrOfType<TypeAttr>("function_type")
+                          definition->getAttrOfType<mlir::TypeAttr>("function_type")
                               .getValue())
                     : cast<mlir::FunctionType>(
-                          row.getAs<TypeAttr>("function_type").getValue());
+                          row.getAs<mlir::TypeAttr>("function_type").getValue());
 }
 mlir::ArrayAttr getArgumentNames() const {
   if (isNativeMemoryTerminal()) {
@@ -156,13 +156,13 @@ mlir::ArrayAttr getParameters() const {
     mlir::Builder builder(module->getContext());
     auto signature = getFunctionType();
     auto names = getArgumentNames();
-    SmallVector<Attribute> parameters;
+    llvm::SmallVector<mlir::Attribute> parameters;
     for (auto [ordinal, type] : llvm::enumerate(signature.getInputs())) {
-      Attribute constraint = nativeMemoryAction == NativeMemoryAction::Write && ordinal == 1
+      mlir::Attribute constraint = nativeMemoryAction == NativeMemoryAction::Write && ordinal == 1
           ? nativeMemoryPayloadConstraint
           : builder.getDictionaryAttr({
               builder.getNamedAttr("kind", builder.getStringAttr("hardware")),
-              builder.getNamedAttr("type", TypeAttr::get(type)),
+              builder.getNamedAttr("type", mlir::TypeAttr::get(type)),
               builder.getNamedAttr("source_kind", builder.getStringAttr("fixed_bits"))});
       parameters.push_back(builder.getDictionaryAttr({
           builder.getNamedAttr("name", names[ordinal]),
@@ -208,9 +208,9 @@ mlir::ArrayAttr getResultConstraints() const {
 }
 mlir::StringAttr getReturnForm() const {
   if (isNativeMemoryTerminal())
-    return StringAttr::get(module->getContext(), getFunctionType().getNumResults() ? "single" : "none");
+    return mlir::StringAttr::get(module->getContext(), getFunctionType().getNumResults() ? "single" : "none");
   if (isNativeQueueTerminal())
-    return StringAttr::get(module->getContext(),
+    return mlir::StringAttr::get(module->getContext(),
                            nativeQueueAction == NativeQueueAction::Push
                                ? "none"
                                : "single");
@@ -219,7 +219,7 @@ mlir::StringAttr getReturnForm() const {
 }
 mlir::StringAttr getVisibility() const {
   if (isNativeTerminal())
-    return StringAttr::get(module->getContext(), "public");
+    return mlir::StringAttr::get(module->getContext(), "public");
   return definition ? definition->getAttrOfType<mlir::StringAttr>("sym_visibility")
                     : row.getAs<mlir::StringAttr>("visibility");
 }
@@ -240,34 +240,34 @@ mlir::DictionaryAttr getGuardLocation() const {
   if (isNativeTerminal())
     return {};
   return definition
-             ? definition->getAttrOfType<DictionaryAttr>("ac.guard_location")
-             : row.getAs<DictionaryAttr>("guard_location");
+             ? definition->getAttrOfType<mlir::DictionaryAttr>("ac.guard_location")
+             : row.getAs<mlir::DictionaryAttr>("guard_location");
 }
-SymbolRefAttr getSymbol() const {
+mlir::SymbolRefAttr getSymbol() const {
   if (isNativeMemoryTerminal()) {
     std::string name = nativeMemoryAction == NativeMemoryAction::Request ? "request" :
         nativeMemoryAction == NativeMemoryAction::Result ? "result" :
         nativeMemoryAction == NativeMemoryAction::Read ? "read" : "write";
     if (nativeMemoryAction == NativeMemoryAction::Request || nativeMemoryAction == NativeMemoryAction::Result)
       name += std::to_string(nativeMemoryPort);
-    return SymbolRefAttr::get(module->getContext(), SymbolTable::getSymbolName(module).getValue(),
-        {FlatSymbolRefAttr::get(module->getContext(), name)});
+    return mlir::SymbolRefAttr::get(module->getContext(), mlir::SymbolTable::getSymbolName(module).getValue(),
+        {mlir::FlatSymbolRefAttr::get(module->getContext(), name)});
   }
   if (isNativeQueueTerminal()) {
     StringRef name = nativeQueueAction == NativeQueueAction::Push
                          ? "push"
                          : nativeQueueAction == NativeQueueAction::Pop ? "pop"
                                                                        : "peek";
-    return SymbolRefAttr::get(module->getContext(),
-                              SymbolTable::getSymbolName(module).getValue(),
-                              {FlatSymbolRefAttr::get(module->getContext(),
+    return mlir::SymbolRefAttr::get(module->getContext(),
+                              mlir::SymbolTable::getSymbolName(module).getValue(),
+                              {mlir::FlatSymbolRefAttr::get(module->getContext(),
                                                      name)});
   }
-  auto name = definition ? definition->getAttrOfType<StringAttr>("sym_name")
-                         : row.getAs<StringAttr>("name");
-  return SymbolRefAttr::get(module->getContext(),
-                            SymbolTable::getSymbolName(module).getValue(),
-                            {FlatSymbolRefAttr::get(name)});
+  auto name = definition ? definition->getAttrOfType<mlir::StringAttr>("sym_name")
+                         : row.getAs<mlir::StringAttr>("name");
+  return mlir::SymbolRefAttr::get(module->getContext(),
+                            mlir::SymbolTable::getSymbolName(module).getValue(),
+                            {mlir::FlatSymbolRefAttr::get(name)});
 }
 };
 
