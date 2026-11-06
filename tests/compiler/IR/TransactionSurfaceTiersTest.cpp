@@ -359,7 +359,7 @@ std::string tableCounter(StringRef owner) {
                      "[#wW]} : (!b8) -> !lanes\n"
                      "    %q = \"ac.state\"(%clk, %rst, %initial) "
                      "{instance_name = \"entries\", occurrence = #counter} "
-                     ": (!lanes) -> !lanes\n"
+                     ": (!b1, !b1, !lanes) -> !lanes\n"
                      "    %yes = \"ac.bits.constant\"() {value = #w1} : () "
                      "-> !b1\n"
                      "    \"ac.method\"(%yes) ({\n"
