@@ -107,7 +107,7 @@ mlir::FunctionType getFunctionType() const {
     auto kind = module->getAttrOfType<mlir::StringAttr>("primitive_kind").getValue();
     unsigned address = kind == "byte_mem" ? 2 : 3 + 2 * nativeMemoryPort;
     unsigned write = kind == "byte_mem" ? 3 : kind == "sync_mem_dp" ? 6 : 4;
-    llvm::SmallVector<Type> inputs, results;
+    llvm::SmallVector<mlir::Type> inputs, results;
     if (nativeMemoryAction == NativeMemoryAction::Request ||
         nativeMemoryAction == NativeMemoryAction::Read)
       inputs.push_back(signature.getInput(address));
@@ -123,7 +123,7 @@ mlir::FunctionType getFunctionType() const {
     auto moduleType = cast<mlir::FunctionType>(
         module->getAttrOfType<mlir::TypeAttr>("function_type").getValue());
     mlir::Type formalPayload = moduleType.getInput(3);
-    llvm::SmallVector<Type> inputs, results;
+    llvm::SmallVector<mlir::Type> inputs, results;
     (nativeQueueAction == NativeQueueAction::Push ? inputs : results)
         .push_back(formalPayload);
     return mlir::FunctionType::get(module->getContext(), inputs, results);
@@ -254,7 +254,7 @@ mlir::SymbolRefAttr getSymbol() const {
         {mlir::FlatSymbolRefAttr::get(module->getContext(), name)});
   }
   if (isNativeQueueTerminal()) {
-    StringRef name = nativeQueueAction == NativeQueueAction::Push
+    llvm::StringRef name = nativeQueueAction == NativeQueueAction::Push
                          ? "push"
                          : nativeQueueAction == NativeQueueAction::Pop ? "pop"
                                                                        : "peek";
