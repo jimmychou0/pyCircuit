@@ -196,12 +196,37 @@ function(_pyc_link_closure target out)
               set(replacement "${body}")
             elseif(op STREQUAL "IF")
               # $<IF:cond,true,false>: drop the condition, keep both
-              # branches (the forbidden edge may sit in either).
+              # branches (the forbidden edge may sit in either). The split
+              # tracks generator-expression depth so a comma inside a nested
+              # expression (e.g. a STREQUAL condition) never splits a branch,
+              # and the loop terminates on the empty string — branch text
+              # like OFF must not be mistaken for the loop's end (r8 review
+              # batch 3 follow-up).
               set(branches "${body}")
               set(replacement "")
               set(branchIndex 0)
-              while(branches)
-                string(FIND "${branches}" "," commaAt)
+              while(NOT branches STREQUAL "")
+                set(depth 0)
+                set(scan 0)
+                set(commaAt -1)
+                string(LENGTH "${branches}" branchLength)
+                while(scan LESS branchLength)
+                  string(SUBSTRING "${branches}" ${scan} 2 pair)
+                  string(SUBSTRING "${branches}" ${scan} 1 char)
+                  if(pair STREQUAL "$<")
+                    math(EXPR depth "${depth} + 1")
+                    math(EXPR scan "${scan} + 2")
+                    continue()
+                  endif()
+                  if(char STREQUAL ">")
+                    math(EXPR depth "${depth} - 1")
+                  endif()
+                  if(char STREQUAL "," AND depth EQUAL 0)
+                    set(commaAt ${scan})
+                    break()
+                  endif()
+                  math(EXPR scan "${scan} + 1")
+                endwhile()
                 if(commaAt EQUAL -1)
                   set(branch "${branches}")
                   set(branches "")
