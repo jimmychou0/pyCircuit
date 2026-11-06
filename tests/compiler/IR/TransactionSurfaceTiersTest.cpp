@@ -355,7 +355,8 @@ TEST_F(TransactionSurfaceTiersTest, NonBitsCarrierKeepsTheCanonicalText) {
 std::string tableCounter(StringRef owner) {
   return std::string("\"ac.module\"() ({\n"
                      "^bb0(%data: !b8, %clk: !b1, %rst: !b1):\n"
-                     "    %initial = \"ac.table.splat\"(%data) {shape = "
+    "    %zero = \"ac.bits.constant\"() {value = #w1} : () -> !b8\n"
+                     "    %initial = \"ac.table.splat\"(%zero) {shape = "
                      "[#wW]} : (!b8) -> !lanes\n"
                      "    %q = \"ac.state\"(%clk, %rst, %initial) "
                      "{instance_name = \"entries\", occurrence = #counter} "
