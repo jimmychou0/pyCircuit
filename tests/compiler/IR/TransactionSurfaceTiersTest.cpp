@@ -42,6 +42,7 @@ std::string vocabulary(StringRef owner) {
   return "#w1 = #ac.static_expr<{kind = \"literal\", value = {kind = "
          "\"integer\", value = #ac.math_int<1>}, " +
          origin +
+         "}>\n"
          "#w3 = #ac.static_expr<{kind = \"literal\", value = {kind = "
          "\"integer\", value = #ac.math_int<3>}, " +
          origin +
