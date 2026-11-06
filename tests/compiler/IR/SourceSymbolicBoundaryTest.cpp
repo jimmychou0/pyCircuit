@@ -150,6 +150,24 @@ TEST_F(SourceSymbolicBoundaryTest,
 }
 
 TEST_F(SourceSymbolicBoundaryTest,
+       MatchingActualBindingIsAcceptedThroughTheBindingTier) {
+  diagnostics.clear();
+  mlir::ScopedDiagnosticHandler handler(&context, [&](Diagnostic &error) {
+    llvm::raw_string_ostream stream(diagnostics);
+    error.print(stream);
+    return success();
+  });
+  // The matching three-lane wire type under the N = 3 binding clears the
+  // same binding tier that rejects the disagreeing variant.
+  auto unit = parse(generic() + top(/*illegalBinding=*/false));
+  ASSERT_TRUE(unit) << diagnostics;
+  ASSERT_TRUE(succeeded(mlir::verify(*unit))) << diagnostics;
+  auto error = [&] { return unit->emitError(); };
+  EXPECT_TRUE(succeeded(ac::verifySourceBodyStructure(*unit, error)))
+      << diagnostics;
+}
+
+TEST_F(SourceSymbolicBoundaryTest,
        ActualZeroBindingIsRejectedAtTheResolvingTier) {
   diagnostics.clear();
   mlir::ScopedDiagnosticHandler handler(&context, [&](Diagnostic &error) {

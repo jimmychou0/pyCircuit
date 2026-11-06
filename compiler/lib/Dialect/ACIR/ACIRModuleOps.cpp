@@ -1,6 +1,5 @@
 #include "pycircuit/Dialect/ACIR/TransactionalContracts.h"
 #include "ACIRSourceContracts.h"
-#include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
 #include "pycircuit/Dialect/ACIR/SourceEffects.h"
 #include "pycircuit/Dialect/ACIR/SourceIdentifier.h"
 #include "pycircuit/Dialect/ACIR/SourceMethodAnalysis.h"
