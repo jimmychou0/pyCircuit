@@ -334,7 +334,6 @@ TEST_F(TransactionSurfaceTiersTest, NonBitsCarrierKeepsTheCanonicalText) {
   // verification, which is exactly why only the direct staged call reaches
   // the canonical carrier text).
   auto *rootModule = transaction->getParentOp();
-  mlir::Value packet = rootModule->getRegion(0).front().addArgument(
       ac::StructType::get(&context,
                           mlir::StringAttr::get(&context, "Packet")),
       transaction.getLoc());
