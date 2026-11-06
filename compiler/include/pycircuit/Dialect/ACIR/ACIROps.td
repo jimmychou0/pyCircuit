@@ -707,7 +707,6 @@ def ACIR_TableMapOp : ACIR_Op<"table.map", [Pure, IsolatedFromAbove,
       Variadic<ACIR_ScalarHardwareType>:$captures, ArrayAttr:$shape);
   let results = (outs Variadic<ACIR_TableType>:$results);
   let regions = (region AnyRegion:$body);
-  let hasVerifier = 1;
   let hasRegionVerifier = 1;
 }
 def ACIR_TableViewOp : ACIR_Op<"table.view", [Pure]> {

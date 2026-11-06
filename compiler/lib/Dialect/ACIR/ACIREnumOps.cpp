@@ -78,6 +78,10 @@ FailureOr<EnumDefinitionView> validateEnumDeclaration(EnumOp declaration,
   return view;
 }
 
+LogicalResult EnumOp::verify() {
+  return success(succeeded(validateEnumDeclaration(*this, *this)));
+}
+
 // The enum value-operation bound checks (member existence, carrier widths)
 // run from the staged enum rows: the source-unit semantic walk in its
 // symbolic-tolerant mode and HardwareAnalysis::verifyResolvedOperation at

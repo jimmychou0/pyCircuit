@@ -60,6 +60,12 @@ LogicalResult CollectionOp::verify() {
   return detail::verifyOccurrence(getOccurrence(),
                                   [&] { return emitOpError(); });
 }
+// Symbol-use verification keeps the default (no additional symbol facts);
+// the bound checks run from the staged collection rows after the IX
+// severing.
+LogicalResult CollectionOp::verifySymbolUses(SymbolTableCollection &) {
+  return success();
+}
 LogicalResult TableMapOp::verifyRegions() {
   if (getBody().empty() || getBody().front().getArguments().empty())
     return emitOpError() << "table.map requires ordinal argument";
