@@ -24,8 +24,8 @@ public:
 };
 
 
-MLIR_DECLARE_EXPLICIT_TYPE_ID(::acir::ac::TransactionalClosureHost)
-
 } // namespace acir::ac
+
+MLIR_DECLARE_EXPLICIT_TYPE_ID(::acir::ac::TransactionalClosureHost)
 
 #endif // PYCIRCUIT_DIALECT_ACIR_TRANSACTIONALCLOSUREHOST_H
