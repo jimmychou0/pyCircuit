@@ -301,7 +301,7 @@ TEST_F(TransactionSurfaceTiersTest,
   auto file = parsePlain(counter("Counter") + root("#w0"));
   ASSERT_TRUE(file) << diagnostics;
   EXPECT_TRUE(failed(route(*file))) << diagnostics;
-  SUCCEED() << "route diagnostics: " << diagnostics;
+  llvm::errs() << "route diagnostics: " << diagnostics << "\n";
   EXPECT_NE(diagnostics.find("hardware static value must be positive and "
                              "fit u64"),
             std::string::npos)
