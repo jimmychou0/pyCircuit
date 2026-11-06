@@ -67,6 +67,8 @@ std::string vocabulary(StringRef owner) {
          "!b8 = !ac.bits<#w8>\n"
          "!bw = !ac.bits<#wW>\n"
          "!b3 = !ac.bits<#w3>\n"
+         "!table3 = !ac.table<[#w3], !b8>\n"
+         "!table4 = !ac.table<[#w4], !b8>\n"
          "!lanes = !ac.table<[#wW], !b8>\n"
          "#counter = {site = {definition = @" + owner.str() +
          ", ast_path = []}, expansion = []}\n"
@@ -136,13 +138,16 @@ std::string counter(StringRef owner, StringRef guardRead = "!b8",
 // The Root consumer for the table design: the instance signature carries
 // the same table type as the callee, so a signature mismatch can never
 // mask the index check. `binding` supplies the actual parameter binding.
-std::string tableRoot(StringRef binding) {
+std::string tableRoot(StringRef binding, StringRef boundTable) {
+  // The instance result carries the BOUND table spelling: the symbolic
+  // reference inside !lanes names Counter as its owner and would fail the
+  // static-reference owner check when re-verified under Root.
   auto instance = [&](const char *name, const char *occurrence) {
     return std::string("    %") + name + " = \"ac.instance\"(%data, %clk, "
            "%rst) {instance_name = \"" + name + "\", callee = "
-           "@transactions.Counter, parameters = [" + binding.str() + "], "
+           "@Counter, parameters = [" + binding.str() + "], "
            "type_arguments = [], occurrence = " + occurrence + "} : (!b8, "
-           "!b1, !b1) -> !lanes\n";
+           "!b1, !b1) -> " + boundTable.str() + "\n";
   };
   return std::string("\"ac.module\"() ({\n"
                      "^bb0(%data: !b8, %clk: !b1, %rst: !b1):\n"
@@ -157,7 +162,7 @@ std::string tableRoot(StringRef binding) {
          "    }, {\n"
          "    ^bb0(%path: !b1, %value: !b3):\n"
          "      %a = \"ac.method.call\"(%path, %value) {callee = "
-         "@transactions.Counter::@add, instance_path = [\"left\"], "
+         "@Counter::@add, instance_path = [\"left\"], "
          "occurrence = #root} : (!b1, !b3) -> !b8\n"
          "      \"ac.yield\"(%a) : (!b8) -> ()\n"
          "    }) {name = \"step\", declaration = #root, occurrence = "
@@ -166,7 +171,8 @@ std::string tableRoot(StringRef binding) {
          "    \"ac.yield\"(%answer) : (!b8) -> ()\n"
          "  }) {sym_name = \"Root\", source_owner = {package = \"\", path "
          "= \"transactions.py\"}, parameters = [], type_parameters = [], "
-         "function_type = (!b8, !b1, !b1) -> !b8, input_names = "
+         "function_type = (!b8, !b1, !b1) -> " + boundTable.str() +
+         ", input_names = "
          "[\"data\", \"pyc_clk\", \"pyc_rst\"], output_names = "
          "[\"out\"]} : () -> ()\n"
          "  \"ac.system\"() {entry = {callee = @Root, parameters = [], "
@@ -468,7 +474,8 @@ TEST_F(TransactionSurfaceTiersTest,
   capture();
   // W = 3: three bits index the eight-lane table — the signature matches,
   // the index range fits, and the routing preparation completes.
-  auto unit = parsePlain(tableCounter("Counter") + tableRoot("#w3"));
+  auto unit = parsePlain(tableCounter("Counter") +
+                         tableRoot("#w3", "!table3"));
   ASSERT_TRUE(unit) << diagnostics;
   EXPECT_TRUE(succeeded(route(*unit))) << diagnostics;
 }
@@ -479,7 +486,8 @@ TEST_F(TransactionSurfaceTiersTest,
   // W = 4: four bits can address sixteen lanes — the same index grammar
   // now exceeds the bound extent, and the routing preparation rejects with
   // the index-range check's own text.
-  auto unit = parsePlain(tableCounter("Counter") + tableRoot("#w4"));
+  auto unit = parsePlain(tableCounter("Counter") +
+                         tableRoot("#w4", "!table4"));
   ASSERT_TRUE(unit) << diagnostics;
   EXPECT_TRUE(failed(route(*unit))) << diagnostics;
   EXPECT_NE(diagnostics.find("checked Table index complete unsigned range "
