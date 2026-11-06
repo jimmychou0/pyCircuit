@@ -236,8 +236,13 @@ protected:
     return unit;
   }
   OwningOpRef<mlir::ModuleOp> parsePlain(const std::string &content) {
+    // The routing preparation consumes the merged source-units record, as
+    // the lit transaction fixtures carry it.
     return parseSourceString<mlir::ModuleOp>(
-        vocabulary("Counter") + "module {\n" + content + "\n}",
+        vocabulary("Counter") +
+            "module attributes {ac.source_units = [{package = \"\", path = "
+            "\"transactions.py\"}]} {\n" +
+            content + "\n}",
         ParserConfig(&context, /*verifyAfterParse=*/false));
   }
   LogicalResult route(mlir::ModuleOp file) {
