@@ -28,36 +28,39 @@ template <typename... Ts>
 std::uintptr_t anchorSum(std::uintptr_t seed, Ts *...rest) {
   return seed + anchorSum(reinterpret_cast<std::uintptr_t>(rest)...);
 }
-  // ACIRCoreDefs: generated attribute classes and their registration
-  // (the generated typedef `get` anchors here too).
-  // ACIRPacketTypes: out-of-line custom type verifies and the shape
-  // schema (not re-emitted by the generated classes).
-  // ACIRIdentityContracts: occurrence grammar and its memo.
-  // ACIRSourceContracts: source site/occurrence contract leaves.
-  // SourceStaticValueContracts: closed static-value grammar.
-  // ACIRStaticContracts: static expression tree verification.
-  // SourceAttributeContracts: source domain/type-expr attr verifiers.
-  // SourceSyntaxSiteContracts: lexical path grammar.
-  // SourceValueSemantics: value opcode grammar.
-  // StateDeclarationContracts: declaration placement contracts.
-  // SourceIdentifier: Python identifier grammar leaf.
+TEST(ACIRCoreStandalone, ReferencesEveryCoreUnit) {
+  // One pinned symbol per core member TU (r9 §4); the anchorSum call
+  // materializes every reference (r8 review fix — a bare `(void)&f;` can
+  // be folded away, so it could not guarantee the reference).
   auto anchored = anchorSum(
       0u,
+      // ACIRCoreDefs: generated attribute classes and their registration
+      // (the generated typedef `get` anchors here too).
       &acir::ac::MathIntAttr::get,
       &acir::ac::BitsType::get,
+      // ACIRPacketTypes: out-of-line custom type verifies and the shape
+      // schema (not re-emitted by the generated classes).
       &acir::ac::detail::shapeSchema,
+      // ACIRIdentityContracts: occurrence grammar and its memo.
       &acir::ac::detail::verifyOccurrence,
+      // ACIRSourceContracts: source site/occurrence contract leaves.
       &acir::ac::detail::verifySite,
+      // SourceStaticValueContracts: closed static-value grammar.
       &acir::ac::detail::verifyStaticValueStructure,
+      // ACIRStaticContracts: static expression tree verification.
       &acir::ac::StaticExprAttr::verify,
+      // SourceAttributeContracts: source domain/type-expr attr verifiers.
       &acir::ac::SourceDomainAttr::verify,
+      // SourceSyntaxSiteContracts: lexical path grammar.
       &acir::ac::detail::verifyLexicalPath,
+      // SourceValueSemantics: value opcode grammar.
       &acir::ac::detail::parseValueOpcode,
+      // StateDeclarationContracts: declaration placement contracts.
       &acir::ac::verifyRoutedLogicalStatePlacement,
+      // SourceIdentifier: Python identifier grammar leaf.
       &acir::ac::detail::verifyPythonAstIdentifier);
-  // A nonempty set of aligned function addresses cannot plausibly sum to
-  // exactly 42; the branch is not provably dead, so every reference is
-  // materialized into the object file.
+  // The sum feeds an unprovable runtime branch, so no reference can be
+  // folded away regardless of optimization level.
   ASSERT_NE(anchored, 42u) << "unreachable: pinned symbol anchors";
   SUCCEED();
 }
