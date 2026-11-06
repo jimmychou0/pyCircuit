@@ -1,8 +1,12 @@
 // Collection operation local verifiers (B2 step-2 design r9): these stay
-// with the operations layer; the shared member implementations live in
-// CollectionAnalysis.cpp.
-#include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
+// with the operations layer. The bound checks that required HardwareAnalysis
+// left the native verifiers at IX (r7 row): the staged collection rows — the
+// source-unit semantic walk in its symbolic-tolerant mode and
+// HardwareAnalysis::verifyResolvedOperation at the binding tiers — run the
+// shared member implementations from CollectionAnalysis.cpp. The native
+// verifiers keep placement, naming and region grammar.
 #include "ACIRSourceContracts.h"
+#include "IR/StateDeclarationContracts.h"
 #include "pycircuit/Dialect/ACIR/ACIROps.h"
 
 using namespace mlir;
@@ -17,12 +21,6 @@ bool equivalentTypes(TypeRange lhs, TypeRange rhs) {
     if (!areEquivalentHardwareTypes(left, right))
       return false;
   return true;
-}
-
-HardwareBindings scope(Operation *op) {
-  HardwareBindings b;
-  b.owner = op->getParentOfType<ModuleOp>();
-  return b;
 }
 
 LogicalResult scalarRegion(Operation *op, TypeRange args, TypeRange results) {
@@ -59,25 +57,9 @@ LogicalResult CollectionOp::verify() {
         other.getAttrOfType<StringAttr>("instance_name") ==
             getInstanceNameAttr())
       return emitOpError() << "instance_name must be unique within parent";
-  if (failed(detail::verifyOccurrence(getOccurrence(),
-                                      [&] { return emitOpError(); })))
-    return failure();
-  return detail::verifyCollectionLocally(*this);
+  return detail::verifyOccurrence(getOccurrence(),
+                                  [&] { return emitOpError(); });
 }
-LogicalResult CollectionOp::verifySymbolUses(SymbolTableCollection &) {
-  return detail::verifyCollectionLocally(*this);
-}
-LogicalResult TableCreateOp::verify() { return detail::verifyCollectionLocally(*this); }
-LogicalResult TableSplatOp::verify() { return detail::verifyCollectionLocally(*this); }
-LogicalResult TableMapOp::verify() { return detail::verifyCollectionLocally(*this); }
-LogicalResult TableViewOp::verify() { return detail::verifyCollectionLocally(*this); }
-LogicalResult TableIndexOp::verify() { return detail::verifyCollectionLocally(*this); }
-LogicalResult TableReadOp::verify() { return detail::verifyCollectionLocally(*this); }
-LogicalResult TableGetOp::verify() { return detail::verifyCollectionLocally(*this); }
-LogicalResult TableMatchOp::verify() { return detail::verifyCollectionLocally(*this); }
-LogicalResult TableChooseOp::verify() { return detail::verifyCollectionLocally(*this); }
-LogicalResult TableFoldOp::verify() { return detail::verifyCollectionLocally(*this); }
-LogicalResult ValueMergeOp::verify() { return detail::verifyCollectionLocally(*this); }
 LogicalResult TableMapOp::verifyRegions() {
   if (getBody().empty() || getBody().front().getArguments().empty())
     return emitOpError() << "table.map requires ordinal argument";

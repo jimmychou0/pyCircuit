@@ -45,17 +45,6 @@ struct ModulePortLayout {
 mlir::FailureOr<ModulePortLayout>
 getModulePortLayout(mlir::Operation *declaration);
 
-struct EnumMember {
-  mlir::StringAttr name;
-  MathIntAttr code;
-};
-/// Validated declaration data shared by analysis and both emitters.
-struct EnumDefinitionView {
-  uint64_t width;
-  mlir::StringAttr encoding;
-  llvm::SmallVector<EnumMember> members;
-};
-
 enum class QueueReadyPolicy { LocalOccupancy, DownstreamPop };
 /// Recognize the canonical FIFO allocation; schema and bindings are verified
 /// by the same instance and primitive checks used for other native leaves.

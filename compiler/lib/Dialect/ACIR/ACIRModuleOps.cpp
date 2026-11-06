@@ -1,8 +1,8 @@
 #include "pycircuit/Dialect/ACIR/TransactionalContracts.h"
 #include "ACIRSourceContracts.h"
-#include "HardwareSourceChecks.h"
 #include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
 #include "pycircuit/Dialect/ACIR/SourceEffects.h"
+#include "pycircuit/Dialect/ACIR/SourceIdentifier.h"
 #include "pycircuit/Dialect/ACIR/SourceMethodAnalysis.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/DenseSet.h"
@@ -243,4 +243,203 @@ LogicalResult ModuleImportOp::verify() {
 LogicalResult SourceObserveOp::verify() {
   return detail::verifySourceObservationStructure(*this);
 }
+
+// Module reference formal grammar (declared in SourceMethodAnalysis.h; the
+// native verifyModuleSignature walk and the staged method analysis share it;
+// defined here so the operations archive stays self-sufficient).
+LogicalResult verifySourceReferenceParameters(Operation *module) {
+  Attribute raw = module->getAttr("ac.reference_parameters");
+  if (!raw) return success();
+  auto refs = dyn_cast<ArrayAttr>(raw);
+  if (!refs || refs.empty())
+    return module->emitOpError() << "ac.reference_parameters requires a nonempty formal array";
+  if (module->hasAttr("ac.root_kind"))
+    return module->emitOpError() << "closed System cannot declare Module reference formals";
+  if (isa<ModuleImportOp>(module)) {
+    auto semantic = module->getAttrOfType<StringAttr>("semantic_kind");
+    if (!semantic || semantic.getValue() != "transactions")
+      return module->emitOpError() << "Module reference imports require transaction schema authority";
+  }
+  auto data = module->getAttrOfType<ArrayAttr>("ac.parameters");
+  if (!data) return module->emitOpError() << "Module reference formals require a complete source call contract";
+  unsigned count = refs.size() + (data ? data.size() : 0);
+  llvm::StringSet<> names;
+  for (StringRef field : {"input_names", "output_names", "type_parameters"})
+    if (auto values = module->getAttrOfType<ArrayAttr>(field))
+      for (Attribute value : values) if (auto name = dyn_cast<StringAttr>(value)) names.insert(name.getValue());
+  if (auto values = module->getAttrOfType<ArrayAttr>("parameters"))
+    for (Attribute value : values) {
+      auto row = dyn_cast<DictionaryAttr>(value);
+      auto name = row ? row.getAs<StringAttr>("name") : StringAttr();
+      if (!name) return module->emitOpError() << "invalid static parameter inventory";
+      names.insert(name.getValue());
+    }
+  llvm::DenseSet<int64_t> positions;
+  int64_t previous = -1;
+  for (Attribute item : refs) {
+    auto row = dyn_cast<DictionaryAttr>(item);
+    auto name = row ? row.getAs<StringAttr>("name") : StringAttr();
+    auto callee = row ? row.getAs<FlatSymbolRefAttr>("callee") : FlatSymbolRefAttr();
+    auto position = row ? row.getAs<IntegerAttr>("position") : IntegerAttr();
+    if (!row || row.size() != 3 || !name || !callee || callee.getValue().empty() ||
+        !position || !position.getType().isSignlessInteger(64) || position.getInt() < 0 ||
+        static_cast<uint64_t>(position.getInt()) >= count || position.getInt() <= previous ||
+        !positions.insert(position.getInt()).second || !names.insert(name.getValue()).second ||
+        failed(detail::verifyPythonAstIdentifier(name.getValue(), true, [&] { return module->emitOpError(); })))
+      return module->emitOpError() << "invalid, duplicate or unordered Module reference formal";
+    previous = position.getInt();
+  }
+  return success();
+}
+
+// ---------------------------------------------------------------------------
+// Observation grammar (B2 step-2 design r7 row): the native verifiers keep
+// structure/spec/identity; the source-placement path-width predicate runs
+// from the staged dispatcher row and the check-plan tier after the ops
+// archive stopped referencing the analysis target.
+namespace acir::ac::detail {
+// Only statement arms extend a callable body. Other region owners (including
+// guards and pure helpers) never acquire source-effect placement by ancestry.
+Operation *sourceEffectCallable(Operation *operation) {
+  Region *region = operation->getParentRegion();
+  Operation *parent = operation->getParentOp();
+  while (auto branch = dyn_cast_or_null<SourceBranchOp>(parent)) {
+    if (branch->getNumRegions() != 2)
+      return nullptr;
+    if (region != &branch.getThenRegion() && region != &branch.getElseRegion())
+      return nullptr;
+    region = branch->getParentRegion();
+    parent = branch->getParentOp();
+  }
+  return isa_and_nonnull<SourceMethodOp, SourceTransactionOp>(parent) &&
+                 parent->getNumRegions() == 2 && region == &parent->getRegion(1)
+             ? parent
+             : nullptr;
+}
+LogicalResult
+verifySourceObservationStructure(SourceObserveOp observe) {
+  auto error = [&] { return observe.emitOpError(); };
+  auto kind = observe->getAttrOfType<StringAttr>("kind");
+  auto spec = observe->getAttrOfType<DictionaryAttr>("spec");
+  auto *parent = detail::sourceEffectCallable(observe);
+  bool source = parent != nullptr;
+  if (!source)
+    parent = observe->getParentOp();
+  if (source) {
+    if (!kind ||
+        !llvm::is_contained(ArrayRef<StringRef>{"log", "report"},
+                            kind.getValue()) ||
+        observe->hasAttr("ac.observation_id") ||
+        observe->hasAttr("ac.check_id"))
+      return error()
+             << "source observation requires statement Method/transaction "
+                "body placement, log/report kind and no final identity";
+    if (failed(verifySourceEffectMetadata(
+            observe->getAttrOfType<DictionaryAttr>("occurrence"),
+            observe->getAttrOfType<DictionaryAttr>("ac.location"),
+            parent->getParentOp(), error)))
+      return failure();
+  } else {
+    if (!isa<ModuleOp>(parent) || !kind ||
+        !llvm::is_contained(ArrayRef<StringRef>{"print", "log", "report"},
+                            kind.getValue()))
+      return error() << "observation requires module placement and known kind";
+    if (failed(verifyObservationID(
+            observe->getAttrOfType<DictionaryAttr>("ac.observation_id"),
+            error)) ||
+        failed(verifySourceSpan(
+            observe->getAttrOfType<DictionaryAttr>("ac.location"), error)))
+      return failure();
+  }
+  if (observe->getNumOperands() == 0 ||
+      !isa<BitsType, TypeParamType>(observe->getOperand(0).getType()))
+    return error() << "observation path requires scalar Bits";
+  // The source-placement path width predicate runs from the staged
+  // dispatcher row (verifySourceObservationWidths) under the caller's
+  // actual bindings; module-placement observations keep no width check,
+  // exactly as the native verifier before the split.
+  for (auto operand : observe->getOperands().drop_front())
+    if (!isa<BitsType, EnumType, TypeParamType>(operand.getType()))
+      return error() << "observation value requires a scalar hardware payload";
+  return verifySourceObservationSpec(kind, spec, observe->getNumOperands() - 1,
+                                     error);
+}
+
+LogicalResult verifySourceObservationSpec(StringAttr kind,
+                                          DictionaryAttr spec,
+                                          uint64_t valueCount,
+                                          EmitError error) {
+  if (!kind || !spec)
+    return error() << "observation requires a known kind and closed spec";
+  auto text = [&](StringRef key, bool nonempty = false) {
+    auto value = spec.getAs<StringAttr>(key);
+    return value && (!nonempty || !value.getValue().empty());
+  };
+  if (kind.getValue() == "report") {
+    if (spec.size() != 1 || !text("name", true) || valueCount != 1)
+      return error() << "report requires a nonempty name and one scalar value";
+    return success();
+  }
+  if (spec.size() != 3 ||
+      (kind.getValue() == "print" && (!text("sep") || !text("end"))) ||
+      (kind.getValue() == "log" &&
+       (!text("event", true) || !text("level") ||
+        !llvm::is_contained(
+            ArrayRef<StringRef>{"debug", "info", "warning", "error"},
+            spec.getAs<StringAttr>("level").getValue()))))
+    return error() << "observation spec has invalid closed fields";
+  auto items = spec.getAs<ArrayAttr>("items");
+  if (!items)
+    return error() << "observation items must be an array";
+  uint64_t next = 0;
+  for (auto raw : items) {
+    auto item = dyn_cast<DictionaryAttr>(raw);
+    auto itemKind = item ? item.getAs<StringAttr>("kind") : StringAttr();
+    if (!item || item.size() != 2 || !itemKind)
+      return error() << "observation item requires exact kind and payload";
+    if (itemKind.getValue() == "literal") {
+      if (!item.getAs<StringAttr>("text"))
+        return error() << "literal observation item requires text";
+    } else if (itemKind.getValue() == "value") {
+      auto ordinal = decodeU32(item.getAs<IntegerAttr>("ordinal"),
+                               "observation item ordinal", error);
+      if (failed(ordinal) || *ordinal != next++)
+        return error()
+               << "observation items must cover values exactly in order";
+    } else {
+      return error() << "observation item kind must be literal or value";
+    }
+  }
+  if (next != valueCount)
+    return error() << "observation items must cover values exactly in order";
+  return success();
+}
+
+LogicalResult verifyModuleObservationIdentities(Operation *rawDefinition) {
+  auto definition = dyn_cast_or_null<ModuleOp>(rawDefinition);
+  if (!definition)
+    return failure();
+  SmallVector<ObservationLocalKey, 0> keys;
+  for (auto observe : definition.getBody().front().getOps<SourceObserveOp>()) {
+    if (failed(verifySourceObservationStructure(observe)))
+      return failure();
+    auto identity = observe->getAttrOfType<DictionaryAttr>("ac.observation_id");
+    ObservationLocalKey key{identity, identity.getAs<DictionaryAttr>("owner"),
+                            observe.getKind() == "report"
+                                ? observe.getSpec().getAs<StringAttr>("name")
+                                : StringAttr()};
+    for (const auto &prior : keys) {
+      if (prior.identity == key.identity)
+        return observe.emitOpError() << "duplicate full ObservationID";
+      if (key.reportName && prior.reportName == key.reportName &&
+          prior.owner == key.owner)
+        return observe.emitOpError()
+               << "report name must be unique within logical owner: "
+               << key.reportName.getValue();
+    }
+    keys.push_back(key);
+  }
+  return success();
+}
+} // namespace acir::ac::detail
 } // namespace acir::ac

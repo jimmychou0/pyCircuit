@@ -1,9 +1,9 @@
 // Collection/table member resolution and verification (B2 step-2 design
-// r9): the HardwareAnalysis members, their helper cluster and the common
-// verification entry; the op-local verify bodies in
-// CollectionLocalVerifies.cpp call them through the contracts header.
-// Compiled in the operations target until the r9 §5 reroutes sever the
-// registration knot (slice-IV record).
+// r9): the HardwareAnalysis members and their helper cluster. The staged
+// entries — the source-unit semantic walk in its symbolic-tolerant mode and
+// HardwareAnalysis::verifyResolvedOperation at the binding tiers — run these
+// members after the IX reroute severed the native staged calls
+// (CollectionLocalVerifies.cpp keeps only local grammar).
 #include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
 #include "ACIRSourceContracts.h"
 #include "pycircuit/Dialect/ACIR/ACIROps.h"
@@ -11,17 +11,6 @@
 using namespace mlir;
 
 namespace acir::ac {
-namespace detail {
-LogicalResult verifyCollectionLocally(Operation *op) {
-  auto package = op->getParentOfType<mlir::ModuleOp>();
-  if (!package)
-    return op->emitOpError() << "requires hardware package placement";
-  HardwareBindings bindings;
-  bindings.owner = op->getParentOfType<ModuleOp>();
-  return HardwareAnalysis(package).verifyCollectionOperation(op, bindings);
-}
-} // namespace detail
-
 namespace {
 
 Attribute semantic(Attribute attr) {

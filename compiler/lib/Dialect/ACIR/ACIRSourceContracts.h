@@ -18,10 +18,7 @@ class HardwareAnalysis;
 struct HardwareBindings;
 class ModuleImportOp;
 class ModuleOp;
-/// Per-definition source checks (r9 §5): implementation hosted with the
-/// staged analysis; the operations-layer ModuleOp verifier calls this.
-mlir::LogicalResult
-verifyDefinitionSourceChecksStandalone(ModuleOp definition);
+class SourceObserveOp;
 } // namespace acir::ac
 
 namespace acir::ac {
@@ -39,14 +36,26 @@ namespace acir::ac::detail {
 // collection operation verifiers (ops layer).
 mlir::LogicalResult shapeSchema(mlir::ArrayAttr shape,
                                 llvm::function_ref<mlir::InFlightDiagnostic()> error);
-// Shared local verification entries (B2 step-2 design r9): hosted with
-// the analysis implementations, called by the operation verifiers.
-mlir::LogicalResult verifyEnumValueLocally(mlir::Operation *operation);
-mlir::LogicalResult verifyCollectionLocally(mlir::Operation *operation);
-
-mlir::LogicalResult verifyCollectionLocally(mlir::Operation *operation);
 
 using EmitError = llvm::function_ref<mlir::InFlightDiagnostic()>;
+
+// Observation grammar shared by the native SourceObserveOp and ModuleOp
+// verifiers (ops layer, where these are defined) and the staged check-plan
+// tier, which re-runs the structure before resolving the observation owner.
+struct ObservationLocalKey {
+  mlir::DictionaryAttr identity;
+  mlir::DictionaryAttr owner;
+  mlir::StringAttr reportName;
+};
+/// Statement Method/transaction bodies own source-effect placement; every
+/// other region owner (including guards and pure helpers) never acquires it.
+mlir::Operation *sourceEffectCallable(mlir::Operation *operation);
+mlir::LogicalResult verifySourceObservationStructure(SourceObserveOp observe);
+mlir::LogicalResult verifySourceObservationSpec(mlir::StringAttr kind,
+                                                mlir::DictionaryAttr spec,
+                                                uint64_t valueCount,
+                                                EmitError emitError);
+mlir::LogicalResult verifyModuleObservationIdentities(mlir::Operation *module);
 
 // Implementation storage for common small static-expression grammars, not an
 // admission limit. The source closure preflight accounts for this same storage.
@@ -242,14 +251,6 @@ mlir::LogicalResult verifyStateRef(mlir::DictionaryAttr value,
 // Total structural order for attributes admitted by closed source identity
 // schemas. Callers must verify the enclosing Occurrence or StateRef first.
 int compareClosedSourceStructure(mlir::Attribute left, mlir::Attribute right);
-
-
-
-mlir::LogicalResult
-verifyEntryBoundaryAttributeEntry(mlir::Operation *operation,
-                                  mlir::Attribute attribute);
-mlir::LogicalResult
-verifyModuleObservationIdentitiesEntry(mlir::Operation *module);
 } // namespace acir::ac::detail
 
 #endif // ACIR_LIB_DIALECT_ACIR_ACIRSOURCECONTRACTS_H

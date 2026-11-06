@@ -696,12 +696,10 @@ def ACIR_QueueOp : ACIR_Op<"queue"> {
 def ACIR_TableCreateOp : ACIR_Op<"table.create", [Pure]> {
   let arguments = (ins Variadic<ACIR_ScalarHardwareType>:$inputs);
   let results = (outs ACIR_TableType:$result);
-  let hasVerifier = 1;
 }
 def ACIR_TableSplatOp : ACIR_Op<"table.splat", [Pure]> {
   let arguments = (ins ACIR_HardwareType:$input, ArrayAttr:$shape);
   let results = (outs ACIR_TableType:$result);
-  let hasVerifier = 1;
 }
 def ACIR_TableMapOp : ACIR_Op<"table.map", [Pure, IsolatedFromAbove,
     SingleBlock, AttrSizedOperandSegments]> {
@@ -716,12 +714,10 @@ def ACIR_TableViewOp : ACIR_Op<"table.view", [Pure]> {
   let arguments = (ins ACIR_TableType:$input, StrAttr:$kind,
       DictionaryAttr:$parameters);
   let results = (outs ACIR_TableType:$result);
-  let hasVerifier = 1;
 }
 def ACIR_TableIndexOp : ACIR_Op<"table.index", [Pure]> {
   let arguments = (ins Variadic<ACIR_BitsType>:$coords, ArrayAttr:$shape);
   let results = (outs ACIR_BitsType:$result);
-  let hasVerifier = 1;
 }
 def ACIR_TableReadOp : ACIR_Op<"table.read", [Pure]> {
   let summary = "Read one statically checked source Table element";
@@ -733,12 +729,10 @@ def ACIR_TableReadOp : ACIR_Op<"table.read", [Pure]> {
   }];
   let arguments = (ins ACIR_TableType:$input, ACIR_BitsType:$index);
   let results = (outs ACIR_ScalarHardwareType:$value);
-  let hasVerifier = 1;
 }
 def ACIR_TableGetOp : ACIR_Op<"table.get", [Pure]> {
   let arguments = (ins ACIR_TableType:$input, ACIR_BitsType:$index);
   let results = (outs ACIR_ScalarHardwareType:$value, ACIR_BitsType:$in_range);
-  let hasVerifier = 1;
 }
 def ACIR_TableMatchOp : ACIR_Op<"table.match", [Pure, IsolatedFromAbove,
     SingleBlock]> {
@@ -746,19 +740,16 @@ def ACIR_TableMatchOp : ACIR_Op<"table.match", [Pure, IsolatedFromAbove,
       Variadic<ACIR_ScalarHardwareType>:$captures);
   let results = (outs ACIR_BitsType:$mask);
   let regions = (region AnyRegion:$body);
-  let hasVerifier = 1;
   let hasRegionVerifier = 1;
 }
 def ACIR_TableChooseOp : ACIR_Op<"table.choose", [Pure]> {
   let arguments = (ins ACIR_TableType:$input, ACIR_BitsType:$mask,
       I64Attr:$count, StrAttr:$policy, StrAttr:$order);
   let results = (outs Variadic<ACIR_BitsType>:$results);
-  let hasVerifier = 1;
 }
 def ACIR_TableFoldOp : ACIR_Op<"table.fold", [Pure]> {
   let arguments = (ins ACIR_TableType:$input, StrAttr:$kind);
   let results = (outs ACIR_BitsType:$result);
-  let hasVerifier = 1;
 }
 def ACIR_ValueMergeOp : ACIR_Op<"value.merge", [Pure,
     AttrSizedOperandSegments]> {
@@ -766,7 +757,6 @@ def ACIR_ValueMergeOp : ACIR_Op<"value.merge", [Pure,
       Variadic<ACIR_BitsType>:$guards,
       Variadic<ACIR_HardwareType>:$values, ArrayAttr:$paths);
   let results = (outs ACIR_HardwareType:$next, ACIR_BitsType:$en);
-  let hasVerifier = 1;
 }
 
 def ACIR_EnumOp : ACIR_Op<"enum", [Symbol]> {
@@ -786,14 +776,12 @@ def ACIR_EnumCreateOp : ACIR_Op<"enum.create", [Pure]> {
   let summary = "Create the declared code of one nominal enum member";
   let arguments = (ins StrAttr:$member);
   let results = (outs ACIR_EnumType:$result);
-  let hasVerifier = 1;
 }
 
 def ACIR_EnumToBitsOp : ACIR_Op<"enum.to_bits", [Pure]> {
   let summary = "Expose an enum carrier without changing its four-state bits";
   let arguments = (ins ACIR_EnumType:$input);
   let results = (outs ACIR_BitsType:$result);
-  let hasVerifier = 1;
 }
 
 def ACIR_EnumFromBitsOp : ACIR_Op<"enum.from_bits", [Pure]> {
@@ -806,7 +794,6 @@ def ACIR_EnumFromBitsOp : ACIR_Op<"enum.from_bits", [Pure]> {
   }];
   let arguments = (ins ACIR_BitsType:$input);
   let results = (outs ACIR_EnumType:$value, ACIR_BitsType:$member);
-  let hasVerifier = 1;
 }
 
 def ACIR_StructOp : ACIR_Op<"struct", [Symbol]> {

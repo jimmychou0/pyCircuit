@@ -2,7 +2,6 @@
 #include "IR/StateDeclarationContracts.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/IR/Verifier.h"
-#include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
 #include "pycircuit/Dialect/ACIR/SourceIdentifier.h"
 #include "pycircuit/Dialect/ACIR/SourceMethodAnalysis.h"
 #include "llvm/ADT/STLExtras.h"
@@ -12,6 +11,36 @@ using namespace mlir;
 
 namespace acir::ac {
 namespace {
+
+// Relative receiver grammar (declared in SourceMethodAnalysis.h; the native
+// SourceMethodCallOp verifier and the staged method analysis share it;
+// defined here so the operations archive stays self-sufficient).
+LogicalResult verifySourceRelativeReceiver(DictionaryAttr receiver,
+                                          Operation *site,
+                                          const SourceReceiverProofFees *fees) {
+  auto kind = receiver ? receiver.getAs<StringAttr>("receiver_kind") : StringAttr();
+  auto depth = receiver ? receiver.getAs<IntegerAttr>("ancestor_depth") : IntegerAttr();
+  auto path = receiver ? receiver.getAs<ArrayAttr>("instance_path") : ArrayAttr();
+  if (!receiver || receiver.size() != 3 || !kind ||
+      kind.getValue() != "reference" || !depth ||
+      !depth.getType().isSignlessInteger(64) || depth.getInt() < 0 ||
+      depth.getInt() > 128 || !path || path.size() > 128 ||
+      path.size() + static_cast<uint64_t>(depth.getInt()) > 128)
+    return site->emitOpError() << "relative receiver requires exactly receiver_kind = reference, nonnegative i64 ancestor_depth and a bounded child-name instance_path";
+  if (depth.getInt() != 0 || path.size() > 1)
+    return site->emitOpError() << "static instance reference cannot bypass lexical scope through ancestors, siblings or descendants";
+  if (fees && failed(fees->workStorage(site, 3 + path.size(), 0))) return failure();
+  for (Attribute raw : path) {
+    auto name = dyn_cast<StringAttr>(raw);
+    if (!name)
+      return site->emitOpError() << "relative receiver child path requires Python identifiers";
+    if (fees && failed(fees->workStorage(site, name.getValue().size(), 0))) return failure();
+    if (failed(detail::verifyPythonAstIdentifier(
+            name.getValue(), true, [&] { return site->emitOpError(); })))
+      return failure();
+  }
+  return success();
+}
 
 LogicalResult moduleOccurrence(Operation *operation, DictionaryAttr identity,
                                StringRef description) {
@@ -462,7 +491,10 @@ LogicalResult SourceTransactionOp::verifyRegions() {
     return failure();
   if (failed(region(*this, 1, getCaptures().getTypes(), getResultTypes())))
     return failure();
-  return failed(getSourceRegistrationEntry(*this)) ? failure() : success();
+  // The registration-entry structure (one local transparent Method call)
+  // requires the staged Method resolution cluster and runs from the staged
+  // transaction-surface row (B2 step-2 design r7 diagnostic-site move).
+  return success();
 }
 
 Operation *detail::findUnloweredTransaction(Operation *root) {

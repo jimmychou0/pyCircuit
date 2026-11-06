@@ -749,6 +749,13 @@ LogicalResult HardwareAnalysis::verifyTransactionSurfaceOperation(
             predicate(*this, transaction.getRst(), bindings, transaction,
                       "transaction reset")))
       return failure();
+    // The registration-entry structure left the native region verifier at
+    // IX (it requires the staged Method resolution cluster); the staged
+    // surface row owns it so a direct staged call stays safe on mutated IR.
+    // Transactions without the marker resolve to an empty entry, exactly as
+    // the native verifier saw.
+    if (failed(getSourceRegistrationEntry(transaction)))
+      return failure();
     return guardYieldPredicate(*this, transaction);
   }
   return operation->emitOpError()

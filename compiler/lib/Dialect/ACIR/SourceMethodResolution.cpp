@@ -9,50 +9,6 @@
 
 using namespace mlir;
 namespace acir::ac {
-LogicalResult verifySourceReferenceParameters(Operation *module) {
-  Attribute raw = module->getAttr("ac.reference_parameters");
-  if (!raw) return success();
-  auto refs = dyn_cast<ArrayAttr>(raw);
-  if (!refs || refs.empty())
-    return module->emitOpError() << "ac.reference_parameters requires a nonempty formal array";
-  if (module->hasAttr("ac.root_kind"))
-    return module->emitOpError() << "closed System cannot declare Module reference formals";
-  if (isa<ModuleImportOp>(module)) {
-    auto semantic = module->getAttrOfType<StringAttr>("semantic_kind");
-    if (!semantic || semantic.getValue() != "transactions")
-      return module->emitOpError() << "Module reference imports require transaction schema authority";
-  }
-  auto data = module->getAttrOfType<ArrayAttr>("ac.parameters");
-  if (!data) return module->emitOpError() << "Module reference formals require a complete source call contract";
-  unsigned count = refs.size() + (data ? data.size() : 0);
-  llvm::StringSet<> names;
-  for (StringRef field : {"input_names", "output_names", "type_parameters"})
-    if (auto values = module->getAttrOfType<ArrayAttr>(field))
-      for (Attribute value : values) if (auto name = dyn_cast<StringAttr>(value)) names.insert(name.getValue());
-  if (auto values = module->getAttrOfType<ArrayAttr>("parameters"))
-    for (Attribute value : values) {
-      auto row = dyn_cast<DictionaryAttr>(value);
-      auto name = row ? row.getAs<StringAttr>("name") : StringAttr();
-      if (!name) return module->emitOpError() << "invalid static parameter inventory";
-      names.insert(name.getValue());
-    }
-  llvm::DenseSet<int64_t> positions;
-  int64_t previous = -1;
-  for (Attribute item : refs) {
-    auto row = dyn_cast<DictionaryAttr>(item);
-    auto name = row ? row.getAs<StringAttr>("name") : StringAttr();
-    auto callee = row ? row.getAs<FlatSymbolRefAttr>("callee") : FlatSymbolRefAttr();
-    auto position = row ? row.getAs<IntegerAttr>("position") : IntegerAttr();
-    if (!row || row.size() != 3 || !name || !callee || callee.getValue().empty() ||
-        !position || !position.getType().isSignlessInteger(64) || position.getInt() < 0 ||
-        static_cast<uint64_t>(position.getInt()) >= count || position.getInt() <= previous ||
-        !positions.insert(position.getInt()).second || !names.insert(name.getValue()).second ||
-        failed(detail::verifyPythonAstIdentifier(name.getValue(), true, [&] { return module->emitOpError(); })))
-      return module->emitOpError() << "invalid, duplicate or unordered Module reference formal";
-    previous = position.getInt();
-  }
-  return success();
-}
 namespace {
 FailureOr<Operation *> resolveReferenceReceiver(
     Operation *module, DictionaryAttr receiver, SourceModuleLookup lookup,
@@ -1266,32 +1222,6 @@ FailureOr<ResolvedSourceMethod> resolve(Operation *caller, SymbolRefAttr symbol,
   return ResolvedSourceMethod{method, bindings, receiver};
 }
 } // namespace
-LogicalResult verifySourceRelativeReceiver(DictionaryAttr receiver,
-                                          Operation *site,
-                                          const SourceReceiverProofFees *fees) {
-  auto kind = receiver ? receiver.getAs<StringAttr>("receiver_kind") : StringAttr();
-  auto depth = receiver ? receiver.getAs<IntegerAttr>("ancestor_depth") : IntegerAttr();
-  auto path = receiver ? receiver.getAs<ArrayAttr>("instance_path") : ArrayAttr();
-  if (!receiver || receiver.size() != 3 || !kind ||
-      kind.getValue() != "reference" || !depth ||
-      !depth.getType().isSignlessInteger(64) || depth.getInt() < 0 ||
-      depth.getInt() > 128 || !path || path.size() > 128 ||
-      path.size() + static_cast<uint64_t>(depth.getInt()) > 128)
-    return site->emitOpError() << "relative receiver requires exactly receiver_kind = reference, nonnegative i64 ancestor_depth and a bounded child-name instance_path";
-  if (depth.getInt() != 0 || path.size() > 1)
-    return site->emitOpError() << "static instance reference cannot bypass lexical scope through ancestors, siblings or descendants";
-  if (fees && failed(fees->workStorage(site, 3 + path.size(), 0))) return failure();
-  for (Attribute raw : path) {
-    auto name = dyn_cast<StringAttr>(raw);
-    if (!name)
-      return site->emitOpError() << "relative receiver child path requires Python identifiers";
-    if (fees && failed(fees->workStorage(site, name.getValue().size(), 0))) return failure();
-    if (failed(detail::verifyPythonAstIdentifier(
-            name.getValue(), true, [&] { return site->emitOpError(); })))
-      return failure();
-  }
-  return success();
-}
 FailureOr<ResolvedSourceMethod> resolveSourceRelativeMethodContract(
     Operation *caller, SymbolRefAttr callee, DictionaryAttr receiver,
     SourceModuleLookup lookup, Operation *site,

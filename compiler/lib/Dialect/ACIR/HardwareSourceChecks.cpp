@@ -386,24 +386,9 @@ LogicalResult payEffectMetadata(
   }
   return success();
 }
-// Only statement arms extend a callable body. Other region owners (including
-// guards and pure helpers) never acquire source-effect placement by ancestry.
-Operation *sourceEffectCallable(Operation *operation) {
-  Region *region = operation->getParentRegion();
-  Operation *parent = operation->getParentOp();
-  while (auto branch = dyn_cast_or_null<SourceBranchOp>(parent)) {
-    if (branch->getNumRegions() != 2)
-      return nullptr;
-    if (region != &branch.getThenRegion() && region != &branch.getElseRegion())
-      return nullptr;
-    region = branch->getParentRegion();
-    parent = branch->getParentOp();
-  }
-  return isa_and_nonnull<SourceMethodOp, SourceTransactionOp>(parent) &&
-                 parent->getNumRegions() == 2 && region == &parent->getRegion(1)
-             ? parent
-             : nullptr;
-}
+// Only statement arms extend a callable body; the shared placement walk is
+// detail::sourceEffectCallable, defined with the observation grammar in the
+// operations layer.
 int compareCheckWithinRegistration(DictionaryAttr lhs, DictionaryAttr rhs) {
   for (StringRef key : {"check", "obligation"})
     if (int order =
@@ -412,130 +397,17 @@ int compareCheckWithinRegistration(DictionaryAttr lhs, DictionaryAttr rhs) {
   return 0;
 }
 } // namespace
-LogicalResult
-detail::verifySourceObservationStructure(SourceObserveOp observe) {
-  auto error = [&] { return observe.emitOpError(); };
-  auto kind = observe->getAttrOfType<StringAttr>("kind");
-  auto spec = observe->getAttrOfType<DictionaryAttr>("spec");
-  auto *parent = sourceEffectCallable(observe);
-  bool source = parent != nullptr;
-  if (!source)
-    parent = observe->getParentOp();
-  if (source) {
-    if (!kind ||
-        !llvm::is_contained(ArrayRef<StringRef>{"log", "report"},
-                            kind.getValue()) ||
-        observe->hasAttr("ac.observation_id") ||
-        observe->hasAttr("ac.check_id"))
-      return error()
-             << "source observation requires statement Method/transaction "
-                "body placement, log/report kind and no final identity";
-    if (failed(verifySourceEffectMetadata(
-            observe->getAttrOfType<DictionaryAttr>("occurrence"),
-            observe->getAttrOfType<DictionaryAttr>("ac.location"),
-            parent->getParentOp(), error)))
-      return failure();
-  } else {
-    if (!isa<ModuleOp>(parent) || !kind ||
-        !llvm::is_contained(ArrayRef<StringRef>{"print", "log", "report"},
-                            kind.getValue()))
-      return error() << "observation requires module placement and known kind";
-    if (failed(verifyObservationID(
-            observe->getAttrOfType<DictionaryAttr>("ac.observation_id"),
-            error)) ||
-        failed(verifySourceSpan(
-            observe->getAttrOfType<DictionaryAttr>("ac.location"), error)))
-      return failure();
-  }
-  if (observe->getNumOperands() == 0 ||
-      !isa<BitsType, TypeParamType>(observe->getOperand(0).getType()))
-    return error() << "observation path requires scalar Bits";
-  HardwareBindings bindings;
-  bindings.owner = source ? parent->getParentOp() : parent;
-  if (source &&
-      failed(predicate(
-          HardwareAnalysis(observe->getParentOfType<mlir::ModuleOp>()),
-          observe->getOperand(0), bindings, observe)))
-    return failure();
-  for (auto operand : observe->getOperands().drop_front())
-    if (!isa<BitsType, EnumType, TypeParamType>(operand.getType()))
-      return error() << "observation value requires a scalar hardware payload";
-  return verifySourceObservationSpec(kind, spec, observe->getNumOperands() - 1,
-                                     error);
-}
-
-LogicalResult detail::verifySourceObservationSpec(StringAttr kind,
-                                                  DictionaryAttr spec,
-                                                  uint64_t valueCount,
-                                                  EmitError error) {
-  if (!kind || !spec)
-    return error() << "observation requires a known kind and closed spec";
-  auto text = [&](StringRef key, bool nonempty = false) {
-    auto value = spec.getAs<StringAttr>(key);
-    return value && (!nonempty || !value.getValue().empty());
-  };
-  if (kind.getValue() == "report") {
-    if (spec.size() != 1 || !text("name", true) || valueCount != 1)
-      return error() << "report requires a nonempty name and one scalar value";
+// The observation grammar (structure, spec and module identity duplicates)
+// lives in the operations layer (ACIRModuleOps.cpp) so the native verifiers
+// keep it; this tier keeps the source-placement path-width predicate the
+// native verifier used to run with empty bindings, now under the caller's
+// actual bindings (B2 step-2 design r7 diagnostic-site move).
+LogicalResult detail::verifySourceObservationWidths(
+    const HardwareAnalysis &analysis, SourceObserveOp observe,
+    const HardwareBindings &bindings) {
+  if (!detail::sourceEffectCallable(observe))
     return success();
-  }
-  if (spec.size() != 3 ||
-      (kind.getValue() == "print" && (!text("sep") || !text("end"))) ||
-      (kind.getValue() == "log" &&
-       (!text("event", true) || !text("level") ||
-        !llvm::is_contained(
-            ArrayRef<StringRef>{"debug", "info", "warning", "error"},
-            spec.getAs<StringAttr>("level").getValue()))))
-    return error() << "observation spec has invalid closed fields";
-  auto items = spec.getAs<ArrayAttr>("items");
-  if (!items)
-    return error() << "observation items must be an array";
-  uint64_t next = 0;
-  for (auto raw : items) {
-    auto item = dyn_cast<DictionaryAttr>(raw);
-    auto itemKind = item ? item.getAs<StringAttr>("kind") : StringAttr();
-    if (!item || item.size() != 2 || !itemKind)
-      return error() << "observation item requires exact kind and payload";
-    if (itemKind.getValue() == "literal") {
-      if (!item.getAs<StringAttr>("text"))
-        return error() << "literal observation item requires text";
-    } else if (itemKind.getValue() == "value") {
-      auto ordinal = decodeU32(item.getAs<IntegerAttr>("ordinal"),
-                               "observation item ordinal", error);
-      if (failed(ordinal) || *ordinal != next++)
-        return error()
-               << "observation items must cover values exactly in order";
-    } else {
-      return error() << "observation item kind must be literal or value";
-    }
-  }
-  if (next != valueCount)
-    return error() << "observation items must cover values exactly in order";
-  return success();
-}
-
-LogicalResult detail::verifyModuleObservationIdentities(ModuleOp definition) {
-  SmallVector<ObservationLocalKey, 0> keys;
-  for (auto observe : definition.getBody().front().getOps<SourceObserveOp>()) {
-    if (failed(verifySourceObservationStructure(observe)))
-      return failure();
-    auto identity = observe->getAttrOfType<DictionaryAttr>("ac.observation_id");
-    ObservationLocalKey key{identity, identity.getAs<DictionaryAttr>("owner"),
-                            observe.getKind() == "report"
-                                ? observe.getSpec().getAs<StringAttr>("name")
-                                : StringAttr()};
-    for (const auto &prior : keys) {
-      if (prior.identity == key.identity)
-        return observe.emitOpError() << "duplicate full ObservationID";
-      if (key.reportName && prior.reportName == key.reportName &&
-          prior.owner == key.owner)
-        return observe.emitOpError()
-               << "report name must be unique within logical owner: "
-               << key.reportName.getValue();
-    }
-    keys.push_back(key);
-  }
-  return success();
+  return predicate(analysis, observe->getOperand(0), bindings, observe);
 }
 
 #include "HardwareTransactionReturns.inc"
@@ -1145,7 +1017,7 @@ LogicalResult verifySourceExpectOperation(const HardwareAnalysis &analysis,
                                           SourceExpectOp expect,
                                           const HardwareBindings &bindings) {
   auto error = [&] { return expect.emitOpError(); };
-  auto *parent = sourceEffectCallable(expect);
+  auto *parent = detail::sourceEffectCallable(expect);
   bool source = parent != nullptr;
   if (!source)
     parent = expect->getParentOp();
@@ -1391,11 +1263,5 @@ LogicalResult HardwareAnalysis::verifySourceCheckPlan(
         lhs.ordinal != rhs.ordinal)
       return mismatch();
   return success();
-}
-
-LogicalResult verifyDefinitionSourceChecksStandalone(
-    ModuleOp definition) {
-  return HardwareAnalysis(definition->getParentOfType<mlir::ModuleOp>())
-      .verifyDefinitionSourceChecks(definition);
 }
 } // namespace acir::ac

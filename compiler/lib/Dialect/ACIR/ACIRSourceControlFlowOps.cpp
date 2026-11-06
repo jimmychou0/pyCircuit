@@ -1,6 +1,5 @@
 #include "ACIRSourceContracts.h"
 #include "pycircuit/Dialect/ACIR/ACIROps.h"
-#include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
 
 using namespace mlir;
 

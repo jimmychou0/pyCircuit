@@ -8,16 +8,13 @@
 namespace acir::ac::detail {
 class SourceCheckBudget;
 class SampledAdmissionValidation;
-mlir::LogicalResult verifySourceObservationSpec(
-    mlir::StringAttr kind, mlir::DictionaryAttr spec, uint64_t valueCount,
-    EmitError emitError);
-struct ObservationLocalKey {
-  mlir::DictionaryAttr identity;
-  mlir::DictionaryAttr owner;
-  mlir::StringAttr reportName;
-};
-mlir::LogicalResult verifySourceObservationStructure(SourceObserveOp observe);
-mlir::LogicalResult verifyModuleObservationIdentities(ModuleOp definition);
+// The observation grammar (structure/spec/identity duplicates) and the
+// source-effect placement walk are declared in ACIRSourceContracts.h and
+// defined in the operations layer; this tier owns the bound-width hook and
+// the check-plan entries.
+mlir::LogicalResult verifySourceObservationWidths(
+    const HardwareAnalysis &analysis, SourceObserveOp observe,
+    const HardwareBindings &bindings);
 mlir::LogicalResult verifyRoutedRegistration(
     const HardwareAnalysis &analysis, RuleOp rule,
     const std::function<mlir::LogicalResult(uint64_t, mlir::Operation *)> &debit);

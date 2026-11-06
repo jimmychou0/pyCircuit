@@ -1,8 +1,10 @@
 #ifndef PYCIRCUIT_DIALECT_ACIR_HARDWAREANALYSISCONTEXT_H
 #define PYCIRCUIT_DIALECT_ACIR_HARDWAREANALYSISCONTEXT_H
 
+#include "pycircuit/Dialect/ACIR/ACIRAttributes.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Types.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringMap.h"
 #include <cstdint>
 
@@ -25,5 +27,19 @@ struct HardwareSourceCheckLimits {
 /// header stays above the operation layer, so the closed policy enum lives
 /// here with the limits (B2 step-2 design r9 header split).
 enum class HardwareResetSemantics { Strict, IfOne };
+
+/// Validated raw clock/reset rows on a System Module/ModuleImport
+/// declaration live with the shared context types: both the operations-layer
+/// declaration grammar and the staged analysis consume the same view.
+struct EnumMember {
+  mlir::StringAttr name;
+  MathIntAttr code;
+};
+/// Validated declaration data shared by analysis and both emitters.
+struct EnumDefinitionView {
+  uint64_t width;
+  mlir::StringAttr encoding;
+  llvm::SmallVector<EnumMember> members;
+};
 } // namespace acir::ac
 #endif

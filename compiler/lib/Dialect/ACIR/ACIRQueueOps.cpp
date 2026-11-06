@@ -4,7 +4,6 @@
 // and grammar. Reached from InstanceOp payload contracts (until the r9 §5
 // instance reroute), the resolved dispatch and the staged plan walks.
 #include "ACIRSourceContracts.h"
-#include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
 #include "pycircuit/Interfaces/LogicalStateInterfaces.h"
 #include "pycircuit/Dialect/ACIR/SourceMethodAnalysis.h"
 #include "pycircuit/Dialect/ACIR/SourceIdentifier.h"
