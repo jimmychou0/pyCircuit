@@ -174,17 +174,65 @@ function(_pyc_link_closure target out)
               math(EXPR bodyLength "${innerLength2} - ${bodyStart}")
               string(SUBSTRING "${inner}" ${bodyStart} ${bodyLength} body)
             endif()
-            if(op MATCHES "^TARGET_PROPERTY")
+            # Only explicitly supported forms are parsed (r8 review batch 3
+            # follow-up): content operators carry their argument as linked
+            # content; value-conditional operators keep their first argument
+            # as the conditionally linked result; pure conditions contribute
+            # nothing; IF contributes its true/false branches after dropping
+            # the condition argument. Everything else — TARGET_PROPERTY,
+            # string transforms, unknown operators — cannot be resolved
+            # statically and fails the configure with the exact target and
+            # expression.
+            if(op MATCHES "\$<")
+              # The operator position is itself a nested condition genex
+              # ($<$<TARGET_EXISTS:x>:y>): drop it and keep the result.
+              set(replacement "${body}")
+            elseif(op STREQUAL "TARGET_PROPERTY")
               message(FATAL_ERROR
                 "layering walk: ${head} carries '${entry}' whose "
                 "TARGET_PROPERTY result cannot be resolved statically; "
                 "replace it on a layer link line")
-            endif()
-            if(NOT op MATCHES "^(LINK_ONLY|BUILD_INTERFACE|INSTALL_INTERFACE)$")
-              # A condition: drop the condition text, keep only the result.
+            elseif(op MATCHES "^(LINK_ONLY|BUILD_INTERFACE|INSTALL_INTERFACE)$")
               set(replacement "${body}")
+            elseif(op STREQUAL "IF")
+              # $<IF:cond,true,false>: drop the condition, keep both
+              # branches (the forbidden edge may sit in either).
+              set(branches "${body}")
+              set(replacement "")
+              set(branchIndex 0)
+              while(branches)
+                string(FIND "${branches}" "," commaAt)
+                if(commaAt EQUAL -1)
+                  set(branch "${branches}")
+                  set(branches "")
+                else()
+                  string(SUBSTRING "${branches}" 0 ${commaAt} branch)
+                  math(EXPR commaAt "${commaAt} + 1")
+                  string(SUBSTRING "${branches}" ${commaAt} -1 branches)
+                endif()
+                if(branchIndex GREATER 0)
+                  string(APPEND replacement " " "${branch}")
+                endif()
+                math(EXPR branchIndex "${branchIndex} + 1")
+              endwhile()
+            elseif(op MATCHES "^(CONFIG|TARGET_EXISTS|BOOL|IN_LIST)$")
+              # $<CONFIG:cfg> / $<TARGET_EXISTS:t> / $<BOOL:v> / $<IN_LIST:
+              # item,list>: the first argument is the conditionally linked
+              # result (IN_LIST drops the list argument).
+              set(replacement "${body}")
+              if(op STREQUAL "IN_LIST")
+                string(FIND "${body}" "," commaAt)
+                if(NOT commaAt EQUAL -1)
+                  string(SUBSTRING "${body}" 0 ${commaAt} replacement)
+                endif()
+              endif()
+            elseif(op MATCHES "^(NOT|AND|OR|MATCHES|COMPARE_|VERSION_)")
+              set(replacement "")
             else()
-              set(replacement "${inner}")
+              message(FATAL_ERROR
+                "layering walk: ${head} carries '${entry}' whose operator "
+                "'${op}' is not a supported generator-expression form; "
+                "replace it on a layer link line")
             endif()
             string(LENGTH "${remainder}" tailLength)
             math(EXPR tailStart "${closeAt} + 1")
