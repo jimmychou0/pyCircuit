@@ -1,5 +1,6 @@
 #ifndef PYCIRCUIT_DIALECT_ACIR_TRANSACTIONALCONTRACTS_H
 #define PYCIRCUIT_DIALECT_ACIR_TRANSACTIONALCONTRACTS_H
+#include "pycircuit/Dialect/ACIR/TransactionalClosureHost.h"
 #include "pycircuit/Dialect/ACIR/ACIROps.h"
 #include "mlir/IR/BuiltinOps.h"
 namespace acir::ac {

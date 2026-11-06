@@ -60,7 +60,7 @@ LogicalResult verifyTransactionalLinkedPackage(mlir::ModuleOp package) {
 }
 } // namespace acir::ac
 
-mlir::LogicalResult StagedTransactionalClosure::verifyLinkedWidths(
+mlir::LogicalResult acir::ac::StagedTransactionalClosure::verifyLinkedWidths(
     mlir::ModuleOp package) const {
   return verifyTransactionalLinkedPackage(package);
 }
