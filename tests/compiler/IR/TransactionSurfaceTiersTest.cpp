@@ -66,6 +66,7 @@ std::string vocabulary(StringRef owner) {
          "!b1 = !ac.bits<#w1>\n"
          "!b8 = !ac.bits<#w8>\n"
          "!bw = !ac.bits<#wW>\n"
+         "!b3 = !ac.bits<#w3>\n"
          "!lanes = !ac.table<[#wW], !b8>\n"
          "#counter = {site = {definition = @" + owner.str() +
          ", ast_path = []}, expansion = []}\n"
@@ -149,17 +150,18 @@ std::string tableRoot(StringRef binding) {
                      "-> !b1\n") +
          instance("left", "#left_instance") +
          instance("right", "#right_instance") +
-         "    %answer = \"ac.transaction\"(%clk, %rst, %yes, %data) ({\n"
-         "    ^bb0(%path: !b1, %value: !bw):\n"
+         "    %idx = \"ac.bits.constant\"() {value = #w3} : () -> !b3\n"
+         "    %answer = \"ac.transaction\"(%clk, %rst, %yes, %idx) ({\n"
+         "    ^bb0(%path: !b1, %value: !b3):\n"
          "      \"ac.yield\"(%path) : (!b1) -> ()\n"
          "    }, {\n"
-         "    ^bb0(%path: !b1, %value: !bw):\n"
+         "    ^bb0(%path: !b1, %value: !b3):\n"
          "      %a = \"ac.method.call\"(%path, %value) {callee = "
          "@transactions.Counter::@add, instance_path = [\"left\"], "
-         "occurrence = #root} : (!b1, !bw) -> !b8\n"
+         "occurrence = #root} : (!b1, !b3) -> !b8\n"
          "      \"ac.yield\"(%a) : (!b8) -> ()\n"
          "    }) {name = \"step\", declaration = #root, occurrence = "
-         "#root, ac.guard_location = #span} : (!b1, !b1, !b1, !bw) -> "
+         "#root, ac.guard_location = #span} : (!b1, !b1, !b1, !b3) -> "
          "!b8\n"
          "    \"ac.yield\"(%answer) : (!lanes) -> ()\n"
          "  }) {sym_name = \"Root\", source_owner = {package = \"\", path "
