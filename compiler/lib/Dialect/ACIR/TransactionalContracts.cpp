@@ -382,8 +382,7 @@ LogicalResult verifyTransactionalPackage(mlir::ModuleOp package) {
   // The payload-closure half is analysis-owned (r8 review): the registered
   // host runs it as part of the supported structural verification entry;
   // without a host the closure cannot run and the package is rejected.
-  auto *dialect = llvm::dyn_cast_or_null<ACIRDialect>(
-      package->getContext()->getLoadedDialect("ac"));
+  auto *dialect = package->getContext()->getLoadedDialect("ac");
   auto *host = dialect
                    ? dialect->getRegisteredInterface<TransactionalClosureHost>()
                    : nullptr;

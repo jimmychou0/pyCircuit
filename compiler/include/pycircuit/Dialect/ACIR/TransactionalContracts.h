@@ -1,6 +1,7 @@
 #ifndef PYCIRCUIT_DIALECT_ACIR_TRANSACTIONALCONTRACTS_H
 #define PYCIRCUIT_DIALECT_ACIR_TRANSACTIONALCONTRACTS_H
 #include "pycircuit/Dialect/ACIR/TransactionalClosureHost.h"
+#include "mlir/IR/DialectRegistry.h"
 #include "pycircuit/Dialect/ACIR/ACIROps.h"
 #include "mlir/IR/BuiltinOps.h"
 namespace acir::ac {
@@ -35,4 +36,8 @@ public:
   mlir::LogicalResult
   verifyLinkedWidths(mlir::ModuleOp package) const override;
 };
+
+/// Register the staged closure host as an ac-dialect extension so the
+/// native transactional verifier reaches the analysis-owned closure.
+void attachStagedTransactionalClosure(mlir::DialectRegistry &registry);
 } // namespace acir::ac

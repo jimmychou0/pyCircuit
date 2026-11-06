@@ -6,6 +6,7 @@
 // the literal-Bits carrier width (verifyLiteralWidthResolves). This TU joins
 // ACIRAnalysis at IX; the compiler-layer transition hook calls the entry
 // declared in TransactionalContracts.h.
+#include "pycircuit/Dialect/ACIR/ACIRDialect.h"
 #include "pycircuit/Dialect/ACIR/TransactionalContracts.h"
 #include "pycircuit/Dialect/ACIR/TransactionalClosureHost.h"
 #include "ACIRSourceContracts.h"
@@ -64,5 +65,12 @@ namespace acir::ac {
 mlir::LogicalResult StagedTransactionalClosure::verifyLinkedWidths(
     mlir::ModuleOp package) const {
   return verifyTransactionalLinkedPackage(package);
+}
+
+void attachStagedTransactionalClosure(mlir::DialectRegistry &registry) {
+  registry.addExtension(+[](mlir::MLIRContext *context, ACIRDialect *dialect) {
+    dialect->addInterface(
+        std::make_unique<StagedTransactionalClosure>(dialect));
+  });
 }
 } // namespace acir::ac

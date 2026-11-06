@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
                   mlir::scf::SCFDialect>();
   // The staged transactional payload closure rides the native verifier
   // through this dialect extension (r8 review).
-  dialects.addExtension<acir::ac::StagedTransactionalClosure>();
+  acir::ac::attachStagedTransactionalClosure(dialects);
   acir::registerACIRPasses();
   acir::compiler::detail::registerSourceCompilerPasses();
   acir::compiler::detail::registerSourceBindingsPass();
