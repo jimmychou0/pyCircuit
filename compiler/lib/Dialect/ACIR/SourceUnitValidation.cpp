@@ -224,8 +224,11 @@ FailureOr<SourceUnitStructure> verifyStructure(mlir::ModuleOp unit, bool body,
         result = pred.emitOpError()
                  << "source SCF predicate requires width-one Bits";
     }
-    if (failed(result))
+    if (failed(result)) {
+      operation->emitOpError() << "TEMPWALKROW "
+                               << operation->getName().getStringRef();
       return WalkResult::interrupt();
+    }
     return WalkResult::advance();
   });
   if (semanticWalk.wasInterrupted())
