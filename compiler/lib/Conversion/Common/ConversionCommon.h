@@ -7,7 +7,7 @@
 #ifndef PYCIRCUIT_CONVERSION_CONVERSIONCOMMON_H
 #define PYCIRCUIT_CONVERSION_CONVERSIONCOMMON_H
 
-#include "Dialect/ACIR/HardwareAnalysis.h"
+#include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/Value.h"

@@ -1,7 +1,14 @@
 #ifndef PYCIRCUIT_CONVERSION_GFIRTOHWIR_H
 #define PYCIRCUIT_CONVERSION_GFIRTOHWIR_H
 
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/OwningOpRef.h"
+#include "mlir/Support/LogicalResult.h"
+#include <memory>
+
+namespace mlir {
+class Pass;
+}
 
 namespace acir::ac::detail {
 class SourceCheckBudget;

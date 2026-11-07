@@ -7,8 +7,8 @@
 // Conversion-common helpers shared with the ACIRToGFIR routing stage.
 #include "../Common/ConversionCommon.h"
 #include "Dialect/ACIR/ACIRSourceContracts.h"
-#include "Dialect/ACIR/HardwareAnalysis.h"
 #include "Dialect/ACIR/SourceCheckBudget.h"
+#include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
 #include "pycircuit/Analysis/LogicalStateValidation.h"
 #include "pycircuit/Dialect/ACIR/ACIRDialect.h"
 #include "pycircuit/Dialect/ACIR/GFIRPackageValidation.h"
