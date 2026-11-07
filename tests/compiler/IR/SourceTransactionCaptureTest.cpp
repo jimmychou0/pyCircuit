@@ -6,7 +6,7 @@
 #include "Compiler/SourceUnit.h"
 #include "Dialect/ACIR/HardwareSourceCheckPreflight.h"
 #include "Dialect/ACIR/HardwareSourceChecks.h"
-#include "Transforms/LowerTransactions.h"
+#include "pycircuit/Conversion/ACIRToGFIR.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/Verifier.h"

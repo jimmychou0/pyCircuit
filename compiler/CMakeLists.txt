@@ -351,7 +351,8 @@ function(_pyc_link_closure target out)
           # A layer target mentioned inside an entry that did not resolve to
           # a dependency must not slip through silently (r8 review batch 3).
           foreach(_pyc_layer IN ITEMS GFIRDialect ACIRDialect ACIRAnalysis ACIRCore
-              GFIRValidation HWIRValidation)
+              GFIRValidation HWIRValidation ACIRConversionCommon ACIRToGFIR
+              GFIRToHWIR)
             if("${entry}" MATCHES "(^|[^A-Za-z0-9_:.${_pyc_layer}])${_pyc_layer}([^A-Za-z0-9_:.]|$)")
               set(_pyc_resolved 0)
               foreach(name IN LISTS names)
@@ -393,7 +394,20 @@ function(pycircuit_verify_layering)
     "GFIRValidation:ACIRTransforms"
     "GFIRValidation:ACIRCodegen"
     "HWIRValidation:ACIRTransforms"
-    "HWIRValidation:ACIRCodegen")
+    "HWIRValidation:ACIRCodegen"
+    # The two conversion stages sit between the analysis/validation layer and
+    # the integration/emitter layer (C-package design §1.2/B2 tail): each may
+    # consume both dialects, the staged analysis and the two validations
+    # through the conversion-common helpers, but never each other, never a
+    # source transform, never the integration owner and never an emitter.
+    "ACIRToGFIR:GFIRToHWIR"
+    "GFIRToHWIR:ACIRToGFIR"
+    "ACIRToGFIR:ACIRTransforms"
+    "GFIRToHWIR:ACIRTransforms"
+    "ACIRToGFIR:ACIRSourceCompiler"
+    "GFIRToHWIR:ACIRSourceCompiler"
+    "ACIRToGFIR:ACIRCodegen"
+    "GFIRToHWIR:ACIRCodegen")
   foreach(pair IN LISTS forbidden)
     string(REPLACE ":" ";" ends "${pair}")
     list(GET ends 0 lower)
@@ -405,6 +419,27 @@ function(pycircuit_verify_layering)
     if("${upper}" IN_LIST closure)
       message(FATAL_ERROR
         "layering violation: ${lower} transitively links ${upper}")
+    endif()
+  endforeach()
+  # The prospective conversion DAG is enforced positively as well: each
+  # conversion stage must actually consume its declared analysis and
+  # dialect/validation inputs, not merely avoid the forbidden edges.
+  set(required
+    "ACIRToGFIR:ACIRAnalysis"
+    "ACIRToGFIR:GFIRDialect"
+    "GFIRToHWIR:GFIRDialect"
+    "GFIRToHWIR:HWIRValidation")
+  foreach(pair IN LISTS required)
+    string(REPLACE ":" ";" ends "${pair}")
+    list(GET ends 0 lower)
+    list(GET ends 1 upper)
+    if(NOT TARGET "${lower}")
+      continue()
+    endif()
+    _pyc_link_closure("${lower}" closure)
+    if(NOT "${upper}" IN_LIST closure)
+      message(FATAL_ERROR
+        "layering violation: ${lower} does not link required ${upper}")
     endif()
   endforeach()
   message(STATUS "verify-layering: layer directions OK")

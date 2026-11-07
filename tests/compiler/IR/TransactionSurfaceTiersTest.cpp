@@ -12,7 +12,7 @@
 #include "pycircuit/Dialect/ACIR/SourceUnitValidation.h"
 #include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
 #include "pycircuit/Dialect/GFIR/GFIRDialect.h"
-#include "pycircuit/Transforms/Passes.h"
+#include "pycircuit/Conversion/ACIRToGFIR.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/SymbolTable.h"

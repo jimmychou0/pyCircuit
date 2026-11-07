@@ -2,7 +2,7 @@
 #include "Compiler/SourceLink.h"
 #include "Compiler/SourceUnit.h"
 #include "Dialect/ACIR/HardwareSourceCheckPreflight.h"
-#include "Transforms/LowerTransactions.h"
+#include "pycircuit/Conversion/ACIRToGFIR.h"
 #include "mlir/AsmParser/AsmParser.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/Diagnostics.h"

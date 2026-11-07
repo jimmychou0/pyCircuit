@@ -26,6 +26,8 @@ add_acir_library(ACIRSourceCompiler SOURCES
     ACIRAnalysis
     GFIRValidation
     HWIRValidation
+    ACIRToGFIR
+    GFIRToHWIR
     ACIRTransforms
     MLIRArithDialect
     MLIRFuncDialect

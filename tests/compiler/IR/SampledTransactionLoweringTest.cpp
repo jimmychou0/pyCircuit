@@ -1,5 +1,6 @@
 #include "Dialect/ACIR/HardwareSourceCheckPreflight.h"
-#include "Transforms/LowerTransactions.h"
+#include "pycircuit/Conversion/ACIRToGFIR.h"
+#include "pycircuit/Conversion/GFIRToHWIR.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/IR/Verifier.h"

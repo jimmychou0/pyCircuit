@@ -107,7 +107,7 @@ target_compile_definitions(ACIRSourceInterfacePassTests PRIVATE
   PYCIRCUIT_TEST_REPO_ROOT="${PYCIRCUIT_REPO_ROOT}")
 target_link_libraries(ACIRSourceInterfacePassTests PRIVATE
   ACIRCodegen
-  ACIRSourceCompiler ACIRTransforms MLIRPass)
+  ACIRSourceCompiler ACIRToGFIR ACIRTransforms MLIRPass)
 add_acir_api_test(ACIRRecordProjectionSimplificationTests RecordProjectionSimplificationTest.cpp)
 target_link_libraries(ACIRRecordProjectionSimplificationTests PRIVATE
   ACIRTransforms MLIRPass)
@@ -118,7 +118,7 @@ add_acir_api_test(ACIRTransactionEffectsTests TransactionEffectsTest.cpp
   SourceFormalOwnerBindingTest.cpp SourceRegistrationEntryTest.cpp
   HardwareWriteDomainsTest.cpp HardwareResourceDemandTest.cpp)
 target_link_libraries(ACIRTransactionEffectsTests PRIVATE
-  ACIRSourceCompiler ACIRTransforms MLIRPass)
+  ACIRSourceCompiler ACIRToGFIR GFIRToHWIR ACIRTransforms MLIRPass)
 target_compile_definitions(ACIRTransactionEffectsTests PRIVATE
   PYCIRCUIT_TEST_PYTHON="${Python3_EXECUTABLE}"
   PYCIRCUIT_TEST_REPO_ROOT="${PYCIRCUIT_REPO_ROOT}")
@@ -134,7 +134,7 @@ add_acir_api_test(ACIRTableDependencySummaryTests TableDependencySummaryTest.cpp
 add_acir_api_test(ACIRSourceSymbolicBoundaryTests SourceSymbolicBoundaryTest.cpp)
 add_acir_api_test(ACIRTransactionSurfaceTiersTests TransactionSurfaceTiersTest.cpp)
 target_link_libraries(ACIRTransactionSurfaceTiersTests PRIVATE
-  ACIRTransforms MLIRPass)
+  ACIRToGFIR ACIRTransforms MLIRPass)
 add_acir_api_test(ACIRHardwareSourceChecksTests
   GUARD "${CMAKE_CURRENT_SOURCE_DIR}/run_source_checks_guarded.py"
   FILTER "-HardwareSourceChecksExecution.*"

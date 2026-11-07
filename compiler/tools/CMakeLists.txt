@@ -48,6 +48,8 @@ target_link_libraries(pycircuit-opt PRIVATE
   GFIRValidation
   HWIRValidation
   GFIRDialect
+  ACIRToGFIR
+  GFIRToHWIR
   ACIRSourceCompiler
   ACIRTransforms
   MLIRArithDialect

@@ -1,5 +1,5 @@
-#ifndef PYCIRCUIT_LOWER_TRANSACTIONS_H
-#define PYCIRCUIT_LOWER_TRANSACTIONS_H
+#ifndef PYCIRCUIT_CONVERSION_ACIRTOGFIR_H
+#define PYCIRCUIT_CONVERSION_ACIRTOGFIR_H
 
 #include "llvm/ADT/DenseSet.h"
 #include "mlir/IR/IRMapping.h"
@@ -268,10 +268,10 @@ mlir::LogicalResult verifyTransactionMaterialization(
     const PreparedTransactionLowering &prepared,
     const MaterializedTransactionLowering &candidate,
     ac::detail::SourceCheckBudget &budget);
-mlir::FailureOr<mlir::OwningOpRef<mlir::ModuleOp>> materializeHardwareState(
-    mlir::ModuleOp routed, ac::detail::SourceCheckBudget &budget);
-mlir::LogicalResult verifyHardwareStateMaterialization(
-    mlir::ModuleOp routed, mlir::ModuleOp candidate,
-    ac::detail::SourceCheckBudget &budget);
 } // namespace acir::detail
+
+namespace acir {
+std::unique_ptr<mlir::Pass> createRouteTransactionsPass();
+void registerACIRToGFIRPasses();
+} // namespace acir
 #endif

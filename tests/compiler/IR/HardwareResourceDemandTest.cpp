@@ -2,7 +2,7 @@
 // source. Serialized admission rows never supply the expected demand graph.
 #include "Compiler/SourceLink.h"
 #include "Compiler/SourceUnit.h"
-#include "Transforms/LowerTransactions.h"
+#include "pycircuit/Conversion/ACIRToGFIR.h"
 #include "Dialect/ACIR/HardwareSampledAdmission.h"
 #include "Dialect/ACIR/HardwareQueueResources.h"
 #include "Dialect/ACIR/HardwareSourceCheckPreflight.h"
