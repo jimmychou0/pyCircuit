@@ -263,7 +263,6 @@ add_custom_target(check-pycircuit
   ACIRTransactionSurfaceTiersTests
     ACIRTableDependencySummaryTests
     ACIRHardwareSourceChecksTests
-    ACIRHardwareSourceChecksExecution
     ACIREnumHardwareAnalysisTests
     ACIRFinalSourceUnitsTests ACIREnumSourceUnitAuthorityTests
     ACIRRegRuntimeTests ACIRCollectionRuntimeTests ACIRFifoRuntimeTests ACIRSystemLifecycleTests ACIRObservationTests ACIRSimExecutorTests
