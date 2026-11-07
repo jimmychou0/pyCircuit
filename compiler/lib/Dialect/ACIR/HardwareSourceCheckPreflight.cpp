@@ -39,8 +39,8 @@ struct BoundDefinition {
 class Builder {
 public:
   Builder(const HardwareAnalysis &analysis, HardwareSourceCheckLimits limits,
-          PackageVerificationProfile profile)
-      : analysis(analysis), profile(profile), budget(limits), validation(analysis, budget) {}
+          const PackageStagePolicy &policy)
+      : analysis(analysis), policy(policy), budget(limits), validation(analysis, budget) {}
   FailureOr<HardwareSourceCheckPlan> build() {
     auto package = analysis.getPackage();
     budget.setPhase("raw preflight");
@@ -51,7 +51,7 @@ public:
       if (failed(rawPreflight()))
         return failure();
     }
-    if (failed(verifyHardwarePackageStage(analysis, profile))) return failure();
+    if (failed(verifyHardwarePackageStage(analysis, policy))) return failure();
     {
       NativeSourceCheckScope native(analysis, validation, budget, nativeChecks);
       // Establish the builtin package's own ODS/trait/custom shape before any
@@ -96,7 +96,7 @@ public:
           return failure();
     }
     if (failed(verifyHardwarePackageEnvelope(
-            analysis, profile, [&](uint64_t units, Operation *site) {
+            analysis, policy, [&](uint64_t units, Operation *site) {
               return budget.debit(units, site);
             }))) return failure();
     auto resetSemantics = getHardwareResetSemantics(package);
@@ -1667,7 +1667,7 @@ private:
         } else {
           auto childDefinition = dyn_cast<ModuleOp>(child->owner);
           if (!childDefinition) {
-            if (profile != PackageVerificationProfile::Routed ||
+            if (!policy.combinationalExternalAdmission ||
                 !child->owner->hasAttr("ac.external_contract"))
               return allocation->emitOpError()
                      << "source check plan requires explicit provider body";
@@ -1847,7 +1847,7 @@ private:
     return success();
   }
   const HardwareAnalysis &analysis;
-  PackageVerificationProfile profile;
+  PackageStagePolicy policy;
   SourceCheckBudget budget;
   SampledAdmissionValidation validation;
   HardwareSourceCheckPlan plan;
@@ -1864,7 +1864,7 @@ private:
 FailureOr<HardwareSourceCheckPlan>
 buildSourceCheckPlan(const HardwareAnalysis &analysis,
                      HardwareSourceCheckLimits limits,
-                     PackageVerificationProfile profile) {
-  return Builder(analysis, limits, profile).build();
+                     const PackageStagePolicy &policy) {
+  return Builder(analysis, limits, policy).build();
 }
 } // namespace acir::ac::detail

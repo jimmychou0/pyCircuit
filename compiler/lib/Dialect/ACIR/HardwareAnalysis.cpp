@@ -1,6 +1,5 @@
 #include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
 #include "AnalysisResolver.h"
-#include "HardwareSourceCheckPreflight.h"
 #include "pycircuit/Dialect/ACIR/SourceMethodAnalysis.h"
 #include "ACIRSourceContracts.h"
 #include "IR/StateDeclarationContracts.h"
@@ -262,19 +261,6 @@ HardwareAnalysis::verifyOccurrence(Operation *instance,
     if (failed(check(a, e)))
       return failure();
   return success();
-}
-LogicalResult verifyHardwarePackage(mlir::ModuleOp package) {
-  if (!package)
-    return failure();
-  return HardwareAnalysis(package).verify();
-}
-LogicalResult verifyRoutedPackage(mlir::ModuleOp package,
-                                  HardwareSourceCheckLimits limits) {
-  if (!package)
-    return failure();
-  HardwareAnalysis analysis(package);
-  return success(succeeded(detail::buildSourceCheckPlan(
-      analysis, limits, detail::PackageVerificationProfile::Routed)));
 }
 } // namespace acir::ac
 namespace acir::ac {

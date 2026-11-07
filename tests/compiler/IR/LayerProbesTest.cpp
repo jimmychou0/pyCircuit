@@ -113,6 +113,91 @@ TEST(ACIRAnalysisStandalone, RunsTheStagedPackageAcceptance) {
       << diagnostics;
 }
 } // namespace
+#elif defined(PYCIRCUIT_GFIR_VALIDATION_PROBE)
+// GFIR validation containment probe: this executable links ONLY the
+// GFIRValidation target (C-package design §5). Running the routed package
+// entrypoint must pull no symbol from HWIRValidation, GFIRDialect,
+// ACIRTransforms or ACIRCodegen; the configure-time pycircuit_verify_layering
+// walk asserts the transitive closure. The ACIR dialect resolves through
+// GFIRValidation's own ACIRAnalysis dependency, below this layer.
+#include "pycircuit/Dialect/ACIR/GFIRPackageValidation.h"
+#include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinOps.h"
+namespace {
+TEST(GFIRValidationStandalone, RunsTheRoutedPackageEntrypoint) {
+  mlir::DialectRegistry registry;
+  registry.insert<acir::ac::ACIRDialect>();
+  mlir::MLIRContext context(registry);
+  ASSERT_TRUE(context.getOrLoadDialect<acir::ac::ACIRDialect>() != nullptr);
+  std::string diagnostics;
+  mlir::ScopedDiagnosticHandler capture(&context, [&](mlir::Diagnostic &diagnostic) {
+    diagnostics += diagnostic.str();
+    return mlir::success();
+  });
+  // The routed stage policy rejects a package without ac.stage with the
+  // exact boundary text; the shared bounded pipeline runs to that check.
+  auto unstaged = mlir::ModuleOp::create(mlir::UnknownLoc::get(&context));
+  EXPECT_TRUE(mlir::failed(acir::ac::verifyRoutedPackage(*unstaged)));
+  EXPECT_NE(diagnostics.find("routed verification requires ac.stage = routed"),
+            std::string::npos)
+      << diagnostics;
+  // Transactional packages never enter the legacy routed pipeline.
+  diagnostics.clear();
+  auto transactional = mlir::ModuleOp::create(mlir::UnknownLoc::get(&context));
+  transactional->setAttr("ac.transactional",
+                         mlir::IntegerAttr::get(mlir::IntegerType::get(&context, 64),
+                                                2));
+  EXPECT_TRUE(mlir::failed(acir::ac::verifyRoutedPackage(*transactional)));
+  EXPECT_NE(diagnostics.find(
+                "transactional resource packages cannot enter legacy routed "
+                "or final hardware analysis"),
+            std::string::npos)
+      << diagnostics;
+}
+} // namespace
+#elif defined(PYCIRCUIT_HWIR_VALIDATION_PROBE)
+// HWIR validation containment probe: this executable links ONLY the
+// HWIRValidation target (C-package design §5). Running the final hardware
+// package entrypoint must pull no symbol from GFIRValidation, GFIRDialect,
+// ACIRTransforms or ACIRCodegen; the configure-time pycircuit_verify_layering
+// walk asserts the transitive closure.
+#include "pycircuit/Dialect/ACIR/HWIRPackageValidation.h"
+#include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinOps.h"
+namespace {
+TEST(HWIRValidationStandalone, RunsTheFinalPackageEntrypoint) {
+  mlir::DialectRegistry registry;
+  registry.insert<acir::ac::ACIRDialect>();
+  mlir::MLIRContext context(registry);
+  ASSERT_TRUE(context.getOrLoadDialect<acir::ac::ACIRDialect>() != nullptr);
+  std::string diagnostics;
+  mlir::ScopedDiagnosticHandler capture(&context, [&](mlir::Diagnostic &diagnostic) {
+    diagnostics += diagnostic.str();
+    return mlir::success();
+  });
+  // The final hardware stage policy rejects a retained routed stage with the
+  // exact boundary text; routed packages require state refinement first.
+  auto routed = mlir::ModuleOp::create(mlir::UnknownLoc::get(&context));
+  routed->setAttr("ac.stage", mlir::StringAttr::get(&context, "routed"));
+  EXPECT_TRUE(mlir::failed(acir::ac::verifyHardwarePackage(*routed)));
+  EXPECT_NE(diagnostics.find("executable hardware verification requires final "
+                             "hardware; routed packages require state refinement"),
+            std::string::npos)
+      << diagnostics;
+  // Transactional packages never enter the legacy final pipeline.
+  diagnostics.clear();
+  auto transactional = mlir::ModuleOp::create(mlir::UnknownLoc::get(&context));
+  transactional->setAttr("ac.transactional",
+                         mlir::IntegerAttr::get(mlir::IntegerType::get(&context, 64),
+                                                2));
+  EXPECT_TRUE(mlir::failed(acir::ac::verifyHardwarePackage(*transactional)));
+  EXPECT_NE(diagnostics.find(
+                "transactional resource packages cannot enter legacy routed "
+                "or final hardware analysis"),
+            std::string::npos)
+      << diagnostics;
+}
+} // namespace
 #else
 // Ops-layer containment probe: this executable links ONLY the ACIRDialect
 // target. Loading the dialect and resolving registered operations must

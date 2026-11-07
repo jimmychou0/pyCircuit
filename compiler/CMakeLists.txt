@@ -350,7 +350,8 @@ function(_pyc_link_closure target out)
           endforeach()
           # A layer target mentioned inside an entry that did not resolve to
           # a dependency must not slip through silently (r8 review batch 3).
-          foreach(_pyc_layer IN ITEMS GFIRDialect ACIRDialect ACIRAnalysis ACIRCore)
+          foreach(_pyc_layer IN ITEMS GFIRDialect ACIRDialect ACIRAnalysis ACIRCore
+              GFIRValidation HWIRValidation)
             if("${entry}" MATCHES "(^|[^A-Za-z0-9_:.${_pyc_layer}])${_pyc_layer}([^A-Za-z0-9_:.]|$)")
               set(_pyc_resolved 0)
               foreach(name IN LISTS names)
@@ -380,7 +381,19 @@ function(pycircuit_verify_layering)
     "ACIRCore:ACIRAnalysis"
     "ACIRDialect:ACIRAnalysis"
     "ACIRAnalysis:ACIRTransforms"
-    "ACIRAnalysis:ACIRCodegen")
+    "ACIRAnalysis:ACIRCodegen"
+    # The two package-verification targets are independent siblings above
+    # ACIRAnalysis (C-package design §5): neither links the other, neither
+    # links GFIRDialect (the routed walk compares registered op NAME
+    # strings), and neither may grow an upper-layer dependency.
+    "GFIRValidation:HWIRValidation"
+    "HWIRValidation:GFIRValidation"
+    "GFIRValidation:GFIRDialect"
+    "HWIRValidation:GFIRDialect"
+    "GFIRValidation:ACIRTransforms"
+    "GFIRValidation:ACIRCodegen"
+    "HWIRValidation:ACIRTransforms"
+    "HWIRValidation:ACIRCodegen")
   foreach(pair IN LISTS forbidden)
     string(REPLACE ":" ";" ends "${pair}")
     list(GET ends 0 lower)

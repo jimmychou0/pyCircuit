@@ -12,8 +12,9 @@ function(add_acir_api_test target)
   add_executable(${target} ${API_TEST_UNPARSED_ARGUMENTS})
   target_include_directories(${target} PRIVATE "${PYCIRCUIT_SOURCE_DIR}/lib")
   # API tests exercise staged behavior; the dedicated layer-containment
-  # probes (ACIROps/ACIRAnalysis/GFIRStandalone) own the link-line checks.
-  target_link_libraries(${target} PRIVATE ACIRDialect ACIRAnalysis MLIRParser MLIRFuncDialect GTest::gtest_main)
+  # probes (ACIROps/ACIRAnalysis/GFIR/HWIRValidationStandalone) own the
+  # link-line checks.
+  target_link_libraries(${target} PRIVATE ACIRDialect ACIRAnalysis GFIRValidation HWIRValidation MLIRParser MLIRFuncDialect GTest::gtest_main)
   if(NOT API_TEST_FILTER)
     set(API_TEST_FILTER "*")
   endif()
@@ -67,6 +68,26 @@ target_link_libraries(ACIRCoreStandaloneTests PRIVATE
   "$<LINK_LIBRARY:WHOLE_ARCHIVE,ACIRCore>" GTest::gtest_main)
 add_test(NAME ACIRCoreStandaloneTests COMMAND ACIRCoreStandaloneTests)
 set_tests_properties(ACIRCoreStandaloneTests PROPERTIES LABELS "api;gate;nightly")
+
+# GFIR/HWIR validation containment probes: each links exactly its own
+# validation target (C-package design §5). Running the package entrypoint
+# must pull no symbol from the sibling validation target, GFIRDialect or any
+# upper layer; pycircuit_verify_layering asserts the transitive closure.
+add_executable(GFIRValidationStandaloneTests LayerProbesTest.cpp)
+target_compile_definitions(GFIRValidationStandaloneTests PRIVATE
+  PYCIRCUIT_GFIR_VALIDATION_PROBE=1)
+target_link_libraries(GFIRValidationStandaloneTests PRIVATE
+  GFIRValidation GTest::gtest_main)
+add_test(NAME GFIRValidationStandaloneTests COMMAND GFIRValidationStandaloneTests)
+set_tests_properties(GFIRValidationStandaloneTests PROPERTIES LABELS "api;gate;nightly")
+
+add_executable(HWIRValidationStandaloneTests LayerProbesTest.cpp)
+target_compile_definitions(HWIRValidationStandaloneTests PRIVATE
+  PYCIRCUIT_HWIR_VALIDATION_PROBE=1)
+target_link_libraries(HWIRValidationStandaloneTests PRIVATE
+  HWIRValidation GTest::gtest_main)
+add_test(NAME HWIRValidationStandaloneTests COMMAND HWIRValidationStandaloneTests)
+set_tests_properties(HWIRValidationStandaloneTests PROPERTIES LABELS "api;gate;nightly")
 target_link_libraries(ACIRLogicalStateInterfacesTests PRIVATE PycircuitStateInterfaces GFIRDialect ACIRAnalysis)
 target_link_libraries(ACIRRoutedAnchorTests PRIVATE ACIRSourceCompiler)
 add_acir_api_test(ACIRAnchorArtifactTests AnchorArtifactTest.cpp)

@@ -15,6 +15,8 @@ target_link_libraries(pycircuit-link PRIVATE
   pycircuit_project_options
   ACIRDialect
   ACIRAnalysis
+  GFIRValidation
+  HWIRValidation
   GFIRDialect
   ACIRSourceCompiler
   MLIRArithDialect
@@ -29,6 +31,7 @@ target_link_libraries(pycircuit-emit PRIVATE
   pycircuit_project_options
   ACIRDialect
   ACIRAnalysis
+  HWIRValidation
   GFIRDialect
   ACIRCodegen
   MLIRArithDialect
@@ -42,6 +45,8 @@ target_link_libraries(pycircuit-opt PRIVATE
   pycircuit_project_options
   ACIRDialect
   ACIRAnalysis
+  GFIRValidation
+  HWIRValidation
   GFIRDialect
   ACIRSourceCompiler
   ACIRTransforms

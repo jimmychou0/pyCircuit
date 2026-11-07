@@ -372,12 +372,5 @@ private:
       demandedStatic;
 };
 
-/// Verify common hardware shape, binding, dependency and execution contracts.
-mlir::LogicalResult verifyHardwarePackage(mlir::ModuleOp package);
-/// Verify the versioned routed graph without requiring physical state refinement
-/// or an implementation for a declared ordinary external combinational module.
-mlir::LogicalResult verifyRoutedPackage(mlir::ModuleOp package,
-                                       HardwareSourceCheckLimits limits = {});
-
 } // namespace acir::ac
 #endif

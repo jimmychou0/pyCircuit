@@ -1,5 +1,5 @@
 add_acir_library(ACIRTransforms SOURCES
-  VerifyHardware.cpp
+  PassRegistration.cpp
   NormalizeSourceControlFlow.cpp
   ExtractSourceInterface.cpp
   SimplifyRecordWires.cpp
@@ -10,6 +10,8 @@ add_acir_library(ACIRTransforms SOURCES
   LINK_LIBRARIES
     ACIRDialect
     ACIRAnalysis
+    GFIRValidation
+    HWIRValidation
     GFIRDialect
     PycircuitStateInterfaces
     MLIRPass

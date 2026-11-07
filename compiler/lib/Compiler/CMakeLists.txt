@@ -24,6 +24,8 @@ add_acir_library(ACIRSourceCompiler SOURCES
   LINK_LIBRARIES
     ACIRDialect
     ACIRAnalysis
+    GFIRValidation
+    HWIRValidation
     ACIRTransforms
     MLIRArithDialect
     MLIRFuncDialect
@@ -45,7 +47,7 @@ add_acir_library(ACIRCodegen SOURCES
   HardwareEmitCppChecks.cpp
   HardwareEmitCppDefinition.cpp
   HardwareEmitVerilogDefinition.cpp
-  LINK_LIBRARIES ACIRDialect ACIRAnalysis MLIRParser
+  LINK_LIBRARIES ACIRDialect ACIRAnalysis HWIRValidation MLIRParser
 )
 target_include_directories(ACIRCodegen PUBLIC
   "$<BUILD_INTERFACE:${PYCIRCUIT_SOURCE_DIR}/lib>"

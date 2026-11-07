@@ -8,8 +8,36 @@
 
 using namespace mlir;
 namespace acir::ac {
+const detail::PackageStagePolicy &detail::PackageStagePolicy::routed() {
+  static const PackageStagePolicy policy = {
+      .stageRequired = true,
+      .stageValue = "routed",
+      .admitRoutedLogicalStateByName = true,
+      .rejectUnloweredInstanceBindings = true,
+      .requireExternalContract = true,
+      .requireImplementedImports = false,
+      .anchorProvenanceTopLevelOnly = false,
+      .rejectUnloweredTransactions = false,
+      .combinationalExternalAdmission = true,
+  };
+  return policy;
+}
+const detail::PackageStagePolicy &detail::PackageStagePolicy::hardware() {
+  static const PackageStagePolicy policy = {
+      .stageRequired = false,
+      .stageValue = "final",
+      .admitRoutedLogicalStateByName = false,
+      .rejectUnloweredInstanceBindings = false,
+      .requireExternalContract = false,
+      .requireImplementedImports = true,
+      .anchorProvenanceTopLevelOnly = true,
+      .rejectUnloweredTransactions = true,
+      .combinationalExternalAdmission = false,
+  };
+  return policy;
+}
 LogicalResult detail::verifyHardwarePackageStage(
-    const HardwareAnalysis &analysis, PackageVerificationProfile profile) {
+    const HardwareAnalysis &analysis, const PackageStagePolicy &policy) {
   auto package = analysis.getPackage();
   if (package->hasAttr("ac.transactional"))
     return package.emitOpError()
@@ -20,14 +48,21 @@ LogicalResult detail::verifyHardwarePackageStage(
   bool boundary = llvm::any_of(package.getOps<SystemOp>(), [](SystemOp system) {
     return system->hasAttr("ac.entry_boundary");
   });
-  bool routed = profile == PackageVerificationProfile::Routed;
   if (package->hasAttr("ac.unit_kind") ||
-      (routed ? !stage || stage.getValue() != "routed"
-              : rawStage && (!stage || stage.getValue() != "final")))
+      (policy.stageRequired
+           ? !stage || stage.getValue() != policy.stageValue
+           : rawStage && (!stage || stage.getValue() != policy.stageValue))) {
+    if (policy.stageRequired)
+      return package.emitOpError()
+             << "routed verification requires ac.stage = routed";
     return package.emitOpError()
-           << (routed ? "routed verification requires ac.stage = routed"
-                      : "executable hardware verification requires final hardware; routed packages require state refinement");
-  if ((routed || boundary || package->hasAttr("ac.routed_contract")) &&
+           << "executable hardware verification requires final hardware; routed packages require state refinement";
+  }
+  // Shared unconditionally by both stages: a package under routed
+  // verification, an entry boundary or a retained routed contract must carry
+  // the regenerated marker (4, or 5 with an entry boundary); final packages
+  // re-validate it rather than trusting the routed pass.
+  if ((policy.stageRequired || boundary || package->hasAttr("ac.routed_contract")) &&
       (!marker || !marker.getType().isSignlessInteger(64) ||
        marker.getValue() != (boundary ? 5 : 4)))
     return package.emitOpError()
@@ -36,7 +71,8 @@ LogicalResult detail::verifyHardwarePackageStage(
     // HWIR rejects every routed logical-state interface unconditionally,
     // including retained dead regions; source state forms stay rejected by
     // their own declaration contract.
-    if (!routed && operation != package.getOperation() &&
+    if (!policy.admitRoutedLogicalStateByName &&
+        operation != package.getOperation() &&
         isa<acir::LogicalStateOpInterface,
             acir::LogicalStateUpdateOpInterface>(operation)) {
       operation->emitOpError()
@@ -57,7 +93,8 @@ LogicalResult detail::verifyHardwarePackageStage(
       }
     }
     if (operation->hasAttr("ac.anchor_provenance") &&
-        (operation != package.getOperation() || routed)) {
+        (!policy.anchorProvenanceTopLevelOnly ||
+         operation != package.getOperation())) {
       operation->emitOpError()
           << "ac.anchor_provenance belongs only to the top-level final package";
       return WalkResult::interrupt();
@@ -66,7 +103,7 @@ LogicalResult detail::verifyHardwarePackageStage(
       operation->emitOpError() << "ac.routed_contract belongs only to the top-level package";
       return WalkResult::interrupt();
     }
-    if (routed && isa<InstanceOp>(operation) &&
+    if (policy.rejectUnloweredInstanceBindings && isa<InstanceOp>(operation) &&
         (operation->hasAttr("ac.source_unbound_push") ||
          operation->hasAttr("ac.source_unbound_pop") ||
          operation->hasAttr("ac.source_memory") ||
@@ -74,7 +111,8 @@ LogicalResult detail::verifyHardwarePackageStage(
       operation->emitOpError() << "unlowered source resource binding cannot cross the routed boundary";
       return WalkResult::interrupt();
     }
-    if (!routed || operation == package.getOperation() ||
+    if (!policy.admitRoutedLogicalStateByName ||
+        operation == package.getOperation() ||
         isa<ModuleOp, ModuleImportOp, StructOp, EnumOp, SystemOp, InstanceOp,
             CollectionOp, RuleOp, YieldOp, SourceExpectOp,
             SourceObserveOp>(operation) ||
@@ -97,7 +135,7 @@ LogicalResult detail::verifyHardwarePackageStage(
   return failure(closed.wasInterrupted());
 }
 LogicalResult detail::verifyHardwarePackageEnvelope(
-    const HardwareAnalysis &analysis, PackageVerificationProfile profile,
+    const HardwareAnalysis &analysis, const PackageStagePolicy &policy,
     const std::function<LogicalResult(uint64_t, Operation *)> &debit) {
   auto package = analysis.getPackage();
   if (!package)
@@ -140,7 +178,7 @@ LogicalResult detail::verifyHardwarePackageEnvelope(
   });
   if (layouts.wasInterrupted())
     return failure();
-  if (profile == PackageVerificationProfile::Hardware &&
+  if (policy.rejectUnloweredTransactions &&
       failed(verifyNoUnloweredTransactions(package)))
     return failure();
   if (failed(collectFinalSourceUnits(package,
@@ -165,10 +203,10 @@ LogicalResult detail::verifyHardwarePackageEnvelope(
       return failure();
     if (analysis.getPrimitiveKind(imported).empty()) {
       if (!imported->hasAttr("ac.external_contract") &&
-          profile == PackageVerificationProfile::Routed)
+          policy.requireExternalContract)
         return imported.emitOpError()
                << "routed ordinary module import requires ac.external_contract";
-      if (profile == PackageVerificationProfile::Hardware)
+      if (policy.requireImplementedImports)
         return imported.emitOpError()
                << "executable hardware package has unresolved ordinary module import; implementation is required for execution completeness";
     }

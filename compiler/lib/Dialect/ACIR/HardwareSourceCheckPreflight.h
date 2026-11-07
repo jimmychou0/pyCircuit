@@ -32,7 +32,7 @@ private:
 mlir::FailureOr<HardwareSourceCheckPlan>
 buildSourceCheckPlan(const HardwareAnalysis &analysis,
                      HardwareSourceCheckLimits limits,
-                     PackageVerificationProfile profile =
-                         PackageVerificationProfile::Hardware);
+                     const PackageStagePolicy &policy =
+                         PackageStagePolicy::hardware());
 } // namespace acir::ac::detail
 #endif

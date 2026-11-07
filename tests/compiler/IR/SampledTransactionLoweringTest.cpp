@@ -9,6 +9,8 @@
 #include "pycircuit/Dialect/GFIR/GFIRDialect.h"
 #include "pycircuit/Dialect/GFIR/GFIROps.h"
 #include "pycircuit/Interfaces/LogicalStateInterfaces.h"
+#include "pycircuit/Dialect/ACIR/GFIRPackageValidation.h"
+#include "pycircuit/Dialect/ACIR/HWIRPackageValidation.h"
 #include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
 #include "pycircuit/Dialect/ACIR/SourceTransactionStateAnalysis.h"
 #include "llvm/ADT/STLExtras.h"
