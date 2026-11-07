@@ -263,11 +263,14 @@ add_custom_target(check-pycircuit
   ACIRTransactionSurfaceTiersTests
     ACIRTableDependencySummaryTests
     ACIRHardwareSourceChecksTests
+    ACIRHardwareSourceChecksExecution
     ACIREnumHardwareAnalysisTests
     ACIRFinalSourceUnitsTests ACIREnumSourceUnitAuthorityTests
     ACIRRegRuntimeTests ACIRCollectionRuntimeTests ACIRFifoRuntimeTests ACIRSystemLifecycleTests ACIRObservationTests ACIRSimExecutorTests
     ACIRWorkExecutorTests
     ACIRWorkPartitionTests
+    ACIRGFIRStandaloneTests ACIROpsStandaloneTests ACIRAnalysisStandaloneTests ACIRCoreStandaloneTests
+    GFIRValidationStandaloneTests HWIRValidationStandaloneTests
   USES_TERMINAL VERBATIM)
 if(TARGET pyc6_runtime)
   # Source gates link generated DUTs against the Runtime archive from this build.
