@@ -5,6 +5,11 @@
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/OwningOpRef.h"
 #include "pycircuit/Dialect/ACIR/SourceTransactionStateAnalysis.h"
+#include <memory>
+
+namespace mlir {
+class Pass;
+}
 
 namespace acir::ac::detail {
 class SourceCheckBudget;

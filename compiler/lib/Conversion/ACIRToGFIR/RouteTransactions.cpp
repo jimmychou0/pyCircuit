@@ -1,6 +1,6 @@
-#include "../Dialect/ACIR/SourceFormalProposalProof.h"
+#include "Dialect/ACIR/SourceFormalProposalProof.h"
 #include "Dialect/ACIR/HardwareGrantProof.h"
-#include "../Dialect/ACIR/SourceFormalCandidateSelection.h"
+#include "Dialect/ACIR/SourceFormalCandidateSelection.h"
 #include "pycircuit/Conversion/ACIRToGFIR.h"
 #include "TransactionValueAvailability.h"
 #include "Dialect/ACIR/HardwareValueAvailability.h"
