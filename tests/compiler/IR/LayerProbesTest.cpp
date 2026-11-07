@@ -137,7 +137,7 @@ TEST(GFIRValidationStandalone, RunsTheRoutedPackageEntrypoint) {
   // The routed stage policy rejects a package without ac.stage with the
   // exact boundary text; the shared bounded pipeline runs to that check.
   auto unstaged = mlir::ModuleOp::create(mlir::UnknownLoc::get(&context));
-  EXPECT_TRUE(mlir::failed(acir::ac::verifyRoutedPackage(*unstaged)));
+  EXPECT_TRUE(mlir::failed(acir::ac::verifyRoutedPackage(unstaged)));
   EXPECT_NE(diagnostics.find("routed verification requires ac.stage = routed"),
             std::string::npos)
       << diagnostics;
@@ -147,7 +147,7 @@ TEST(GFIRValidationStandalone, RunsTheRoutedPackageEntrypoint) {
   transactional->setAttr("ac.transactional",
                          mlir::IntegerAttr::get(mlir::IntegerType::get(&context, 64),
                                                 2));
-  EXPECT_TRUE(mlir::failed(acir::ac::verifyRoutedPackage(*transactional)));
+  EXPECT_TRUE(mlir::failed(acir::ac::verifyRoutedPackage(transactional)));
   EXPECT_NE(diagnostics.find(
                 "transactional resource packages cannot enter legacy routed "
                 "or final hardware analysis"),
@@ -179,7 +179,7 @@ TEST(HWIRValidationStandalone, RunsTheFinalPackageEntrypoint) {
   // exact boundary text; routed packages require state refinement first.
   auto routed = mlir::ModuleOp::create(mlir::UnknownLoc::get(&context));
   routed->setAttr("ac.stage", mlir::StringAttr::get(&context, "routed"));
-  EXPECT_TRUE(mlir::failed(acir::ac::verifyHardwarePackage(*routed)));
+  EXPECT_TRUE(mlir::failed(acir::ac::verifyHardwarePackage(routed)));
   EXPECT_NE(diagnostics.find("executable hardware verification requires final "
                              "hardware; routed packages require state refinement"),
             std::string::npos)
@@ -190,7 +190,7 @@ TEST(HWIRValidationStandalone, RunsTheFinalPackageEntrypoint) {
   transactional->setAttr("ac.transactional",
                          mlir::IntegerAttr::get(mlir::IntegerType::get(&context, 64),
                                                 2));
-  EXPECT_TRUE(mlir::failed(acir::ac::verifyHardwarePackage(*transactional)));
+  EXPECT_TRUE(mlir::failed(acir::ac::verifyHardwarePackage(transactional)));
   EXPECT_NE(diagnostics.find(
                 "transactional resource packages cannot enter legacy routed "
                 "or final hardware analysis"),

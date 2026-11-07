@@ -1,5 +1,7 @@
 #include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
 #include "AnalysisResolver.h"
+#include "HardwareSourceChecks.h"
+#include "SourceCheckBudget.h"
 #include "pycircuit/Dialect/ACIR/SourceMethodAnalysis.h"
 #include "ACIRSourceContracts.h"
 #include "IR/StateDeclarationContracts.h"

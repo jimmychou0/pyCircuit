@@ -1,6 +1,9 @@
 #include "pycircuit/Transforms/Passes.h"
 
+#include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
+
+using namespace mlir;
 
 namespace acir {
 void registerACIRPasses() {
