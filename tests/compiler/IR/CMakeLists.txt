@@ -11,7 +11,10 @@ function(add_acir_api_test target)
   endif()
   add_executable(${target} ${API_TEST_UNPARSED_ARGUMENTS})
   target_include_directories(${target} PRIVATE "${PYCIRCUIT_SOURCE_DIR}/lib")
-  target_link_libraries(${target} PRIVATE ACIRDialect MLIRParser MLIRFuncDialect GTest::gtest_main)
+  # API tests exercise staged behavior; the dedicated layer-containment
+  # probes (ACIROps/ACIRAnalysis/GFIR/HWIRValidationStandalone) own the
+  # link-line checks.
+  target_link_libraries(${target} PRIVATE ACIRDialect ACIRAnalysis GFIRValidation HWIRValidation MLIRParser MLIRFuncDialect GTest::gtest_main)
   if(NOT API_TEST_FILTER)
     set(API_TEST_FILTER "*")
   endif()
@@ -28,6 +31,64 @@ endfunction()
 
 add_acir_api_test(ACIRSourceValueSemanticsTests SourceValueSemanticsTest.cpp)
 add_acir_api_test(ACIRRoutedAnchorTests RoutedAnchorTest.cpp)
+add_acir_api_test(ACIRLogicalStateInterfacesTests LogicalStateInterfacesTest.cpp)
+# Containment probes: each links exactly one layer target; no archives
+# above that layer may appear on the resolved link line (verify-layering).
+add_executable(ACIRGFIRStandaloneTests GFIRStandaloneTest.cpp)
+target_link_libraries(ACIRGFIRStandaloneTests PRIVATE
+  GFIRDialect GTest::gtest_main)
+add_test(NAME ACIRGFIRStandaloneTests COMMAND ACIRGFIRStandaloneTests)
+set_tests_properties(ACIRGFIRStandaloneTests PROPERTIES LABELS "api;gate;nightly")
+
+add_executable(ACIROpsStandaloneTests LayerProbesTest.cpp)
+target_link_libraries(ACIROpsStandaloneTests PRIVATE
+  ACIRDialect GTest::gtest_main)
+add_test(NAME ACIROpsStandaloneTests COMMAND ACIROpsStandaloneTests)
+set_tests_properties(ACIROpsStandaloneTests PROPERTIES LABELS "api;gate;nightly")
+
+# Analysis-layer containment probe: links exactly the ACIRAnalysis target
+# (the ACIR dialect resolves through its own operations dependency, which is
+# below the analysis layer); no target above the analysis layer may appear.
+add_executable(ACIRAnalysisStandaloneTests LayerProbesTest.cpp)
+target_compile_definitions(ACIRAnalysisStandaloneTests PRIVATE
+  PYCIRCUIT_ANALYSIS_PROBE=1)
+target_include_directories(ACIRAnalysisStandaloneTests PRIVATE
+  "${PYCIRCUIT_SOURCE_DIR}/lib")
+target_link_libraries(ACIRAnalysisStandaloneTests PRIVATE
+  ACIRAnalysis GTest::gtest_main)
+add_test(NAME ACIRAnalysisStandaloneTests COMMAND ACIRAnalysisStandaloneTests)
+set_tests_properties(ACIRAnalysisStandaloneTests PROPERTIES LABELS "api;gate;nightly")
+
+add_executable(ACIRCoreStandaloneTests LayerProbesTest.cpp)
+target_compile_definitions(ACIRCoreStandaloneTests PRIVATE
+  PYCIRCUIT_CORE_PROBE=1)
+target_include_directories(ACIRCoreStandaloneTests PRIVATE
+  "${PYCIRCUIT_SOURCE_DIR}/lib")
+target_link_libraries(ACIRCoreStandaloneTests PRIVATE
+  "$<LINK_LIBRARY:WHOLE_ARCHIVE,ACIRCore>" GTest::gtest_main)
+add_test(NAME ACIRCoreStandaloneTests COMMAND ACIRCoreStandaloneTests)
+set_tests_properties(ACIRCoreStandaloneTests PROPERTIES LABELS "api;gate;nightly")
+
+# GFIR/HWIR validation containment probes: each links exactly its own
+# validation target (C-package design §5). Running the package entrypoint
+# must pull no symbol from the sibling validation target, GFIRDialect or any
+# upper layer; pycircuit_verify_layering asserts the transitive closure.
+add_executable(GFIRValidationStandaloneTests LayerProbesTest.cpp)
+target_compile_definitions(GFIRValidationStandaloneTests PRIVATE
+  PYCIRCUIT_GFIR_VALIDATION_PROBE=1)
+target_link_libraries(GFIRValidationStandaloneTests PRIVATE
+  GFIRValidation GTest::gtest_main)
+add_test(NAME GFIRValidationStandaloneTests COMMAND GFIRValidationStandaloneTests)
+set_tests_properties(GFIRValidationStandaloneTests PROPERTIES LABELS "api;gate;nightly")
+
+add_executable(HWIRValidationStandaloneTests LayerProbesTest.cpp)
+target_compile_definitions(HWIRValidationStandaloneTests PRIVATE
+  PYCIRCUIT_HWIR_VALIDATION_PROBE=1)
+target_link_libraries(HWIRValidationStandaloneTests PRIVATE
+  HWIRValidation GTest::gtest_main)
+add_test(NAME HWIRValidationStandaloneTests COMMAND HWIRValidationStandaloneTests)
+set_tests_properties(HWIRValidationStandaloneTests PROPERTIES LABELS "api;gate;nightly")
+target_link_libraries(ACIRLogicalStateInterfacesTests PRIVATE PycircuitStateInterfaces GFIRDialect ACIRAnalysis)
 target_link_libraries(ACIRRoutedAnchorTests PRIVATE ACIRSourceCompiler)
 add_acir_api_test(ACIRAnchorArtifactTests AnchorArtifactTest.cpp)
 target_link_libraries(ACIRAnchorArtifactTests PRIVATE ACIRSourceCompiler ACIRTransforms MLIRPass)
@@ -46,7 +107,7 @@ target_compile_definitions(ACIRSourceInterfacePassTests PRIVATE
   PYCIRCUIT_TEST_REPO_ROOT="${PYCIRCUIT_REPO_ROOT}")
 target_link_libraries(ACIRSourceInterfacePassTests PRIVATE
   ACIRCodegen
-  ACIRSourceCompiler ACIRTransforms MLIRPass)
+  ACIRSourceCompiler ACIRToGFIR ACIRTransforms MLIRPass)
 add_acir_api_test(ACIRRecordProjectionSimplificationTests RecordProjectionSimplificationTest.cpp)
 target_link_libraries(ACIRRecordProjectionSimplificationTests PRIVATE
   ACIRTransforms MLIRPass)
@@ -57,7 +118,7 @@ add_acir_api_test(ACIRTransactionEffectsTests TransactionEffectsTest.cpp
   SourceFormalOwnerBindingTest.cpp SourceRegistrationEntryTest.cpp
   HardwareWriteDomainsTest.cpp HardwareResourceDemandTest.cpp)
 target_link_libraries(ACIRTransactionEffectsTests PRIVATE
-  ACIRSourceCompiler ACIRTransforms MLIRPass)
+  ACIRSourceCompiler ACIRToGFIR GFIRToHWIR ACIRTransforms MLIRPass)
 target_compile_definitions(ACIRTransactionEffectsTests PRIVATE
   PYCIRCUIT_TEST_PYTHON="${Python3_EXECUTABLE}"
   PYCIRCUIT_TEST_REPO_ROOT="${PYCIRCUIT_REPO_ROOT}")
@@ -70,6 +131,10 @@ target_compile_definitions(ACIRQueueContractsTests PRIVATE
   PYCIRCUIT_TEST_EMITTER="$<TARGET_FILE:pycircuit-emit>")
 add_dependencies(ACIRQueueContractsTests pycircuit-link pycircuit-emit)
 add_acir_api_test(ACIRTableDependencySummaryTests TableDependencySummaryTest.cpp)
+add_acir_api_test(ACIRSourceSymbolicBoundaryTests SourceSymbolicBoundaryTest.cpp)
+add_acir_api_test(ACIRTransactionSurfaceTiersTests TransactionSurfaceTiersTest.cpp)
+target_link_libraries(ACIRTransactionSurfaceTiersTests PRIVATE
+  ACIRToGFIR ACIRTransforms MLIRPass)
 add_acir_api_test(ACIRHardwareSourceChecksTests
   GUARD "${CMAKE_CURRENT_SOURCE_DIR}/run_source_checks_guarded.py"
   FILTER "-HardwareSourceChecksExecution.*"
@@ -98,7 +163,9 @@ set_tests_properties(ACIRHardwareSourceChecksExecution PROPERTIES
   LABELS "api;nightly" TIMEOUT 930)
 
 add_acir_api_test(ACIREnumHardwareAnalysisTests EnumHardwareAnalysisTest.cpp)
+target_link_libraries(ACIREnumHardwareAnalysisTests PRIVATE ACIRAnalysis)
 add_acir_api_test(ACIRFinalSourceUnitsTests FinalSourceUnitsTest.cpp)
+target_link_libraries(ACIRFinalSourceUnitsTests PRIVATE ACIRAnalysis)
 add_acir_api_test(ACIREnumSourceUnitAuthorityTests EnumSourceUnitAuthorityTest.cpp)
 target_link_libraries(ACIREnumSourceUnitAuthorityTests PRIVATE
   ACIRSourceCompiler ACIRTransforms MLIRPass)
@@ -191,8 +258,9 @@ add_custom_target(check-pycircuit
     ACIRFixedUnsignedDivRemLoweringTests
     ACIRSourceInterfacePassTests
     ACIRRecordProjectionSimplificationTests
-    ACIRQueueContractsTests
-    ACIRTransactionEffectsTests
+  ACIRQueueContractsTests
+  ACIRTransactionEffectsTests
+  ACIRTransactionSurfaceTiersTests
     ACIRTableDependencySummaryTests
     ACIRHardwareSourceChecksTests
     ACIREnumHardwareAnalysisTests
@@ -200,6 +268,9 @@ add_custom_target(check-pycircuit
     ACIRRegRuntimeTests ACIRCollectionRuntimeTests ACIRFifoRuntimeTests ACIRSystemLifecycleTests ACIRObservationTests ACIRSimExecutorTests
     ACIRWorkExecutorTests
     ACIRWorkPartitionTests
+    ACIRGFIRStandaloneTests ACIROpsStandaloneTests ACIRAnalysisStandaloneTests ACIRCoreStandaloneTests
+    GFIRValidationStandaloneTests HWIRValidationStandaloneTests
+    ACIRLogicalStateInterfacesTests ACIRSourceSymbolicBoundaryTests
   USES_TERMINAL VERBATIM)
 if(TARGET pyc6_runtime)
   # Source gates link generated DUTs against the Runtime archive from this build.
