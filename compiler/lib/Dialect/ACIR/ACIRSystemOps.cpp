@@ -2,6 +2,7 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "pycircuit/Dialect/ACIR/ACIROps.h"
 #include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
 namespace acir::ac {
 namespace {
@@ -63,7 +64,7 @@ getSystemSamples(mlir::Operation *declaration) {
   if (!mlir::isa<ModuleOp, ModuleImportOp>(declaration) ||
       !mlir::isa_and_nonnull<mlir::ModuleOp>(declaration->getParentOp()) ||
       !kind || kind.getValue() != "system" || !metadata ||
-      metadata.size() != 3 || !rows || rows.empty() ||
+      (metadata.size() != 3 && metadata.size() != 4) || !rows || rows.empty() ||
       rows.size() > HardwareSourceCheckLimits{}.maxWorkUnits)
     return error() << "ac.system_samples requires a bounded nonempty rows, "
                       "origin and location dictionary on a System declaration";
@@ -72,16 +73,61 @@ getSystemSamples(mlir::Operation *declaration) {
           metadata.getAs<mlir::DictionaryAttr>("location"), declaration,
           error)))
     return mlir::failure();
+  auto inputs = getSystemSampleInputs(declaration);
+  if (mlir::failed(inputs) || (metadata.size() == 4 && inputs->empty()))
+    return mlir::failure();
+  unsigned width = inputs->empty() ? 2 : inputs->size();
   for (auto rawRow : rows) {
     auto row = mlir::dyn_cast<mlir::StringAttr>(rawRow);
-    if (!row || row.getValue().size() != 2 ||
+    if (!row || row.getValue().size() != width ||
         !llvm::all_of(row.getValue(), [](char bit) {
           return bit == '0' || bit == '1' || bit == 'x' || bit == 'z';
         }))
       return error()
-             << "System sample rows require two canonical 0/1/x/z characters";
+             << "System sample rows require one canonical 0/1/x/z character "
+                "per sampled control";
   }
   return rows;
+}
+
+mlir::FailureOr<llvm::SmallVector<unsigned>>
+getSystemSampleInputs(mlir::Operation *declaration) {
+  auto metadata =
+      declaration->getAttrOfType<mlir::DictionaryAttr>("ac.system_samples");
+  if (!metadata || !metadata.get("inputs"))
+    return llvm::SmallVector<unsigned>{};
+  auto ordinals = metadata.getAs<mlir::ArrayAttr>("inputs");
+  auto signature = declaration->getAttrOfType<mlir::TypeAttr>("function_type");
+  auto type = signature
+                  ? mlir::dyn_cast<mlir::FunctionType>(signature.getValue())
+                  : mlir::FunctionType();
+  auto layout = getModulePortLayout(declaration);
+  if (!ordinals || ordinals.empty() || !type || mlir::failed(layout) ||
+      ordinals.size() != layout->sourceInputCount || layout->sourceOutputCount)
+    return declaration->emitOpError() << "explicit System samples must cover "
+                                         "its closed logical input boundary";
+  llvm::DenseSet<unsigned> seen;
+  llvm::SmallVector<unsigned> result;
+  HardwareAnalysis analysis(declaration->getParentOfType<mlir::ModuleOp>());
+  HardwareBindings bindings;
+  bindings.owner = declaration;
+  for (auto raw : ordinals) {
+    auto ordinal = mlir::dyn_cast<mlir::IntegerAttr>(raw);
+    if (!ordinal || ordinal.getInt() < 0 ||
+        ordinal.getValue().getActiveBits() > 32 ||
+        ordinal.getValue().getZExtValue() >= layout->sourceInputCount ||
+        !seen.insert(ordinal.getValue().getZExtValue()).second)
+      return declaration->emitOpError()
+             << "System sample inputs require unique logical input ordinals";
+    unsigned index = ordinal.getValue().getZExtValue();
+    auto width =
+        analysis.getPackedWidth(type.getInput(index), bindings, declaration);
+    if (mlir::failed(width) || *width != 1)
+      return declaration->emitOpError()
+             << "System sample controls require one-bit logical inputs";
+    result.push_back(index);
+  }
+  return result;
 }
 
 mlir::LogicalResult SystemOp::verify() {

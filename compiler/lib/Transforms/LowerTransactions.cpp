@@ -16,6 +16,7 @@
 #include "pycircuit/Interfaces/LogicalStateInterfaces.h"
 #include "pycircuit/Analysis/LogicalStateValidation.h"
 #include "pycircuit/Dialect/ACIR/SourceUnitValidation.h"
+#include "pycircuit/Dialect/ACIR/HardwareCDC.h"
 #include "pycircuit/Transforms/Passes.h"
 
 #include "Dialect/ACIR/ACIRSourceContracts.h"
@@ -4037,8 +4038,8 @@ LogicalResult materialize(PreparedTransactionLowering &prepared,
     // retains the source class.
     OpBuilder builder(replaced);
     auto routed = builder.create<gfir::StateOp>(
-        original.getLoc(), replaced.getQ().getType(), replaced.getClk(),
-        replaced.getRst(), replaced.getInitial(),
+        original.getLoc(), replaced.getQ().getType(),
+        ValueRange{replaced.getClk(), replaced.getRst(), replaced.getInitial()},
         original.getInstanceNameAttr(), original.getOccurrence());
     if (auto constraint = replaced.getPayloadConstraint())
       routed->setAttr("ac.payload_constraint", constraint);
@@ -8410,11 +8411,20 @@ private:
   DenseSet<Value> values;
 };
 
+#include "TransactionResetMasks.inc"
 #include "TransactionHardwareState.inc"
 
 } // namespace
 
 namespace detail {
+FailureOr<OwningOpRef<mlir::ModuleOp>> materializeTransactionResetMasks(
+    mlir::ModuleOp routed, SourceCheckBudget &budget) {
+  return materializeTransactionResetMasksImpl(routed, budget);
+}
+LogicalResult verifyTransactionResetMaskMaterialization(
+    mlir::ModuleOp routed, mlir::ModuleOp candidate, SourceCheckBudget &budget) {
+  return verifyTransactionResetMaskMaterializationImpl(routed, candidate, budget);
+}
 FailureOr<PreparedTransactionLowering>
 prepareTransactionLowering(mlir::ModuleOp original,
                            const ac::SourceTransactionStateAnalysis &analysis,
@@ -8480,14 +8490,33 @@ FailureOr<OwningOpRef<mlir::ModuleOp>> materializeHardwareState(
   OwningOpRef<mlir::ModuleOp> staged = cast<mlir::ModuleOp>(routed->clone());
   ac::HardwareAnalysis analysis(*staged);
   Builder attributes(routed.getContext());
+  if (primitives->explicitState || primitives->policyState) {
+    unsigned version = primitives->policyState ? 3 : 2;
+    auto declaration = primitives->policyState ? primitives->policyState : primitives->explicitState;
+    OpBuilder builder(routed.getContext());
+    builder.setInsertionPointToStart(staged->getBody());
+    for (bool dff : {true, false}) {
+      if (version == 3 ? (dff ? bool(primitives->dffPolicy) : bool(primitives->dffePolicy))
+                       : (dff ? bool(primitives->dffReset) : bool(primitives->dffeReset))) continue;
+      auto *imported = registerResetImport(declaration, dff, version);
+      if (SymbolTable::lookupSymbolIn(*staged, imported->getAttrOfType<StringAttr>("sym_name").getValue())) {
+        imported->destroy();
+        return routed.emitError("generated register symbol collides with existing declaration");
+      }
+      builder.insert(imported);
+    }
+  }
   for (auto module : staged->getOps<ac::ModuleOp>())
     for (auto state : llvm::make_early_inc_range(
              module.getBody().front().getOps<gfir::StateOp>())) {
       auto update = logicalUpdate(state, budget);
       if (failed(update)) return failure();
       bool dff = unconditionalScalarState(state, *update, analysis, budget);
-      auto primitive = dff ? primitives->dff : primitives->dffe;
-      if (!primitive)
+      bool policyState = bool(state->getAttr("operandSegmentSizes"));
+      bool resetValue = bool(state.getResetValue());
+      auto primitive = policyState ? (dff ? primitives->dffPolicy : primitives->dffePolicy) : resetValue ? (dff ? primitives->dffReset : primitives->dffeReset)
+                                 : (dff ? primitives->dff : primitives->dffe);
+      if (!primitive && !resetValue && !policyState)
         return state.emitOpError()
                << "unconditional hardware state requires the verified DFF primitive";
       auto table = dyn_cast<ac::TableType>(state.getQ().getType());
@@ -8496,20 +8525,34 @@ FailureOr<OwningOpRef<mlir::ModuleOp>> materializeHardwareState(
       leaf.addTypes(state.getQ().getType());
       leaf.addAttribute("instance_name", state.getInstanceNameAttr());
       leaf.addAttribute("occurrence", state.getOccurrence());
-      leaf.addAttribute("callee", FlatSymbolRefAttr::get(primitive.getSymNameAttr()));
+      leaf.addAttribute("callee", FlatSymbolRefAttr::get(primitive ? primitive.getSymNameAttr() : policyState ? attributes.getStringAttr(
+          dff ? "pycircuit.__builtins__.dff_policy" : "pycircuit.__builtins__.dffe_policy") : attributes.getStringAttr(
+          dff ? "pycircuit.__builtins__.dff_reset_value" : "pycircuit.__builtins__.dffe_reset_value")));
       leaf.addAttribute("parameters", attributes.getArrayAttr({}));
       leaf.addAttribute("type_arguments", attributes.getArrayAttr({TypeAttr::get(
           table ? table.getElementType() : state.getQ().getType())}));
       if (table) leaf.addAttribute("shape", table.getShape());
+      if (policyState)
+        for (StringRef name : {"edge", "reset_kind", "reset_polarity", "init_kind"})
+          if (auto attr = state->getAttr(name)) leaf.addAttribute(name, attr);
       OpBuilder builder(state);
+      Value physicalReset = state.getRst();
+      if (!physicalReset) {
+        OperationState zero(state.getLoc(), ac::BitsConstantOp::getOperationName());
+        zero.addTypes(state.getClk().getType());
+        zero.addAttribute("value", bitsLiteralAttribute(state.getClk().getType(), state.getOccurrence(), state.getContext(), false));
+        physicalReset = builder.create(zero)->getResult(0);
+      }
       // Establish Q first so a hold candidate or forward dependency is rebound
       // through ordinary SSA use replacement, without dangling copied Values.
       auto *storage = builder.create(leaf);
       state.getQ().replaceAllUsesWith(storage->getResult(0));
-      SmallVector<Value> inputs{state.getClk(), state.getRst()};
+      SmallVector<Value> inputs{state.getClk(), physicalReset};
       if (!dff) inputs.push_back(update->getIntent());
       inputs.push_back(update->getCandidate());
-      inputs.push_back(state.getInitial());
+      inputs.push_back(state.getInitial() ? state.getInitial() : storage->getResult(0));
+      if (resetValue || policyState)
+        inputs.push_back(state.getResetValue() ? state.getResetValue() : storage->getResult(0));
       if (table)
         for (unsigned i = 0; i < 3; ++i) {
           OperationState splat(state.getLoc(), ac::TableSplatOp::getOperationName());
@@ -8537,6 +8580,35 @@ LogicalResult verifyHardwareStateMaterialization(
       failed(HardwareStateProof(routed, candidate, budget, *primitives).run()))
     return failure();
   return ac::verifyHardwarePackage(candidate);
+}
+FailureOr<OwningOpRef<mlir::ModuleOp>> refineRoutedHardware(
+    mlir::ModuleOp routed, ac::HardwareSourceCheckLimits limits) {
+  OwningOpRef<mlir::ModuleOp> normalized, expanded;
+  mlir::ModuleOp stateSource = routed;
+  auto contract = routed->getAttrOfType<IntegerAttr>("ac.routed_contract");
+  if (contract && contract.getInt() == 6) {
+    SourceCheckBudget resetBudget(limits);
+    auto masks = materializeTransactionResetMasks(routed, resetBudget);
+    if (failed(masks) || failed(verifyTransactionResetMaskMaterialization(
+                             routed, **masks, resetBudget)))
+      return failure();
+    normalized = std::move(*masks);
+    stateSource = *normalized;
+  }
+  if (ac::hasLogicalCDC(stateSource)) {
+    auto cdc = ac::materializeHardwareCDC(stateSource, limits);
+    if (failed(cdc) || failed(ac::verifyHardwareCDCMaterialization(
+                           stateSource, **cdc, limits)))
+      return failure();
+    expanded = std::move(*cdc);
+    stateSource = *expanded;
+  }
+  SourceCheckBudget budget(limits);
+  auto candidate = materializeHardwareState(stateSource, budget);
+  if (failed(candidate) || failed(verifyHardwareStateMaterialization(
+                               stateSource, **candidate, budget)))
+    return failure();
+  return std::move(*candidate);
 }
 } // namespace detail
 
@@ -8641,10 +8713,8 @@ public:
     // just as they do through the routing envelope transition above.
     if (ac::detail::findUnloweredTransaction(input))
       limits.maxWorkUnits = 1024 * 1024;
-    SourceCheckBudget budget(limits);
-    auto candidate = detail::materializeHardwareState(input, budget);
-    if (failed(candidate) || failed(detail::verifyHardwareStateMaterialization(
-                                 input, **candidate, budget))) {
+    auto candidate = detail::refineRoutedHardware(input, limits);
+    if (failed(candidate)) {
       signalPassFailure();
       return;
     }

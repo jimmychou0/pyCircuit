@@ -31,6 +31,9 @@ function(add_acir_api_test target)
   set_tests_properties(${target} PROPERTIES LABELS "api;gate;nightly")
 endfunction()
 
+add_acir_api_test(ACIRAnchorArtifactTests StateResetValueTest.cpp)
+target_link_libraries(ACIRAnchorArtifactTests PRIVATE ACIRSourceCompiler ACIRTransforms GFIRDialect MLIRPass)
+
 add_acir_api_test(ACIRSourceValueSemanticsTests SourceValueSemanticsTest.cpp)
 add_acir_api_test(ACIRSourceStaticEvaluationTests SourceStaticEvaluationTest.cpp)
 add_acir_api_test(ACIRSourceIdentifierTests SourceIdentifierTest.cpp SourceIdentifierOracleTest.cpp

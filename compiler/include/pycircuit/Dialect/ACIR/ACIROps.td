@@ -139,6 +139,11 @@ def ACIR_BitsConstantOp : ACIR_Op<"bits.constant", [Pure]> {
   let hasVerifier = 1;
 }
 
+def ACIR_ValueZeroOp : ACIR_Op<"value.zero", [Pure]> {
+  let results = (outs ACIR_HardwareType:$result);
+  let hasVerifier = 1;
+}
+
 def ACIR_BitsConstant4Op : ACIR_Op<"bits.constant4", [Pure]> {
   let summary = "Create an exact fixed-width four-state hardware bit vector";
   let arguments = (ins StrAttr:$pattern);
@@ -385,6 +390,41 @@ def ACIR_SourceStateOp : ACIR_Op<"state", [
       return (*this)->getAttrOfType<::mlir::DictionaryAttr>("ac.payload_constraint");
     }
   }];
+}
+
+def ACIR_CDCRefinementOp : ACIR_Op<"cdc.refinement", [
+    DeclareOpInterfaceMethods<MemoryEffectsOpInterface>]> {
+  let arguments = (ins Variadic<ACIR_HardwareType>:$values,
+      StrAttr:$logical_kind, I64Attr:$implementation);
+  let hasVerifier = 1;
+}
+
+def ACIR_AsyncRegOp : ACIR_Op<"async_reg", [
+    DeclareOpInterfaceMethods<MemoryEffectsOpInterface>]> {
+  let arguments = (ins ACIR_BitsType:$source_clock, ACIR_BitsType:$target_clock,
+      ACIR_BitsType:$whole_reset, ACIR_BitsType:$input,
+      StrAttr:$instance_name, DictionaryAttr:$occurrence,
+      StrAttr:$source_domain, StrAttr:$target_domain, StrAttr:$target_edge,
+      StrAttr:$reset_polarity, I64Attr:$resource_contract);
+  let results = (outs ACIR_BitsType:$output);
+  let hasVerifier = 1;
+}
+def ACIR_AsyncFIFOOp : ACIR_Op<"async_fifo", [
+    DeclareOpInterfaceMethods<MemoryEffectsOpInterface>]> {
+  let arguments = (ins ACIR_BitsType:$write_clock, ACIR_BitsType:$read_clock,
+      ACIR_BitsType:$whole_reset, StrAttr:$instance_name,
+      DictionaryAttr:$occurrence, StrAttr:$write_domain, StrAttr:$read_domain,
+      StrAttr:$write_edge, StrAttr:$read_edge, StrAttr:$reset_polarity,
+      I64Attr:$depth, I64Attr:$resource_contract);
+  let results = (outs ACIR_HardwareType:$head, ACIR_BitsType:$write_available,
+      ACIR_BitsType:$read_available);
+  let hasVerifier = 1;
+}
+def ACIR_AsyncFIFOUpdateOp : ACIR_Op<"async_fifo.update", [
+    DeclareOpInterfaceMethods<MemoryEffectsOpInterface>]> {
+  let arguments = (ins ACIR_HardwareType:$head, ACIR_HardwareType:$push_payload,
+      ACIR_BitsType:$push_intent, ACIR_BitsType:$pop_intent);
+  let hasVerifier = 1;
 }
 
 def ACIR_SourceStateReadOp : ACIR_Op<"state.read", [

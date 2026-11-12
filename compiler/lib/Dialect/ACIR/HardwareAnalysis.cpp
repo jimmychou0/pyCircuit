@@ -6,6 +6,7 @@
 #include "pycircuit/Dialect/ACIR/SourceMethodAnalysis.h"
 #include "ACIRSourceContracts.h"
 #include "IR/StateDeclarationContracts.h"
+#include "pycircuit/Dialect/ACIR/HardwareCDC.h"
 #include "mlir/IR/Verifier.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/StringSwitch.h"
@@ -228,6 +229,8 @@ HardwareAnalysis::verifyOccurrence(Operation *instance,
   if (failed(bindings))
     return failure();
   auto primitive = getPrimitiveKind(bindings->owner);
+  if ((primitive == "dff" || primitive == "dffe") && failed(getRegisterPolicy(instance)))
+    return failure();
   if (!primitive.empty() && primitive != "fifo_local" &&
       primitive != "fifo_downstream_pop" &&
       isa_and_nonnull<TableType>(bindings->types.lookup("T")))
@@ -597,6 +600,9 @@ LogicalResult HardwareAnalysis::verifySourceIndex(
 
 LogicalResult HardwareAnalysis::verifyResolvedOperation(
     Operation *op, const HardwareBindings &bindings) const {
+  if (isa<AsyncRegOp, AsyncFIFOOp, AsyncFIFOUpdateOp, CDCRefinementOp>(op) &&
+      failed(verifyBoundHardwareCDCOperation(*this, op, bindings)))
+    return failure();
   if (isa<QueueOp>(op))
     return op->emitOpError() << "ac.queue is retired; use a canonical FIFO instance";
   if (auto read = dyn_cast<TableReadOp>(op)) {

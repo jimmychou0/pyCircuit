@@ -5,12 +5,18 @@
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/OwningOpRef.h"
 #include "pycircuit/Dialect/ACIR/SourceTransactionStateAnalysis.h"
+#include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
 
 namespace acir::ac::detail {
 class SourceCheckBudget;
 }
 
 namespace acir::detail {
+mlir::FailureOr<mlir::OwningOpRef<mlir::ModuleOp>> materializeTransactionResetMasks(
+    mlir::ModuleOp routed, ac::detail::SourceCheckBudget &budget);
+mlir::LogicalResult verifyTransactionResetMaskMaterialization(
+    mlir::ModuleOp routed, mlir::ModuleOp candidate, ac::detail::SourceCheckBudget &budget);
+
 using RoutingKey = std::pair<mlir::ArrayAttr, mlir::Value>;
 
 struct Route {
@@ -273,5 +279,9 @@ mlir::FailureOr<mlir::OwningOpRef<mlir::ModuleOp>> materializeHardwareState(
 mlir::LogicalResult verifyHardwareStateMaterialization(
     mlir::ModuleOp routed, mlir::ModuleOp candidate,
     ac::detail::SourceCheckBudget &budget);
+/// The one public refinement chain, including explicit CDC expansion and both
+/// correspondence proofs, shared by linking, passes and saved-anchor reload.
+mlir::FailureOr<mlir::OwningOpRef<mlir::ModuleOp>> refineRoutedHardware(
+    mlir::ModuleOp routed, ac::HardwareSourceCheckLimits limits = {});
 } // namespace acir::detail
 #endif
