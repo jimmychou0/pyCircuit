@@ -1134,3 +1134,56 @@ def _compile_synthesis(generated, binary):
             ]
         )
     )
+
+
+def test_table_selected_reset_retains_index_dependency_in_managed_metadata(
+    tmp_path, monkeypatch
+):
+    producer = Path(os.environ["PYC_BUILD_DIR"]) / "bin/ACIRAnchorArtifactTests"
+    anchor = tmp_path / "anchor"
+    variable = "PYCIRCUIT_TEST_TABLE_RESET_ANCHOR"
+    monkeypatch.setenv(variable, str(anchor))
+    _ok(
+        _run(
+            [
+                str(producer),
+                "--gtest_filter=StateResetValueTest."
+                "PublishTableSelectedResetForManagedMetadata",
+            ]
+        )
+    )
+    monkeypatch.delenv(variable)
+    final = tmp_path / "table-reset.ac"
+    _ok(
+        _cli(
+            "link", "--from-anchor", str(anchor), "--target", "final", "-o", str(final)
+        )
+    )
+    generated = tmp_path / "managed"
+    _ok(
+        _cli(
+            "emit",
+            str(final),
+            "--target",
+            "verilog",
+            "--rtl-mode",
+            "managed",
+            "-o",
+            str(generated),
+        )
+    )
+    ports = json.loads((generated / "ports.json").read_text())
+    inputs = {row["name"]: row for row in ports["inputs"]}
+    assert inputs["enable"]["ordinal"] == 0
+    assert "reset" in inputs["enable"]["roles"]
+    assert "reset" not in inputs["pyc_rst"]["roles"]
+    resets = [
+        reset
+        for endpoint in ports["domains"]["endpoints"]
+        for reset in endpoint["resets"]
+    ]
+    assert resets
+    for reset in resets:
+        assert reset["input_ordinal"] is None
+        assert reset["input_dependencies"] == [0]
+        assert (reset["kind"], reset["polarity"]) == ("async", "low")

@@ -3,6 +3,7 @@
 #include "FinalCppNames.h"
 #include "HardwareEmitCommon.h"
 #include "mlir/IR/Builders.h"
+#include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/SetVector.h"
@@ -1439,13 +1440,48 @@ rootControlSource(HardwareEmitContext &context, Value value, uint64_t owner,
               {cast<ac::YieldOp>(child.definition->getRegion(0).front().back())
                    .getOperand(result.getResultNumber()),
                index});
-    } else if (auto read = dyn_cast<ac::TableReadOp>(op)) {
-      forwarding = true;
-      operands.push_back({read.getInput(), owner});
-    } else if (auto get = dyn_cast<ac::TableGetOp>(op);
-               get && value == get.getValue()) {
-      forwarding = true;
-      operands.push_back({get.getInput(), owner});
+    } else if (isa<ac::TableReadOp>(op) ||
+               (isa<ac::TableGetOp>(op) && result.getResultNumber() == 0)) {
+      auto payload = rootControlSource(context, op->getOperand(0), owner,
+                                       visiting, memo, remaining, depth + 1);
+      auto selector = rootControlSource(context, op->getOperand(1), owner,
+                                        visiting, memo, remaining, depth + 1);
+      if (failed(payload) || failed(selector))
+        return failure();
+      payload->inputs.insert(selector->inputs.begin(), selector->inputs.end());
+      // A dynamic or unknown index changes the selected payload, even when
+      // the Table happens to have a uniform root-input origin. Retain direct
+      // wiring only for a known, in-range constant selection.
+      bool staticSelection = false;
+      std::optional<llvm::APInt> constantIndex;
+      Value index = op->getOperand(1);
+      if (auto constant = index.getDefiningOp<ac::BitsConstantOp>()) {
+        auto number = context.analysis.evaluateStatic(
+            constant.getValue(), scope.bindings, constant);
+        auto width = context.analysis.getPackedWidth(index.getType(),
+                                                     scope.bindings, op);
+        if (failed(number) || failed(width))
+          return failure();
+        if (auto integer = dyn_cast<ac::MathIntAttr>(*number);
+            integer && *width <= std::numeric_limits<unsigned>::max())
+          constantIndex = llvm::APSInt(integer.getCanonicalValue())
+                              .extOrTrunc(static_cast<unsigned>(*width));
+      } else if (auto constant = index.getDefiningOp<ac::BitsConstant4Op>()) {
+        auto pattern = constant.getPattern();
+        if (!pattern.empty() &&
+            pattern.find_first_not_of("01") == StringRef::npos)
+          constantIndex = llvm::APInt(pattern.size(), pattern, 2);
+      }
+      if (constantIndex && constantIndex->getActiveBits() <= 64) {
+        auto size = context.analysis.getTableSize(
+            cast<ac::TableType>(op->getOperand(0).getType()), scope.bindings, op);
+        if (failed(size))
+          return failure();
+        staticSelection = constantIndex->getZExtValue() < *size;
+      }
+      if (!staticSelection)
+        payload->direct.reset();
+      return *payload;
     } else {
       if (auto extract = dyn_cast<ac::BitsExtractOp>(op)) {
         auto inWidth = context.analysis.getPackedWidth(

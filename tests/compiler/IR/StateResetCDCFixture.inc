@@ -596,3 +596,28 @@ TEST_F(StateResetValueTest, CDCRefinementRetainsLogicalSourceDomainIdentity) {
       &context, [](mlir::Diagnostic &) { return mlir::success(); });
   EXPECT_TRUE(mlir::failed(ac::verifyHardwareCDCMaterialization(*logical, **expanded)));
 }
+
+TEST_F(StateResetValueTest, PublishTableSelectedResetForManagedMetadata) {
+  auto text = asyncNegativeStateIR();
+  auto replace = [&](const std::string &from, const std::string &to) {
+    const auto position = text.find(from);
+    ASSERT_NE(position, std::string::npos);
+    text.replace(position, from.size(), to);
+  };
+  text.insert(text.find("module attributes"), R"ir(
+#reset_extent = #ac.static_expr<{kind = "literal", value = {kind = "integer", value = #ac.math_int<2>}, origin = #occ, location = #span}>
+!reset_table = !ac.table<[#reset_extent], !b1>
+)ir");
+  replace("    %initial =", R"ir(
+    %reset_zero = "ac.bits.constant"() {value = #w0} : () -> !b1
+    %reset_one = "ac.bits.constant"() {value = #w1} : () -> !b1
+    %reset_levels = "ac.table.create"(%reset_zero, %reset_one) : (!b1, !b1) -> !reset_table
+    %selected_reset = "ac.table.read"(%reset_levels, %enable) : (!reset_table, !b1) -> !b1
+    %initial =)ir");
+  replace("\"ac.state\"(%clk, %rst,", "\"ac.state\"(%clk, %selected_reset,");
+  replace("\"ac.rule\"(%clk, %rst,", "\"ac.rule\"(%clk, %selected_reset,");
+  replace("\"ac.expect\"(%raw, %reached, %clk, %rst)",
+          "\"ac.expect\"(%raw, %reached, %clk, %selected_reset)");
+  publishSaved(stateIR(false), text,
+               "PYCIRCUIT_TEST_TABLE_RESET_ANCHOR");
+}
