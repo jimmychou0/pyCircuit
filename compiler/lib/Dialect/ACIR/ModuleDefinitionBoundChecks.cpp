@@ -8,6 +8,7 @@
 #include "pycircuit/Dialect/ACIR/ACIROps.h"
 #include "ACIRSourceContracts.h"
 #include "HardwareSourceChecks.h"
+#include "SystemSampling.h"
 #include "pycircuit/Dialect/ACIR/SourceMethodAnalysis.h"
 
 #include "llvm/ADT/DenseSet.h"
@@ -17,6 +18,30 @@
 using namespace mlir;
 
 namespace acir::ac {
+
+FailureOr<llvm::SmallVector<unsigned>>
+getSystemSampleInputs(Operation *declaration) {
+  auto inputs = readSystemSampleInputs(declaration);
+  if (failed(inputs) || inputs->empty()) return inputs;
+  auto layout = getModulePortLayout(declaration);
+  auto rawType = declaration->getAttrOfType<TypeAttr>("function_type");
+  auto type = rawType ? dyn_cast<FunctionType>(rawType.getValue()) : FunctionType();
+  if (failed(layout) || !type || inputs->size() != layout->sourceInputCount ||
+      layout->sourceOutputCount || llvm::any_of(*inputs, [&](unsigned index) {
+        return index >= layout->sourceInputCount;
+      }))
+    return declaration->emitOpError("explicit System samples must cover its closed logical input boundary");
+  HardwareAnalysis analysis(declaration->getParentOfType<mlir::ModuleOp>());
+  HardwareBindings bindings;
+  bindings.owner = declaration;
+  for (unsigned index : *inputs) {
+    auto width = analysis.getPackedWidth(type.getInput(index), bindings, declaration);
+    if (failed(width) || *width != 1)
+      return declaration->emitOpError("System sample controls require one-bit logical inputs");
+  }
+  return *inputs;
+}
+
 
 FailureOr<ModulePortLayout> getModulePortLayout(Operation *declaration) {
   auto error = [&] { return declaration->emitOpError(); };

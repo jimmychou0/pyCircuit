@@ -1,4 +1,5 @@
 #include "ACIRSourceContracts.h"
+#include "SystemSampling.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "pycircuit/Dialect/ACIR/ACIROps.h"
 #include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
@@ -73,7 +74,7 @@ getSystemSamples(mlir::Operation *declaration) {
           metadata.getAs<mlir::DictionaryAttr>("location"), declaration,
           error)))
     return mlir::failure();
-  auto inputs = getSystemSampleInputs(declaration);
+  auto inputs = readSystemSampleInputs(declaration);
   if (mlir::failed(inputs) || (metadata.size() == 4 && inputs->empty()))
     return mlir::failure();
   unsigned width = inputs->empty() ? 2 : inputs->size();
@@ -91,7 +92,7 @@ getSystemSamples(mlir::Operation *declaration) {
 }
 
 mlir::FailureOr<llvm::SmallVector<unsigned>>
-getSystemSampleInputs(mlir::Operation *declaration) {
+readSystemSampleInputs(mlir::Operation *declaration) {
   auto metadata =
       declaration->getAttrOfType<mlir::DictionaryAttr>("ac.system_samples");
   if (!metadata || !metadata.get("inputs"))
@@ -101,30 +102,20 @@ getSystemSampleInputs(mlir::Operation *declaration) {
   auto type = signature
                   ? mlir::dyn_cast<mlir::FunctionType>(signature.getValue())
                   : mlir::FunctionType();
-  auto layout = getModulePortLayout(declaration);
-  if (!ordinals || ordinals.empty() || !type || mlir::failed(layout) ||
-      ordinals.size() != layout->sourceInputCount || layout->sourceOutputCount)
+  if (!ordinals || ordinals.empty() || !type)
     return declaration->emitOpError() << "explicit System samples must cover "
                                          "its closed logical input boundary";
   llvm::DenseSet<unsigned> seen;
   llvm::SmallVector<unsigned> result;
-  HardwareAnalysis analysis(declaration->getParentOfType<mlir::ModuleOp>());
-  HardwareBindings bindings;
-  bindings.owner = declaration;
   for (auto raw : ordinals) {
     auto ordinal = mlir::dyn_cast<mlir::IntegerAttr>(raw);
     if (!ordinal || ordinal.getInt() < 0 ||
         ordinal.getValue().getActiveBits() > 32 ||
-        ordinal.getValue().getZExtValue() >= layout->sourceInputCount ||
+        ordinal.getValue().getZExtValue() >= type.getNumInputs() ||
         !seen.insert(ordinal.getValue().getZExtValue()).second)
       return declaration->emitOpError()
              << "System sample inputs require unique logical input ordinals";
     unsigned index = ordinal.getValue().getZExtValue();
-    auto width =
-        analysis.getPackedWidth(type.getInput(index), bindings, declaration);
-    if (mlir::failed(width) || *width != 1)
-      return declaration->emitOpError()
-             << "System sample controls require one-bit logical inputs";
     result.push_back(index);
   }
   return result;
