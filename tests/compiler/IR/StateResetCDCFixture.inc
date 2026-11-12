@@ -614,7 +614,7 @@ TEST_F(StateResetValueTest, PublishTableSelectedResetForManagedMetadata) {
     %reset_levels = "ac.table.create"(%reset_zero, %reset_one) : (!b1, !b1) -> !reset_table
     %selected_reset = "ac.table.read"(%reset_levels, %enable) : (!reset_table, !b1) -> !b1
     %initial =)ir");
-  replace("\"ac.state\"(%clk, %rst,", "\"ac.state\"(%clk, %selected_reset,");
+  replace("\"gfir.state\"(%clk, %rst,", "\"gfir.state\"(%clk, %selected_reset,");
   replace("\"ac.rule\"(%clk, %rst,", "\"ac.rule\"(%clk, %selected_reset,");
   replace("\"ac.expect\"(%raw, %reached, %clk, %rst)",
           "\"ac.expect\"(%raw, %reached, %clk, %selected_reset)");
