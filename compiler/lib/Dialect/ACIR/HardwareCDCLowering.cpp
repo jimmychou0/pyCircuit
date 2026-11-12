@@ -670,6 +670,9 @@ LogicalResult verifyFinalHardwareCDCComponent(Operation *witness) {
   if (failed(verifyCDCRefinementContract(witness)))
     return failure();
   auto package = witness->getParentOfType<mlir::ModuleOp>();
+  if (failed(verifyCDCRefinementIntents(
+          HardwareAnalysis(package), cast<CDCRefinementOp>(witness), {})))
+    return failure();
   auto imported = dyn_cast_or_null<ModuleImportOp>(
       SymbolTable::lookupSymbolIn(package, registerSymbol));
   auto version =

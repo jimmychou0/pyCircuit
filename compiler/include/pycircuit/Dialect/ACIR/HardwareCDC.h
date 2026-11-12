@@ -6,6 +6,11 @@ mlir::LogicalResult verifyBoundHardwareCDCOperation(
     const HardwareAnalysis &analysis, mlir::Operation *operation,
     const HardwareBindings &bindings);
 mlir::LogicalResult verifyCDCRefinementContract(mlir::Operation *witness);
+/// Authenticate FIFO endpoint authority independently of its component graph.
+/// This proof does not invoke component verification.
+mlir::LogicalResult verifyCDCRefinementIntents(
+    const HardwareAnalysis &analysis, CDCRefinementOp witness,
+    const HardwareBindings &bindings);
 mlir::FailureOr<llvm::DenseMap<mlir::Operation *, mlir::Operation *>>
 getVerifiedCDCComponentOwners(mlir::ModuleOp package);
 mlir::LogicalResult verifyHardwareCDCComponent(mlir::Operation *witness);

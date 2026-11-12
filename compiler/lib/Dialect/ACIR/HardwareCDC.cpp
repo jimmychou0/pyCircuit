@@ -31,6 +31,18 @@ LogicalResult verifyFIFOIntents(const HardwareAnalysis &analysis, Operation *res
 }
 } // namespace
 
+LogicalResult verifyCDCRefinementIntents(
+    const HardwareAnalysis &analysis, CDCRefinementOp witness,
+    const HardwareBindings &bindings) {
+  if (failed(verifyCDCRefinementContract(witness)))
+    return failure();
+  if (witness.getLogicalKind() != "async_fifo")
+    return success();
+  return verifyFIFOIntents(analysis, witness,
+                          {witness.getOperand(4), witness.getOperand(5)},
+                          bindings);
+}
+
 bool hasLogicalCDC(Operation *root) {
   bool found = false;
   root->walk([&](Operation *op) {
@@ -59,8 +71,7 @@ LogicalResult verifyBoundHardwareCDCOperation(
     for (unsigned ordinal : reg ? SmallVector<unsigned>{0, 1, 2, 3, 4}
                                 : SmallVector<unsigned>{0, 1, 2, 4, 5, 7, 8})
       controls.push_back(witness.getOperand(ordinal));
-    if (!reg && failed(verifyFIFOIntents(analysis, witness,
-                           {witness.getOperand(4), witness.getOperand(5)}, bindings)))
+    if (failed(verifyCDCRefinementIntents(analysis, witness, bindings)))
       return failure();
     if (failed(verifyHardwareCDCComponent(op))) return failure();
   }
