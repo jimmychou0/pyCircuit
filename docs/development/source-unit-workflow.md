@@ -115,7 +115,11 @@ checks aggregate internally before any edge commits. It preserves declared
 closed startup values and synchronous reset, and reports
 `PYCIRCUIT_PHYSICAL_FAULT` on invalid controls or clock transitions. Simulation
 then freezes state; a physical reset does not clear the fault. Runners must reject
-that diagnostic even if a testbench later prints success. This is not a host
+that diagnostic even if a testbench later prints success. First-failure
+`PYCIRCUIT_FAULT_DETAIL` JSON lines identify time, actual instance, check or
+primitive control, reason and retained source locations; related control values
+are evidence rather than unique causal attribution. Details preserve the same
+failure and commit policy. This is not a host
 Work/Discard interface. Residual non-guard checks, observations, non-register
 resources, multiple domains, clock-data use and dynamic initializers require
 managed execution. See [physical export](physical-rtl-export.md) for the precise
@@ -384,6 +388,30 @@ template specialization. Its host lifetime extends to process exit; generated
 code measurements must include first-use initialization and resident memory,
 as well as repeated simulation time. This representation adds no hardware state
 or source API.
+
+## Large C++ evaluation functions
+
+C++ emission preserves the verified field evaluation order while outlining
+large `Work()` bodies into ordered, non-inlined helpers. Each emitted module
+definition uses the same policy, including children whose computations are
+evaluated through an ancestor. Parallel task eligibility does not decide whether
+the remaining ordered computation can be split into functions.
+
+`Work()` bodies up to 256 KiB of generated C++ remain a single function with
+local temporaries. Larger bodies use typed, per-call temporary pages with normal
+four-state initialization. Page construction and helper dispatch are grouped to
+bound the work performed by each constructor and caller.
+Immutable constant planes retain their static lifetime. The original check,
+observation, exception/discard and whole-System commit boundaries are unchanged;
+helper calls do not advance time or transfer state.
+
+Once outlining is active, each helper targets 8 KiB of generated C++.
+Splits fall between complete generated statement groups. An indivisible group
+can exceed the target, and the generated comment reports the largest group size.
+There is no promise that a source-byte target equals a particular machine-code
+size or that every target linker can accept an arbitrary design. The CodeGen
+gate exercises deep splitting, optimized helper boundaries, aggregate X/Z
+transport, state timing and failed-check rollback.
 
 ## Common Python statement lowering
 
