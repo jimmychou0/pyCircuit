@@ -368,7 +368,8 @@ Operation *firstResource(mlir::ModuleOp package) {
 FailureOr<OwningOpRef<mlir::ModuleOp>>
 materializeHardwareCDC(mlir::ModuleOp logical,
                        HardwareSourceCheckLimits limits) {
-  if (failed(verifyRoutedPackage(logical, limits)))
+  if (failed(detail::buildSourceCheckPlan(HardwareAnalysis(logical), limits,
+                                         detail::PackageStagePolicy::routed())))
     return failure();
   detail::SourceCheckBudget budget(limits);
   budget.setPhase("CDC physicalization");
@@ -784,7 +785,9 @@ LogicalResult
 verifyHardwareCDCMaterialization(mlir::ModuleOp logical,
                                  mlir::ModuleOp expanded,
                                  HardwareSourceCheckLimits limits) {
-  if (!expanded || failed(verifyRoutedPackage(logical, limits)))
+  if (!expanded || failed(detail::buildSourceCheckPlan(
+                       HardwareAnalysis(logical), limits,
+                       detail::PackageStagePolicy::routed())))
     return failure();
   return Correspondence(logical, expanded, limits).run();
 }

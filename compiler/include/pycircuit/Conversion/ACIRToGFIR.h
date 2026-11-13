@@ -1,22 +1,21 @@
-#ifndef PYCIRCUIT_LOWER_TRANSACTIONS_H
-#define PYCIRCUIT_LOWER_TRANSACTIONS_H
+#ifndef PYCIRCUIT_CONVERSION_ACIRTOGFIR_H
+#define PYCIRCUIT_CONVERSION_ACIRTOGFIR_H
 
 #include "llvm/ADT/DenseSet.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/OwningOpRef.h"
 #include "pycircuit/Dialect/ACIR/SourceTransactionStateAnalysis.h"
-#include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
+#include <memory>
+
+namespace mlir {
+class Pass;
+}
 
 namespace acir::ac::detail {
 class SourceCheckBudget;
 }
 
 namespace acir::detail {
-mlir::FailureOr<mlir::OwningOpRef<mlir::ModuleOp>> materializeTransactionResetMasks(
-    mlir::ModuleOp routed, ac::detail::SourceCheckBudget &budget);
-mlir::LogicalResult verifyTransactionResetMaskMaterialization(
-    mlir::ModuleOp routed, mlir::ModuleOp candidate, ac::detail::SourceCheckBudget &budget);
-
 using RoutingKey = std::pair<mlir::ArrayAttr, mlir::Value>;
 
 struct Route {
@@ -274,14 +273,10 @@ mlir::LogicalResult verifyTransactionMaterialization(
     const PreparedTransactionLowering &prepared,
     const MaterializedTransactionLowering &candidate,
     ac::detail::SourceCheckBudget &budget);
-mlir::FailureOr<mlir::OwningOpRef<mlir::ModuleOp>> materializeHardwareState(
-    mlir::ModuleOp routed, ac::detail::SourceCheckBudget &budget);
-mlir::LogicalResult verifyHardwareStateMaterialization(
-    mlir::ModuleOp routed, mlir::ModuleOp candidate,
-    ac::detail::SourceCheckBudget &budget);
-/// The one public refinement chain, including explicit CDC expansion and both
-/// correspondence proofs, shared by linking, passes and saved-anchor reload.
-mlir::FailureOr<mlir::OwningOpRef<mlir::ModuleOp>> refineRoutedHardware(
-    mlir::ModuleOp routed, ac::HardwareSourceCheckLimits limits = {});
 } // namespace acir::detail
+
+namespace acir {
+std::unique_ptr<mlir::Pass> createRouteTransactionsPass();
+void registerACIRToGFIRPasses();
+} // namespace acir
 #endif
