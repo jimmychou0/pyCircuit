@@ -25,12 +25,5 @@ struct HardwareCDCEndpointEffect {
 mlir::FailureOr<llvm::SmallVector<HardwareCDCEndpointEffect>>
 getAsyncFIFOEndpointEffects(RuleOp rule);
 bool hasLogicalCDC(mlir::Operation *root);
-mlir::FailureOr<mlir::OwningOpRef<mlir::ModuleOp>>
-materializeHardwareCDC(mlir::ModuleOp logical,
-                       HardwareSourceCheckLimits limits = {});
-mlir::LogicalResult
-verifyHardwareCDCMaterialization(mlir::ModuleOp logical,
-                                 mlir::ModuleOp expanded,
-                                 HardwareSourceCheckLimits limits = {});
 } // namespace acir::ac
 #endif

@@ -97,7 +97,7 @@ target_include_directories(ACIRDialect PRIVATE
 # pycircuit_verify_layering and the two layer probes.
 add_acir_library(ACIRAnalysis SOURCES
   HardwareCDC.cpp
-  HardwareCDCLowering.cpp
+  HardwareCDCGraph.cpp
   HardwareDomains.cpp
   HardwarePhysicalEvents.cpp
   HardwareAnalysis.cpp

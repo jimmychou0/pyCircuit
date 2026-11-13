@@ -176,9 +176,11 @@ semantic authority; policy determines unspecified-init and no-reset behavior.
 The existing unmarked register-v1 pin schema remains unchanged.
 
 The shared `refineRoutedHardware` chain normalizes transaction reset masks,
-expands explicit CDC resources and refines logical storage. Each step has an
-independent source-to-candidate correspondence check. Saved-anchor reload and
-the lowering pass use this same chain. A transaction's static transitive effect
+expands explicit CDC resources and refines logical storage. Physical construction
+and logical-to-expanded correspondence belong to `GFIRToHWIR`; `ACIRAnalysis`
+shares read-only circuit equations and standalone final-component checks. Each
+step has an independent source-to-candidate correspondence check. Saved-anchor
+reload and the lowering pass use this same chain. A transaction's static transitive effect
 reset set masks all normal effects and result availability; committed-state
 reads do not enlarge that set. Individual reset transitions and independently
 required reset-known checks remain separate.

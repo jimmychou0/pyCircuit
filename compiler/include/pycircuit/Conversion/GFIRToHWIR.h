@@ -15,6 +15,16 @@ namespace acir::ac::detail {
 class SourceCheckBudget;
 }
 
+namespace acir::ac {
+mlir::FailureOr<mlir::OwningOpRef<mlir::ModuleOp>>
+materializeHardwareCDC(mlir::ModuleOp logical,
+                       HardwareSourceCheckLimits limits = {});
+mlir::LogicalResult
+verifyHardwareCDCMaterialization(mlir::ModuleOp logical,
+                                 mlir::ModuleOp expanded,
+                                 HardwareSourceCheckLimits limits = {});
+} // namespace acir::ac
+
 namespace acir::detail {
 mlir::FailureOr<mlir::OwningOpRef<mlir::ModuleOp>> materializeTransactionResetMasks(
     mlir::ModuleOp routed, ac::detail::SourceCheckBudget &budget);
