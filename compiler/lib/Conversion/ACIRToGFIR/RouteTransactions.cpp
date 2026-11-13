@@ -3915,8 +3915,8 @@ LogicalResult materialize(PreparedTransactionLowering &prepared,
     // retains the source class.
     OpBuilder builder(replaced);
     auto routed = builder.create<gfir::StateOp>(
-        original.getLoc(), replaced.getQ().getType(), replaced.getClk(),
-        replaced.getRst(), replaced.getInitial(),
+        original.getLoc(), replaced.getQ().getType(),
+        ValueRange{replaced.getClk(), replaced.getRst(), replaced.getInitial()},
         original.getInstanceNameAttr(), original.getOccurrence());
     if (auto constraint = replaced.getPayloadConstraint())
       routed->setAttr("ac.payload_constraint", constraint);
