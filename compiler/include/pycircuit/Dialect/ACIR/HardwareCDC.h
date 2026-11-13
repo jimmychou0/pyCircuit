@@ -13,22 +13,22 @@ struct CDCPrimitiveLayout {
   mlir::Type payloadType;
   std::optional<uint64_t> depth;
   bool isFIFO() const { return kind == "async_fifo"; }
-  mlir::Value sourceClock() const { return allocation.getOperand(0); }
-  mlir::Value targetClock() const { return allocation.getOperand(1); }
-  mlir::Value reset() const { return allocation.getOperand(2); }
-  mlir::Value input() const { return allocation.getOperand(3); }
-  mlir::Value output() const { return allocation.getResult(0); }
+  mlir::Value sourceClock() const { return allocation->getOperand(0); }
+  mlir::Value targetClock() const { return allocation->getOperand(1); }
+  mlir::Value reset() const { return allocation->getOperand(2); }
+  mlir::Value input() const { return allocation->getOperand(3); }
+  mlir::Value output() const { return allocation->getResult(0); }
   mlir::Value pushIntent() const {
-    return isFIFO() ? allocation.getOperand(4) : mlir::Value();
+    return isFIFO() ? allocation->getOperand(4) : mlir::Value();
   }
   mlir::Value popIntent() const {
-    return isFIFO() ? allocation.getOperand(5) : mlir::Value();
+    return isFIFO() ? allocation->getOperand(5) : mlir::Value();
   }
   mlir::Value writeAvailable() const {
-    return isFIFO() ? allocation.getResult(1) : mlir::Value();
+    return isFIFO() ? allocation->getResult(1) : mlir::Value();
   }
   mlir::Value readAvailable() const {
-    return isFIFO() ? allocation.getResult(2) : mlir::Value();
+    return isFIFO() ? allocation->getResult(2) : mlir::Value();
   }
 };
 bool isCDCPrimitive(mlir::Operation *declaration);

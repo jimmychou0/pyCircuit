@@ -426,6 +426,26 @@ TEST_F(StateResetValueTest, PublishAsyncNegativeStateForIndependentConsumers) {
 
 #include "StateResetCDCFixture.inc"
 
+TEST_F(StateResetValueTest, UnusedNativeCDCDeclarationIsRemovedBeforeFinal) {
+  auto routed = mlir::parseSourceString<mlir::ModuleOp>(
+      withNativeCDCImport(stateIR(true), "async_reg"), &context);
+  ASSERT_TRUE(routed);
+  ASSERT_TRUE(mlir::succeeded(ac::verifyRoutedPackage(*routed)));
+  const auto before = print(routed->getOperation());
+  auto final = acir::detail::refineRoutedHardware(*routed);
+  ASSERT_TRUE(mlir::succeeded(final));
+  EXPECT_TRUE(mlir::succeeded(ac::verifyHardwarePackage(**final)));
+  (*final)->walk([&](ac::ModuleImportOp imported) {
+    EXPECT_NE(imported.getSymName(), "pycircuit.__builtins__.async_reg");
+    EXPECT_NE(imported.getSymName(), "pycircuit.__builtins__.async_fifo");
+  });
+  (*final)->walk([&](ac::InstanceOp instance) {
+    EXPECT_NE(instance.getCallee(), "pycircuit.__builtins__.async_reg");
+    EXPECT_NE(instance.getCallee(), "pycircuit.__builtins__.async_fifo");
+  });
+  EXPECT_EQ(print(routed->getOperation()), before);
+}
+
 TEST_F(StateResetValueTest, NativeCDCRejectsMalformedCanonicalDeclaration) {
   auto routed = mlir::parseSourceString<mlir::ModuleOp>(asyncRegSystemIR(true), &context);
   ASSERT_TRUE(routed);

@@ -194,7 +194,10 @@ FailureOr<CDCPrimitiveLayout> getCDCPrimitiveLayout(
 }
 bool hasLogicalCDC(Operation *root) {
   bool found = false;
-  root->walk([&](InstanceOp instance) { found |= isCDCInstance(instance); });
+  root->walk([&](Operation *operation) {
+    found |= isCDCPrimitive(operation) ||
+             isCDCInstance(dyn_cast<InstanceOp>(operation));
+  });
   return found;
 }
 LogicalResult verifyBoundHardwareCDCOperation(
