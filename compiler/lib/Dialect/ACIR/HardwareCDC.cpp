@@ -155,14 +155,18 @@ FailureOr<CDCPrimitiveLayout> getCDCPrimitiveLayout(
   if (instance.getInstanceName().empty())
     return instance.emitOpError("CDC resource requires a nonempty instance name");
   auto domains = owner->getAttrOfType<ArrayAttr>("ac.domain_params");
-  for (StringRef name : fifo ? ArrayRef<StringRef>{"write_domain", "read_domain"}
-                            : ArrayRef<StringRef>{"source_domain", "target_domain"}) {
+  SmallVector<StringRef> domainNames =
+      fifo ? SmallVector<StringRef>{"write_domain", "read_domain"}
+           : SmallVector<StringRef>{"source_domain", "target_domain"};
+  for (StringRef name : domainNames) {
     auto value = instance->getAttrOfType<StringAttr>(name);
     if (!value || !domains || !llvm::is_contained(domains, value))
       return instance.emitOpError("CDC endpoint must name a declared logical domain");
   }
-  for (StringRef name : fifo ? ArrayRef<StringRef>{"write_edge", "read_edge"}
-                            : ArrayRef<StringRef>{"target_edge"}) {
+  SmallVector<StringRef> edgeNames =
+      fifo ? SmallVector<StringRef>{"write_edge", "read_edge"}
+           : SmallVector<StringRef>{"target_edge"};
+  for (StringRef name : edgeNames) {
     auto value = instance->getAttrOfType<StringAttr>(name);
     if (!value || (value.getValue() != "posedge" && value.getValue() != "negedge"))
       return instance.emitOpError("CDC endpoint requires an explicit edge");
