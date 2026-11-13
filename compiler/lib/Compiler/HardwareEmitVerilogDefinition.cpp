@@ -266,13 +266,13 @@ public:
             << "  end\n"
             << "  wire " << name << " = ";
         auto contract = context.package->getAttrOfType<IntegerAttr>("ac.routed_contract");
-        if (contract && contract.getInt() >= 6)
+        if (contract && contract.getInt() == 7)
           out << sampling << "_rising && !" << sampling << "_reset_active && (";
         out << "$isunknown(" << name << "_path) || ("
             << sampling << "_rising && !" << sampling << "_reset_active && ("
             << name << "_path === 1'b1) && "
             << "$isunknown(" << name << "_condition))";
-        if (contract && contract.getInt() >= 6)
+        if (contract && contract.getInt() == 7)
           out << ")";
         out << ";\n"
             << "`else\n"

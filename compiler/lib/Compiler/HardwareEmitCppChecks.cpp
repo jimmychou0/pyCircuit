@@ -435,7 +435,7 @@ LogicalResult emitCppRootCheckValidator(HardwareEmitContext &context,
             << samplingOwner->lane << ");\n"
             << "      if (";
         auto contract = context.package->getAttrOfType<IntegerAttr>("ac.routed_contract");
-        if (contract && contract.getInt() >= 6)
+        if (contract && contract.getInt() == 7)
           out << "pyc_sampling.rising && !pyc_sampling.resetActive && ";
         out << "!pyc_reached.isFullyKnown()) {\n"
             << "        failure = {gfsim::SimFailurePhase::Check, "

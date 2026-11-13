@@ -16,7 +16,7 @@ FailureOr<HardwarePhysicalProjection> HardwareAnalysis::getPhysicalProjection(
   if (failed(verifySourceCheckPlan(plan, limits)))
     return failure();
   auto contract = package->getAttrOfType<IntegerAttr>("ac.routed_contract");
-  if (contract && contract.getInt() >= 6)
+  if (contract && contract.getInt() == 7)
     return detail::getBatchedPhysicalProjection(*this, plan, limits);
   if (plan.owners.empty())
     return package.emitOpError() << "physical RTL requires a root owner";
