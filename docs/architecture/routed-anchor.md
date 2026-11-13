@@ -1,7 +1,7 @@
-# Routed logical anchor
+# Routed ACIR anchor
 
 The native compiler has a verified boundary between source transactions and
-physical storage refinement. GFIR owns routed logical state; the existing ACIR module graph carries hierarchy and shared operations.
+physical storage refinement. Both stages use ACIR and the existing module graph.
 Public link produces hardware final by default, and both current emitters consume
 that same final artifact. The optional [saved-anchor workflow](saved-anchor.md)
 publishes and reloads the routed boundary independently. A high-level emitter and
@@ -16,17 +16,19 @@ general extern implementation bindings remain separate work.
 | Hardware final | `ac-lower-transactions`, `verifyHardwarePackage` | Physical storage and verified pins; no logical state/update or unresolved source effects. |
 
 A routed top-level package has `ac.stage = "routed"` and
-`ac.routed_contract = 4 : i64`, or contract 5 when it has a verified
-[selected Module entry boundary](entry-boundary.md). Contract 5 requires that
-boundary; contract 4 forbids it. Contract 6 adds explicit domain references,
-complete state policies, independent reset values, optional initialization and
-logical CDC resources. It permits ordinary roots or the same verified boundary.
-Versions 1–3 and unknown or malformed markers require rebuilding from source.
-The marker cannot appear in a source unit or on a nested operation.
-Hardware refinement preserves it while changing the stage to `final`.
+`ac.routed_contract = 2 : i64`, or contract 3 when it has a verified
+[selected Module entry boundary](entry-boundary.md). Contract 3 requires that
+boundary; contract 2 forbids it. Version 1 and unknown or malformed markers
+require rebuilding from source. The marker cannot appear in a source unit or on
+a nested operation.
+Hardware refinement preserves the marker while changing the stage to `final`.
 Independently authored final hardware may omit routed provenance; a present
-marker must still be valid. Local grammar and standalone package admission
-remain separate checks.
+marker must still be valid. The local attribute hook validates its shape, while
+standalone package preflight enforces root placement after parsing.
+
+Contract 2 includes lifted lexical registration identities and authenticated
+public-result return routes. Contract 1 artifacts must be regenerated; there is
+no reader that ignores the new ordering or availability semantics.
 
 The routing pass accepts an admitted merged source package. It does not replace
 source-unit authentication. Repeating it on a routed package validates without
@@ -42,71 +44,13 @@ inventory and independent loader over this native boundary.
 
 ## Logical state and candidate updates
 
-Source `ac.state` remains a source declaration. Routed contracts 4/5 use
-`gfir.state(clock, reset, initial) -> T`, retaining the payload, declaration
-occurrence and committed Q. One same-module operation binds its candidate:
+`ac.state(clock, reset, initial) -> T` retains the exact payload, declaration
+occurrence and committed value Q. One direct same-module operation binds its
+candidate and intent:
 
 ```text
-gfir.state.update(Q, candidate, intent) : (T, T, Bits1) -> ()
+ac.state.update(Q, candidate, intent) : (T, T, Bits1) -> ()
 ```
-
-Contract 6 keeps logical clock/reset SSA references and authenticates `domain`
-against `ac.domain_params`, actual `ac.domain_bindings` and root
-`ac.domain_clock_inputs`. It requires explicit edge, reset kind and initialization
-kind; reset polarity exists only for resettable state. `operandSegmentSizes` is
-the dense i32 array `[1,R,I,V]` for clock/reset/init/reset-value. R=V=1 for
-sync/async and 0 for none; I=1 for explicit initialization and 0 for unspecified.
-Init and reset value have the exact payload type and use the existing static
-initializer admission. Unspecified storage is available typed all-X payload
-(known=0, z=0). Host Reset restores init; hardware reset uses reset value.
-Neither unknown nor raw-zero storage proves nominal membership or range validity.
-
-Contracts 4/5 retain their three operands, fixed positive-edge synchronous
-active-high policy and `reset_value = initial`. Source compilation/routing
-continue producing these profiles. Contract 6 can be independently constructed,
-saved, reloaded and refined without Python capture; it adds no frontend syntax.
-
-Refinement uses register-contract-3 DFF/DFFE instances for contract 6, with a
-shared policy/layout decoder and separate typed reset-value pin. The logical
-anchor does not choose those circuits. Independent refinement verifies the
-complete payload/control relation. Ignored initialization/reset pins have no
-semantic authority; policy determines unspecified-init and no-reset behavior.
-Older register contracts retain their declared pin schemas.
-
-The shared `refineRoutedHardware` chain normalizes transaction reset masks,
-expands explicit CDC resources and refines logical storage. Each step has an
-independent source-to-candidate correspondence check. Saved-anchor reload and
-the lowering pass use this same chain. A transaction's static transitive effect
-reset set masks all normal effects and result availability; committed-state
-reads do not enlarge that set. Individual reset transitions and independently
-required reset-known checks remain separate.
-
-`ac.async_reg` and `ac.async_fifo` retain logical endpoint roles, clock identities,
-edge, whole reset and capacity without selecting circuits. FIFO updates pair
-head/payload with independently authenticated write/read transaction intents.
-Public expansion generates synchronizers, release state, pointers and a typed
-bank. Self-contained `ac.cdc.refinement` records permit standalone final
-revalidation of the complete circuit and its endpoint admission. A CDC label
-alone never permits an otherwise illegal crossing. The first FIFO implementation
-supports power-of-two depths of at least two; other positive capacities reject
-at refinement without changing the logical request or existing outputs.
-
-Contract-6 emission uses `ports.json` schema 2. Ordinary port rows include their
-declared domain and actual root clock input; control roles come from verified
-connections. Domain metadata lists each actual transaction/storage endpoint,
-owner path and coordinates, clock ordinal, edge and reset policies. A forwarded
-reset identifies its root input ordinal. A derived or internal reset is marked
-by a null direct ordinal and its actual root input dependencies, rather than
-guessing one reset pin. CDC stages retain their verified resource role. Legacy
-port-map schema 1 remains unchanged.
-
-Contract-5 physical simulation accepts sealed event batches with stable data
-and controls until delta drain. Startup root clocks must all be known zero,
-matching managed false history; an invalid startup discards the entire batch,
-including asynchronous reset candidates. Later positive and negative events
-use the common policies. This restriction is versioned to the new adapter;
-legacy physical startup behavior is unchanged. Synthesis uses the same final
-graph with standard functional event controls.
 
 The update has no results, regions or independent owner attributes. Q must be the
 direct declaration result, not a type-compatible alias or another child's value.
@@ -197,6 +141,72 @@ inherit transaction preparation limits merely by passing through the new stages.
 Logical-state preparation/refinement retains its bounded work and allocation
 checks. Missing physical storage declarations can leave a valid logical anchor,
 but must reject requested hardware refinement without changing that anchor.
+
+## Contract 6: domains, reset policies and explicit CDC
+
+The new `ac.routed_contract = 6 : i64` profile adds the domain/reset/CDC backend.
+It permits an ordinary root or a verified [selected Module entry boundary](entry-boundary.md).
+Its logical state is `gfir.state`, paired with `gfir.state.update(Q, candidate, intent)`;
+module hierarchy and shared operations remain in ACIR. This profile is independently
+constructible in IR and adds no Python capture or authoring syntax.
+
+Contract 6 keeps logical clock/reset SSA references and authenticates `domain`
+against `ac.domain_params`, actual `ac.domain_bindings` and root
+`ac.domain_clock_inputs`. It requires explicit edge, reset kind and initialization
+kind; reset polarity exists only for resettable state. `operandSegmentSizes` is
+the dense i32 array `[1,R,I,V]` for clock/reset/init/reset-value. R=V=1 for
+sync/async and 0 for none; I=1 for explicit initialization and 0 for unspecified.
+Init and reset value have the exact payload type and use the existing static
+initializer admission. Unspecified storage is available typed all-X payload
+(known=0, z=0). Host Reset restores init; hardware reset uses reset value.
+Neither unknown nor raw-zero storage proves nominal membership or range validity.
+
+Contracts 4/5 retain their three operands, fixed positive-edge synchronous
+active-high policy and `reset_value = initial`. Source compilation/routing
+continue producing these profiles. Contract 6 can be independently constructed,
+saved, reloaded and refined without Python capture; it adds no frontend syntax.
+
+Refinement uses register-contract-3 DFF/DFFE instances for contract 6, with a
+shared policy/layout decoder and separate typed reset-value pin. The logical
+anchor does not choose those circuits. Independent refinement verifies the
+complete payload/control relation. Ignored initialization/reset pins have no
+semantic authority; policy determines unspecified-init and no-reset behavior.
+The existing unmarked register-v1 pin schema remains unchanged.
+
+The shared `refineRoutedHardware` chain normalizes transaction reset masks,
+expands explicit CDC resources and refines logical storage. Each step has an
+independent source-to-candidate correspondence check. Saved-anchor reload and
+the lowering pass use this same chain. A transaction's static transitive effect
+reset set masks all normal effects and result availability; committed-state
+reads do not enlarge that set. Individual reset transitions and independently
+required reset-known checks remain separate.
+
+`ac.async_reg` and `ac.async_fifo` retain logical endpoint roles, clock identities,
+edge, whole reset and capacity without selecting circuits. FIFO updates pair
+head/payload with independently authenticated write/read transaction intents.
+Public expansion generates synchronizers, release state, pointers and a typed
+bank. Self-contained `ac.cdc.refinement` records permit standalone final
+revalidation of the complete circuit and its endpoint admission. A CDC label
+alone never permits an otherwise illegal crossing. The first FIFO implementation
+supports power-of-two depths of at least two; other positive capacities reject
+at refinement without changing the logical request or existing outputs.
+
+Contract-6 emission uses `ports.json` schema 2. Ordinary port rows include their
+declared domain and actual root clock input; control roles come from verified
+connections. Domain metadata lists each actual transaction/storage endpoint,
+owner path and coordinates, clock ordinal, edge and reset policies. A forwarded
+reset identifies its root input ordinal. A derived or internal reset is marked
+by a null direct ordinal and its actual root input dependencies, rather than
+guessing one reset pin. CDC stages retain their verified resource role. Legacy
+port-map schema 1 remains unchanged.
+
+Contract-6 physical simulation accepts sealed event batches with stable data
+and controls until delta drain. Startup root clocks must all be known zero,
+matching managed false history; an invalid startup discards the entire batch,
+including asynchronous reset candidates. Later positive and negative events
+use the common policies. This restriction is versioned to the new adapter;
+legacy physical startup behavior is unchanged. Synthesis uses the same final
+graph with standard functional event controls.
 
 ## Constrained ordinary extern declarations
 

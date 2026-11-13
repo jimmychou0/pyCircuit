@@ -616,10 +616,6 @@ LogicalResult HardwareAnalysis::verifyModuleDeclaration(
                       : parent;
     return detail::verifySourceExpectOperation(*this, expect, owner);
   }
-  if (isa<ValueZeroOp>(operation)) {
-    if (failed(detail::verifySourceTemplateType(*this, operation->getResult(0).getType(), bindings, operation))) return failure();
-    return requireResolved ? success(succeeded(getPackedWidth(operation->getResult(0).getType(), bindings, operation))) : success();
-  }
   return operation->emitOpError()
          << "operation is not a module declaration bound check";
 }

@@ -172,7 +172,7 @@ FailureOr<HardwarePhysicalProjection> HardwareAnalysis::getPhysicalProjection(
       unsigned initialIndex = primitive == "dff" ? 3 : 4;
       auto policy = getRegisterPolicy(&op);
       if (failed(policy)) return failure();
-      if (*version >= 2 && policy->resetKind != RegisterResetKind::None &&
+      if (*version == 3 && policy->resetKind != RegisterResetKind::None &&
           (op.getNumOperands() <= initialIndex + 1 ||
            failed(detail::verifyClosedStateInitializer(
                *this, op.getOperand(initialIndex + 1), occurrence.bindings, &op, &budget))))

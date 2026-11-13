@@ -61,18 +61,17 @@ replace refinement or hardware verification.
 
 ## Identity and format
 
-Ordinary anchors use `kind="pycircuit-anchor"`, `schema=3` and
-`routed_contract=4`. A compiler-owned
-[selected entry boundary](entry-boundary.md) uses `schema=4`,
-`routed_contract=5`. Complete domain/state/CDC anchors use `schema=5`,
-`routed_contract=6`, with or without that boundary. Only these three pairs are
-admitted; retired or mismatched versions require regeneration from source units.
+Ordinary anchors use `kind="pycircuit-anchor"`, `schema=1` and
+`routed_contract=2`. Anchors with a compiler-owned
+[selected entry boundary](entry-boundary.md) use `schema=2` and
+`routed_contract=3`. Only these two schema/contract pairs are admitted;
+unsupported or mismatched versions require regeneration from source units.
 The manifest has closed fields for owner, root, configuration and its identity,
 complete content identity, file inventory, definition index, retained sources
 and producer provenance. Duplicate fields, definitions, source owners, paths and
 identities are rejected.
 
-An entry boundary in schema 4 or 5 adds exactly `implementation_root` to the configuration object. Its
+Schema 2 adds exactly `implementation_root` to the configuration object. Its
 `{source, definition, variant_id}` row identifies the canonical entry adapter;
 the existing manifest root, owner and configuration root identify the logical
 Module selected by the user. Both rows must match indexed definitions and source
@@ -82,19 +81,6 @@ in the existing configuration fields. Reload rederives both identities and
 bindings after native admission; it cannot swap roots or substitute actuals.
 An unrelated closed caller may be pruned from the saved closure without making
 this entry boundary invalid.
-
-Schemas 3/4 preserve the existing three-operand `gfir.state`, its fixed
-positive-edge synchronous active-high policy and reset-to-init behavior.
-Schema 4 requires the canonical entry boundary; schema 3 forbids it.
-The reader does not upgrade their state policy or reinterpret the version.
-
-Schema 5 retains logical domain attributes, full state policy/operand segments
-and CDC resource/update contracts in exact definition bodies. Its configuration
-additionally contains sorted `domain_bindings` records with `instance_path`,
-`formal` and `clock_input`. Native validation resolves each actual occurrence
-through its complete binding map and compares the reconstructed records exactly.
-These refer to logical root arguments, not emitted wire names or physical
-synchronizer topology. Reload does not choose a new default domain.
 
 Canonical JSON uses literal UTF-8, sorted object keys, compact separators and
 only required escapes. It has no floats or nonfinite numbers. Hardware integer
@@ -129,6 +115,24 @@ payload allocation or MLIR parsing:
 
 Existing graph, proof and clone budgets still apply. The format does not expand
 compact Collections or claim lower peak memory without measurement.
+
+## Schema 5: domain/reset/CDC anchors
+
+The new `kind="pycircuit-anchor"`, `schema=5`, `routed_contract=6` pair
+stores [the domain/reset/CDC profile](routed-anchor.md#contract-6-domains-reset-policies-and-explicit-cdc).
+It retains logical domain attributes, full state policy/operand segments and
+CDC resource/update contracts in exact definition bodies. Its configuration
+additionally contains sorted `domain_bindings` records with `instance_path`,
+`formal` and `clock_input`. Native validation resolves each actual occurrence
+through its complete binding map and compares the reconstructed records exactly.
+These refer to logical root arguments, not emitted wire names or physical
+synchronizer topology. Reload does not choose a new default domain.
+
+Schema 5 permits an ordinary root or the canonical selected entry boundary.
+Only the latter adds `implementation_root` to the configuration, with separate
+logical and implementation root rows and the same native boundary validation.
+Reload preserves the complete contract before entering the shared hardware
+refinement chain; it does not upgrade a legacy anchor's policy.
 
 ## Publication and relocation
 

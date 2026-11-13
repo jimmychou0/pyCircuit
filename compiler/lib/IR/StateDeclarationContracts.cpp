@@ -269,14 +269,14 @@ mlir::FailureOr<unsigned> getRegisterContract(Operation *declaration) {
   unsigned contract = 1;
   if (raw) {
     auto version = dyn_cast<IntegerAttr>(raw);
-    if (!version || !version.getType().isSignlessInteger(64) || (version.getInt() != 2 && version.getInt() != 3))
-      return declaration->emitOpError("register contract requires 2 or 3 : i64");
+    if (!version || !version.getType().isSignlessInteger(64) || version.getInt() != 3)
+      return declaration->emitOpError("register contract requires 3 : i64");
     contract = version.getInt();
   }
   SmallVector<StringRef> names{"clk", "rst"};
   if (kind.getValue() == "dffe") names.push_back("en");
   names.append({"d", "init"});
-  if (contract >= 2) names.push_back("reset_value");
+  if (contract == 3) names.push_back("reset_value");
   auto pins = imported->getAttrOfType<ArrayAttr>("input_names");
   auto outputs = imported->getAttrOfType<ArrayAttr>("output_names");
   auto rawSignature = imported->getAttrOfType<TypeAttr>("function_type");
@@ -344,6 +344,6 @@ mlir::FailureOr<RegisterPrimitiveLayout> getRegisterPrimitiveLayout(Operation *d
   bool enabled = declaration->getAttrOfType<StringAttr>("primitive_kind").getValue() == "dffe";
   unsigned data = enabled ? 3 : 2;
   return RegisterPrimitiveLayout{*version, 0, 1, enabled ? std::optional<unsigned>(2) : std::nullopt,
-                                 data, data + 1, *version >= 2 ? data + 2 : data + 1};
+                                 data, data + 1, *version == 3 ? data + 2 : data + 1};
 }
 }

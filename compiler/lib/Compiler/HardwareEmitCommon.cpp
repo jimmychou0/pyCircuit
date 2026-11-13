@@ -1926,9 +1926,8 @@ HardwareEmitContext::cppBoundModuleType(Operation *definition,
     auto contract = ac::getRegisterContract(definition);
     if (failed(contract))
       return failure();
-    if (*contract >= 2)
-      actuals.push_back("true");
     if (*contract == 3) {
+      actuals.push_back("true");
       auto policy = cppRegisterPolicy(site);
       if (failed(policy))
         return failure();

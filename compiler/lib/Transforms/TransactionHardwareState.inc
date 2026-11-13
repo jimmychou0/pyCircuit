@@ -1,8 +1,8 @@
 // Physical refinement is a separate transformation of independently verified
 // routed IR. None of the source preparation's borrowed records enter this proof.
 struct HardwareStatePrimitives {
-  ac::ModuleImportOp dff, dffe, dffReset, dffeReset, dffPolicy, dffePolicy;
-  gfir::StateOp explicitState, policyState;
+  ac::ModuleImportOp dff, dffe, dffPolicy, dffePolicy;
+  gfir::StateOp policyState;
 };
 
 FailureOr<HardwareStatePrimitives>
@@ -28,11 +28,6 @@ hardwareStatePrimitives(mlir::ModuleOp routed, SourceCheckBudget &budget) {
       else result.dffePolicy = imported;
       continue;
     }
-    if (version == 2) {
-      if (kind == "dff") result.dffReset = imported;
-      else result.dffeReset = imported;
-      continue;
-    }
     if (kind == "dff" && !result.dff)
       result.dff = imported;
     if (kind == "dffe") {
@@ -56,11 +51,10 @@ hardwareStatePrimitives(mlir::ModuleOp routed, SourceCheckBudget &budget) {
 
 // Canonical physical imports are a refinement product, never a logical
 // anchor requirement. Their types remain nominally owned by the new symbol.
-Operation *registerResetImport(gfir::StateOp state, bool dff, unsigned version = 2) {
+Operation *registerPolicyImport(gfir::StateOp state, bool dff) {
   Builder b(state.getContext());
-  StringRef symbol = version == 3
-      ? (dff ? "pycircuit.__builtins__.dff_policy" : "pycircuit.__builtins__.dffe_policy")
-      : (dff ? "pycircuit.__builtins__.dff_reset_value" : "pycircuit.__builtins__.dffe_reset_value");
+  StringRef symbol = dff ? "pycircuit.__builtins__.dff_policy"
+                         : "pycircuit.__builtins__.dffe_policy";
   auto payload = ac::TypeParamType::get(state.getContext(),
       FlatSymbolRefAttr::get(state.getContext(), symbol), b.getStringAttr("T"));
   auto bit = ac::BitsType::get(state.getContext(),
@@ -83,7 +77,7 @@ Operation *registerResetImport(gfir::StateOp state, bool dff, unsigned version =
   op.addAttribute("output_names", b.getArrayAttr({b.getStringAttr("q")}));
   op.addAttribute("semantic_kind", b.getStringAttr("hardware"));
   op.addAttribute("primitive_kind", b.getStringAttr(dff ? "dff" : "dffe"));
-  op.addAttribute("ac.register_contract", b.getI64IntegerAttr(version));
+  op.addAttribute("ac.register_contract", b.getI64IntegerAttr(3));
   auto output = b.getDictionaryAttr({b.getNamedAttr("port", b.getI64IntegerAttr(0)),
                                     b.getNamedAttr("path", b.getArrayAttr({}))});
   op.addAttribute("dependency_summary", b.getArrayAttr({b.getDictionaryAttr({
@@ -161,16 +155,13 @@ private:
           mapping.map(a, b);
         }
         auto next = right.begin();
-        if (source == routed.getOperation() && (primitives.explicitState || primitives.policyState)) {
-          unsigned version = primitives.policyState ? 3 : 2;
-          auto declaration = primitives.policyState ? primitives.policyState : primitives.explicitState;
+        if (source == routed.getOperation() && primitives.policyState) {
           for (bool dff : {true, false}) {
-            if (version == 3 ? (dff ? bool(primitives.dffPolicy) : bool(primitives.dffePolicy))
-                             : (dff ? bool(primitives.dffReset) : bool(primitives.dffeReset))) continue;
+            if (dff ? bool(primitives.dffPolicy) : bool(primitives.dffePolicy)) continue;
             if (next == right.end()) return reject("missing generated register import");
             auto *actual = &*next++;
             if (!charge(budget, routed, 128)) return failure();
-            auto *expected = registerResetImport(declaration, dff, version);
+            auto *expected = registerPolicyImport(primitives.policyState, dff);
             bool matches = actual->getName() == expected->getName() &&
                 actual->getAttrs() == expected->getAttrs() &&
                 actual->getLoc() == expected->getLoc() &&
@@ -258,18 +249,16 @@ private:
     // producer flag nor the candidate primitive's missing enable is authority.
     bool dff = unconditionalScalarState(state, *update, analysis, budget);
     bool policyState = bool(state->getAttr("operandSegmentSizes"));
-    bool resetValue = bool(state.getResetValue());
-    auto primitive = policyState ? (dff ? primitives.dffPolicy : primitives.dffePolicy) : resetValue ? (dff ? primitives.dffReset : primitives.dffeReset)
-                               : (dff ? primitives.dff : primitives.dffe);
-    if (!primitive && !resetValue && !policyState) return reject("required physical primitive is absent");
+    auto primitive = policyState ? (dff ? primitives.dffPolicy : primitives.dffePolicy)
+                                 : (dff ? primitives.dff : primitives.dffe);
+    if (!primitive && !policyState) return reject("required physical primitive is absent");
     auto *target = pair.target;
     Builder b(routed.getContext());
     NamedAttrList attributes;
     attributes.append("instance_name", state.getInstanceNameAttr());
     attributes.append("occurrence", state.getOccurrence());
-    auto symbol = primitive ? primitive.getSymNameAttr() : policyState ? b.getStringAttr(
-        dff ? "pycircuit.__builtins__.dff_policy" : "pycircuit.__builtins__.dffe_policy") : b.getStringAttr(
-        dff ? "pycircuit.__builtins__.dff_reset_value" : "pycircuit.__builtins__.dffe_reset_value");
+    auto symbol = primitive ? primitive.getSymNameAttr() : b.getStringAttr(
+        dff ? "pycircuit.__builtins__.dff_policy" : "pycircuit.__builtins__.dffe_policy");
     attributes.append("callee", FlatSymbolRefAttr::get(symbol));
     attributes.append("parameters", b.getArrayAttr({}));
     attributes.append("type_arguments", b.getArrayAttr({TypeAttr::get(
@@ -283,7 +272,7 @@ private:
     if (!dff) inputs.push_back(mapping.lookup(update->getIntent()));
     inputs.push_back(mapping.lookup(update->getCandidate()));
     inputs.push_back(mapping.lookup(state.getInitial() ? state.getInitial() : state.getQ()));
-    if (resetValue || policyState)
+    if (policyState)
       inputs.push_back(mapping.lookup(state.getResetValue() ? state.getResetValue() : state.getQ()));
     if (table) {
       if (pair.splats.size() != 3) return reject("Table splat inventory differs");

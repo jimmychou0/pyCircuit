@@ -89,7 +89,7 @@ LogicalResult primitiveSchema(const HardwareAnalysis &analysis,
     outputs = {"ready", "valid", "data", "local_capacity"};
   } else
     return op.emitOpError() << "unknown trusted primitive kind";
-  if (reg && registerVersion >= 2) inputs.push_back("reset_value");
+  if (reg && registerVersion == 3) inputs.push_back("reset_value");
   if (op.getInputNames().size() != inputs.size() ||
       op.getOutputNames().size() != outputs.size())
     return op.emitOpError() << "trusted primitive pin count mismatch";

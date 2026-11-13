@@ -8490,15 +8490,12 @@ FailureOr<OwningOpRef<mlir::ModuleOp>> materializeHardwareState(
   OwningOpRef<mlir::ModuleOp> staged = cast<mlir::ModuleOp>(routed->clone());
   ac::HardwareAnalysis analysis(*staged);
   Builder attributes(routed.getContext());
-  if (primitives->explicitState || primitives->policyState) {
-    unsigned version = primitives->policyState ? 3 : 2;
-    auto declaration = primitives->policyState ? primitives->policyState : primitives->explicitState;
+  if (primitives->policyState) {
     OpBuilder builder(routed.getContext());
     builder.setInsertionPointToStart(staged->getBody());
     for (bool dff : {true, false}) {
-      if (version == 3 ? (dff ? bool(primitives->dffPolicy) : bool(primitives->dffePolicy))
-                       : (dff ? bool(primitives->dffReset) : bool(primitives->dffeReset))) continue;
-      auto *imported = registerResetImport(declaration, dff, version);
+      if (dff ? bool(primitives->dffPolicy) : bool(primitives->dffePolicy)) continue;
+      auto *imported = registerPolicyImport(primitives->policyState, dff);
       if (SymbolTable::lookupSymbolIn(*staged, imported->getAttrOfType<StringAttr>("sym_name").getValue())) {
         imported->destroy();
         return routed.emitError("generated register symbol collides with existing declaration");
@@ -8513,10 +8510,9 @@ FailureOr<OwningOpRef<mlir::ModuleOp>> materializeHardwareState(
       if (failed(update)) return failure();
       bool dff = unconditionalScalarState(state, *update, analysis, budget);
       bool policyState = bool(state->getAttr("operandSegmentSizes"));
-      bool resetValue = bool(state.getResetValue());
-      auto primitive = policyState ? (dff ? primitives->dffPolicy : primitives->dffePolicy) : resetValue ? (dff ? primitives->dffReset : primitives->dffeReset)
-                                 : (dff ? primitives->dff : primitives->dffe);
-      if (!primitive && !resetValue && !policyState)
+      auto primitive = policyState ? (dff ? primitives->dffPolicy : primitives->dffePolicy)
+                                   : (dff ? primitives->dff : primitives->dffe);
+      if (!primitive && !policyState)
         return state.emitOpError()
                << "unconditional hardware state requires the verified DFF primitive";
       auto table = dyn_cast<ac::TableType>(state.getQ().getType());
@@ -8525,9 +8521,8 @@ FailureOr<OwningOpRef<mlir::ModuleOp>> materializeHardwareState(
       leaf.addTypes(state.getQ().getType());
       leaf.addAttribute("instance_name", state.getInstanceNameAttr());
       leaf.addAttribute("occurrence", state.getOccurrence());
-      leaf.addAttribute("callee", FlatSymbolRefAttr::get(primitive ? primitive.getSymNameAttr() : policyState ? attributes.getStringAttr(
-          dff ? "pycircuit.__builtins__.dff_policy" : "pycircuit.__builtins__.dffe_policy") : attributes.getStringAttr(
-          dff ? "pycircuit.__builtins__.dff_reset_value" : "pycircuit.__builtins__.dffe_reset_value")));
+      leaf.addAttribute("callee", FlatSymbolRefAttr::get(primitive ? primitive.getSymNameAttr() : attributes.getStringAttr(
+          dff ? "pycircuit.__builtins__.dff_policy" : "pycircuit.__builtins__.dffe_policy")));
       leaf.addAttribute("parameters", attributes.getArrayAttr({}));
       leaf.addAttribute("type_arguments", attributes.getArrayAttr({TypeAttr::get(
           table ? table.getElementType() : state.getQ().getType())}));
@@ -8551,7 +8546,7 @@ FailureOr<OwningOpRef<mlir::ModuleOp>> materializeHardwareState(
       if (!dff) inputs.push_back(update->getIntent());
       inputs.push_back(update->getCandidate());
       inputs.push_back(state.getInitial() ? state.getInitial() : storage->getResult(0));
-      if (resetValue || policyState)
+      if (policyState)
         inputs.push_back(state.getResetValue() ? state.getResetValue() : storage->getResult(0));
       if (table)
         for (unsigned i = 0; i < 3; ++i) {

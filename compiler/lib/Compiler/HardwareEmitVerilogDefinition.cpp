@@ -1075,14 +1075,12 @@ public:
         auto contract = ac::getRegisterContract(callee);
         if (failed(contract))
           return failure();
-        if (*contract >= 2) {
+        if (*contract == 3) {
           auto close = parameters->rfind(')');
           if (close == std::string::npos)
             return occurrence->emitOpError()
                    << "register requires typed RTL parameters";
           parameters->insert(close, ", .pyc_separate_reset_value(1'b1) ");
-        }
-        if (*contract == 3) {
           auto policy = ac::getRegisterPolicy(occurrence);
           if (failed(policy))
             return failure();

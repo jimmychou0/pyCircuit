@@ -463,7 +463,7 @@ private:
       auto contract = ac::getRegisterContract(leaf.bindings.owner);
       if (failed(contract))
         return failure();
-      if (*contract >= 2)
+      if (*contract == 3)
         pins.back() = "&" + pins.back();
       policyRegister = *contract == 3;
       if (policyRegister) {

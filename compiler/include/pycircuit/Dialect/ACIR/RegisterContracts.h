@@ -31,7 +31,7 @@ struct RegisterPrimitiveLayout {
   std::optional<unsigned> enable;
   unsigned data, initial, resetValue;
 };
-/// v3 retains v2's physical ABI; absent initialization is a typed all-X value.
+/// v3 has an independent reset-value pin; absent initialization is typed all-X.
 mlir::FailureOr<RegisterPrimitiveLayout>
 getRegisterPrimitiveLayout(mlir::Operation *declaration);
 
