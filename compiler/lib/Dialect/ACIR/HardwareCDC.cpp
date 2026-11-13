@@ -47,12 +47,17 @@ LogicalResult verifyCDCRefinementIntents(
 
 bool isCDCPrimitive(Operation *declaration) {
   auto imported = dyn_cast_or_null<ModuleImportOp>(declaration);
-  auto kind = imported ? imported.getPrimitiveKindAttr() : StringAttr();
+  auto kind = imported ? imported->getAttrOfType<StringAttr>("primitive_kind")
+                       : StringAttr();
   return kind && (kind.getValue() == "async_reg" || kind.getValue() == "async_fifo");
 }
 bool isCDCInstance(InstanceOp instance) {
-  return instance && (instance.getCallee() == "pycircuit.__builtins__.async_reg" ||
-                      instance.getCallee() == "pycircuit.__builtins__.async_fifo");
+  // Package classification also runs before native structural verification.
+  // A missing or ill-typed callee is rejected by the ordinary instance verifier.
+  auto callee = instance ? instance->getAttrOfType<FlatSymbolRefAttr>("callee")
+                         : FlatSymbolRefAttr();
+  return callee && (callee.getValue() == "pycircuit.__builtins__.async_reg" ||
+                    callee.getValue() == "pycircuit.__builtins__.async_fifo");
 }
 LogicalResult verifyCDCPrimitiveDeclaration(const HardwareAnalysis &analysis,
                                             ModuleImportOp declaration) {
