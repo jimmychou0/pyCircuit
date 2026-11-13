@@ -187,13 +187,13 @@ def _validate_manifest(value: object) -> None:
         or type(manifest["schema"]) is not int
         or type(manifest["routed_contract"]) is not int
         or (manifest["schema"], manifest["routed_contract"])
-        not in ((3, 4), (4, 5), (5, 6))
+        not in ((3, 4), (4, 5), (6, 7))
     ):
         raise _PublicationError(
             "unsupported anchor format/contract; regenerate from source units"
         )
     entry_boundary = manifest["schema"] == 4 or (
-        manifest["schema"] == 5
+        manifest["schema"] == 6
         and isinstance(manifest["configuration"], dict)
         and "implementation_root" in manifest["configuration"]
     )
@@ -341,7 +341,7 @@ def _validate_manifest(value: object) -> None:
             "definitions",
         }
         | ({"implementation_root"} if entry_boundary else set())
-        | ({"domain_bindings"} if manifest["schema"] == 5 else set()),
+        | ({"domain_bindings"} if manifest["schema"] == 6 else set()),
         "configuration",
     )
     config_root = _object(
@@ -391,7 +391,7 @@ def _validate_manifest(value: object) -> None:
     if configuration["type_arguments"] != []:
         raise _PublicationError("anchor public root type arguments must be empty")
     _text(configuration["domain"], "domain")
-    if manifest["schema"] == 5:
+    if manifest["schema"] == 6:
         previous = None
         for raw in _array(configuration["domain_bindings"], "domain bindings"):
             row = _object(

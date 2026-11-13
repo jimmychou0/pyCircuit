@@ -402,7 +402,7 @@ parseSampledAdmission(RuleOp rule, const HardwareAnalysis &analysis,
   bool eventPolicy = row && row.get("resets");
   if (masked && !eventPolicy) return rule.emitOpError("reset masks require the current event-context schema");
   auto packageContract = analysis.getPackage()->getAttrOfType<IntegerAttr>("ac.routed_contract");
-  if (eventPolicy != bool(packageContract && packageContract.getInt() == 6))
+  if (eventPolicy != bool(packageContract && packageContract.getInt() == 7))
     return rule.emitOpError("sampled event schema must match routed contract");
   if (eventPolicy) {
     core.erase("edge");
@@ -568,9 +568,9 @@ parseSampledAdmission(RuleOp rule, const HardwareAnalysis &analysis,
       bool endpoint = false;
       for (const auto &effect : *effects) {
         if (effect.intent != use.get()) continue;
-        if (auto update = dyn_cast<AsyncFIFOUpdateOp>(use.getOwner()))
-          endpoint |= update.getHead().getDefiningOp() == effect.resource &&
-              use.getOperandNumber() == (effect.write ? 2u : 3u);
+        if (use.getOwner() == effect.resource &&
+            isCDCInstance(dyn_cast<InstanceOp>(effect.resource)))
+          endpoint |= use.getOperandNumber() == (effect.write ? 4u : 5u);
         if (use.getOwner() == effect.resource && isa<CDCRefinementOp>(effect.resource)) {
           if (failed(verifyHardwareCDCComponent(effect.resource))) return failure();
           endpoint |= use.getOperandNumber() == (effect.write ? 4u : 5u);
@@ -3530,7 +3530,7 @@ private:
                             const HardwareIdentityEndpoint &right) {
     if (sameEndpoint(left, right)) return success();
     auto contract = analysis.getPackage()->getAttrOfType<IntegerAttr>("ac.routed_contract");
-    if (!contract || contract.getInt() != 6 || left.scope.root != right.scope.root)
+    if (!contract || contract.getInt() != 7 || left.scope.root != right.scope.root)
       return failure();
     if (!domainPlan) {
       auto plan = getHardwareDomainPlan(analysis.getPackage());
@@ -3597,7 +3597,7 @@ private:
       return failure();
     receiver->path.append(logical.path.begin(), logical.path.end());
     auto contract = analysis.getPackage()->getAttrOfType<IntegerAttr>("ac.routed_contract");
-    if (contract && contract.getInt() == 6) {
+    if (contract && contract.getInt() == 7) {
       if (!domainPlan) {
         auto plan = getHardwareDomainPlan(analysis.getPackage());
         if (failed(plan)) return failure();
@@ -4906,13 +4906,16 @@ private:
           return failure();
         continue;
       }
-      if (isa<AsyncFIFOUpdateOp, CDCRefinementOp>(consumer)) {
+      if (isCDCInstance(dyn_cast<InstanceOp>(consumer)) || isa<CDCRefinementOp>(consumer)) {
         Operation *resource = consumer;
         bool intentPin = false, dataPin = false;
-        if (auto update = dyn_cast<AsyncFIFOUpdateOp>(consumer)) {
-          resource = update.getHead().getDefiningOp();
-          intentPin = operand == 2 || operand == 3;
-          dataPin = operand == 1;
+        if (auto instance = dyn_cast<InstanceOp>(consumer)) {
+          auto layout = getCDCPrimitiveLayout(instance, owner.bindings);
+          if (failed(layout)) return failure();
+          if (layout->isFIFO()) {
+            intentPin = operand == 4 || operand == 5;
+            dataPin = operand == 3;
+          }
         } else {
           auto kind = consumer->getAttrOfType<StringAttr>("logical_kind");
           if (kind && kind.getValue() == "async_fifo") {

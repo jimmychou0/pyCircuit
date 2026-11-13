@@ -230,7 +230,8 @@ LogicalResult ModuleImportOp::verify() {
   if (primitive &&
       !llvm::is_contained(ArrayRef<StringRef>{"dff", "dffe", "sync_mem",
                                               "sync_mem_dp", "byte_mem",
-                                              "fifo_local", "fifo_downstream_pop"},
+                                              "fifo_local", "fifo_downstream_pop",
+                                              "async_reg", "async_fifo"},
                           primitive.getValue()))
     return emitOpError() << "unknown trusted primitive kind";
   // The transaction-summary structure and import schema checks run from the

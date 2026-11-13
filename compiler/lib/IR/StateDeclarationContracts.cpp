@@ -167,7 +167,7 @@ LogicalResult verifyRoutedLogicalStatePlacement(Operation *operation) {
   if (!owner || !package || !stage || stage.getValue() != "routed" ||
       package->hasAttr("ac.unit_kind") || !contract ||
       !contract.getType().isSignlessInteger(64) ||
-      (contract.getValue() != 4 && contract.getValue() != 5 && contract.getValue() != 6))
+      (contract.getValue() != 4 && contract.getValue() != 5 && contract.getValue() != 7))
     return operation->emitOpError()
            << "requires direct module graph placement in a versioned routed "
               "package";
@@ -298,7 +298,7 @@ mlir::FailureOr<RegisterPolicy> getRegisterPolicy(Operation *operation) {
     auto *state = operation;
     auto package = state->getParentOfType<mlir::ModuleOp>();
     auto contract = package ? package->getAttrOfType<IntegerAttr>("ac.routed_contract") : IntegerAttr();
-    explicitPolicy = contract && contract.getInt() == 6;
+    explicitPolicy = contract && contract.getInt() == 7;
   } else if (isa<ModuleChildOpInterface>(operation)) {
     auto callee = operation->getAttrOfType<FlatSymbolRefAttr>("callee");
     auto package = operation->getParentOfType<mlir::ModuleOp>();

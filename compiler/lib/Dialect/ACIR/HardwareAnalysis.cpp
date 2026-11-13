@@ -192,6 +192,8 @@ HardwareAnalysis::verifyInstance(InstanceOp instance,
           instance->getAttr("ac.reference_bindings"),
           [&](FlatSymbolRefAttr symbol) { return lookupDefinition(symbol.getValue()); }, instance)))
     return failure();
+  if (isCDCInstance(instance))
+    return verifyBoundHardwareCDCOperation(*this, instance, parent);
   if (isQueueInstance(instance))
     return verifyQueueOperation(instance, parent);
   if (instance->hasAttr("ac.source_memory")) {
@@ -228,10 +230,13 @@ HardwareAnalysis::verifyOccurrence(Operation *instance,
   if (failed(bindings))
     return failure();
   auto primitive = getPrimitiveKind(bindings->owner);
+  if (isCDCPrimitive(bindings->owner) && !isa<InstanceOp>(instance))
+    return instance->emitOpError()
+           << "logical CDC resources require an individual instance";
   if ((primitive == "dff" || primitive == "dffe") && failed(getRegisterPolicy(instance)))
     return failure();
   if (!primitive.empty() && primitive != "fifo_local" &&
-      primitive != "fifo_downstream_pop" &&
+      primitive != "fifo_downstream_pop" && primitive != "async_fifo" &&
       isa_and_nonnull<TableType>(bindings->types.lookup("T")))
     return instance->emitOpError()
            << "storage and memory primitives require a scalar payload binding";
@@ -599,7 +604,7 @@ LogicalResult HardwareAnalysis::verifySourceIndex(
 
 LogicalResult HardwareAnalysis::verifyResolvedOperation(
     Operation *op, const HardwareBindings &bindings) const {
-  if (isa<AsyncRegOp, AsyncFIFOOp, AsyncFIFOUpdateOp, CDCRefinementOp>(op) &&
+  if (isa<CDCRefinementOp>(op) &&
       failed(verifyBoundHardwareCDCOperation(*this, op, bindings)))
     return failure();
   if (isa<QueueOp>(op))

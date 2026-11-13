@@ -1051,7 +1051,7 @@ LogicalResult verifySourceExpectOperation(const HardwareAnalysis &analysis,
       !expect->getAttrOfType<StringAttr>("ac.message"))
     return error() << "source check message must be a static string";
   auto contract = analysis.getPackage()->getAttrOfType<IntegerAttr>("ac.routed_contract");
-  bool events = contract && contract.getInt() == 6;
+  bool events = contract && contract.getInt() == 7;
   if (events ? (expect.getKind() == "guard_known" ? expect.getSampling().empty() : !expect.getSampling().empty()) :
       expect.getSampling().size() != (expect.getKind() == "guard_known" ? 2u : 0u))
     return error() << "guard_known requires clock/reset sampling operands; "

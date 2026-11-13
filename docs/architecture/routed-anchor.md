@@ -18,7 +18,8 @@ general extern implementation bindings remain separate work.
 A routed top-level package has `ac.stage = "routed"` and
 `ac.routed_contract = 4 : i64`, or contract 5 when it has a verified
 [selected Module entry boundary](entry-boundary.md). Contract 5 requires that
-boundary; contract 4 forbids it. Versions 2 and 3, version 1 and unknown or
+boundary; contract 4 forbids it. Contract 7 adds the native-resource domain/reset/CDC profile below. Superseded
+experimental contract 7, versions 1–3 and unknown or
 malformed markers require rebuilding from source. The marker cannot appear in a
 source unit or on a nested operation.
 Hardware refinement preserves the marker while changing the stage to `final`.
@@ -144,15 +145,15 @@ Logical-state preparation/refinement retains its bounded work and allocation
 checks. Missing physical storage declarations can leave a valid logical anchor,
 but must reject requested hardware refinement without changing that anchor.
 
-## Contract 6: domains, reset policies and explicit CDC
+## Contract 7: domains, reset policies and explicit CDC
 
-The new `ac.routed_contract = 6 : i64` profile adds the domain/reset/CDC backend.
+The new `ac.routed_contract = 7 : i64` profile adds the domain/reset/CDC backend.
 It permits an ordinary root or a verified [selected Module entry boundary](entry-boundary.md).
 Its logical state is `gfir.state`, paired with `gfir.state.update(Q, candidate, intent)`;
 module hierarchy and shared operations remain in ACIR. This profile is independently
 constructible in IR and adds no Python capture or authoring syntax.
 
-Contract 6 keeps logical clock/reset SSA references and authenticates `domain`
+Contract 7 keeps logical clock/reset SSA references and authenticates `domain`
 against `ac.domain_params`, actual `ac.domain_bindings` and root
 `ac.domain_clock_inputs`. It requires explicit edge, reset kind and initialization
 kind; reset polarity exists only for resettable state. `operandSegmentSizes` is
@@ -165,10 +166,10 @@ Neither unknown nor raw-zero storage proves nominal membership or range validity
 
 Contracts 4/5 retain their three operands, fixed positive-edge synchronous
 active-high policy and `reset_value = initial`. Source compilation/routing
-continue producing these profiles. Contract 6 can be independently constructed,
+continue producing these profiles. Contract 7 can be independently constructed,
 saved, reloaded and refined without Python capture; it adds no frontend syntax.
 
-Refinement uses register-contract-3 DFF/DFFE instances for contract 6, with a
+Refinement uses register-contract-3 DFF/DFFE instances for contract 7, with a
 shared policy/layout decoder and separate typed reset-value pin. The logical
 anchor does not choose those circuits. Independent refinement verifies the
 complete payload/control relation. Ignored initialization/reset pins have no
@@ -185,17 +186,41 @@ reset set masks all normal effects and result availability; committed-state
 reads do not enlarge that set. Individual reset transitions and independently
 required reset-known checks remain separate.
 
-`ac.async_reg` and `ac.async_fifo` retain logical endpoint roles, clock identities,
-edge, whole reset and capacity without selecting circuits. FIFO updates pair
-head/payload with independently authenticated write/read transaction intents.
-Public expansion generates synchronizers, release state, pointers and a typed
-bank. Self-contained `ac.cdc.refinement` records permit standalone final
-revalidation of the complete circuit and its endpoint admission. A CDC label
-alone never permits an otherwise illegal crossing. The first FIFO implementation
-supports power-of-two depths of at least two; other positive capacities reject
-at refinement without changing the logical request or existing outputs.
+CDC resources use canonical `ac.module.import` declarations and ordinary
+`ac.instance` allocations. Their complete native primitive contracts authenticate
+symbol, kind, formals, pin types and temporal dependency summaries together:
 
-Contract-6 emission uses `ports.json` schema 2. Ordinary port rows include their
+| Canonical builtin | Formals | Inputs | Outputs |
+| --- | --- | --- | --- |
+| `pycircuit.__builtins__.async_reg` / `async_reg` | none | source_clock, target_clock, whole_reset, input: all Bits1 | output: Bits1 |
+| `pycircuit.__builtins__.async_fifo` / `async_fifo` | T and required Integer DEPTH | write_clock, read_clock, whole_reset, push_payload:T, push_intent, pop_intent | head:T, write_available:Bits1, read_available:Bits1 |
+
+FIFO DEPTH is an ordinary StaticExpr parameter actual, with no duplicate depth
+attribute or default. Instance policy attributes retain `resource_contract=1`,
+occurrence, endpoint domains/edges and whole-reset polarity. Actual clock SSA and
+instance bindings authenticate each endpoint. A nonzero FIFO intent must be its
+local sampled Rule final fire, admitted by that endpoint's availability and
+static transaction reset set; known-zero intent is dormant. Remote pop never
+grants immediate write capacity, and endpoint connections do not form a
+cross-domain atomic transaction.
+
+Public expansion removes all logical CDC imports/instances and generates
+synchronizers, release state, pointers and typed banks using common IR. The
+self-contained `ac.cdc.refinement` witness authenticates the exact original pins,
+policies and occurrence independently of physical component verification. Source
+correspondence also authenticates AsyncReg's physically unused source clock.
+A CDC label alone never permits an otherwise illegal crossing. The first FIFO
+recipe supports power-of-two depths of at least two; other positive capacities
+reject at refinement without changing the logical request or existing outputs.
+
+Concrete packed-zero carriers use existing Bits constants, `enum.from_bits`,
+recursive Struct construction and Table splats. Enum membership or a nominal
+default is not packed zero. `ac.value.zero` remains only for opaque type-parametric
+leaves in reusable definitions; one actual binding must not freeze another
+instance's payload type. Payload banks retain unspecified initialization and
+empty reads return known packed zero.
+
+Contract-7 emission uses `ports.json` schema 2. Ordinary port rows include their
 declared domain and actual root clock input; control roles come from verified
 connections. Domain metadata lists each actual transaction/storage endpoint,
 owner path and coordinates, clock ordinal, edge and reset policies. A forwarded
@@ -204,7 +229,7 @@ by a null direct ordinal and its actual root input dependencies, rather than
 guessing one reset pin. CDC stages retain their verified resource role. Legacy
 port-map schema 1 remains unchanged.
 
-Contract-6 physical simulation accepts sealed event batches with stable data
+Contract-7 physical simulation accepts sealed event batches with stable data
 and controls until delta drain. Startup root clocks must all be known zero,
 matching managed false history; an invalid startup discards the entire batch,
 including asynchronous reset candidates. Later positive and negative events

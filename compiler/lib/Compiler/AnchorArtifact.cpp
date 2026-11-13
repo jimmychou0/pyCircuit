@@ -512,7 +512,7 @@ FailureOr<json::Object> manifest(const Files &files, ac::detail::EmitError emitE
       object->getString("kind") != "pycircuit-anchor" ||
       !((object->getInteger("schema") == 3 && object->getInteger("routed_contract") == 4) ||
         (object->getInteger("schema") == 4 && object->getInteger("routed_contract") == 5) ||
-        (object->getInteger("schema") == 5 && object->getInteger("routed_contract") == 6)))
+        (object->getInteger("schema") == 6 && object->getInteger("routed_contract") == 7)))
     return emitError() << "unsupported anchor schema/contract; regenerate from source units";
   auto owner = object->getObject("owner");
   auto producer = object->getObject("producer");
@@ -620,7 +620,7 @@ FailureOr<json::Object> configuration(mlir::ModuleOp package, const json::Array 
       {"domain", system.getDomain()}, {"reset_semantics", *reset == ac::HardwareResetSemantics::Strict ? "strict" : "if_one"},
       {"graph_sha256", graphHash.str()}, {"definitions", std::move(variants)}};
   auto contract = package->getAttrOfType<IntegerAttr>("ac.routed_contract");
-  if (contract && contract.getInt() == 6) {
+  if (contract && contract.getInt() == 7) {
     auto domains = ac::serializeHardwareDomainBindings(package);
     if (failed(domains)) return failure();
     auto value = domainBindingJSON(*domains);
@@ -788,7 +788,7 @@ LogicalResult writeAnchorArtifacts(
     inventory.push_back(json::Object{{"path", path}, {"role", role}, {"sha256", anchorSha256(text)}});
   }
   auto contract = routed->getAttrOfType<IntegerAttr>("ac.routed_contract").getInt();
-  json::Object output{{"kind", "pycircuit-anchor"}, {"schema", contract == 6 ? 5 : boundary ? 4 : 3}, {"routed_contract", contract},
+  json::Object output{{"kind", "pycircuit-anchor"}, {"schema", contract == 7 ? 6 : boundary ? 4 : 3}, {"routed_contract", contract},
     {"owner", json::Object{{"kind", "anchor"}, {"source", json::Object(*rootSource)}, {"definition", root}}},
     {"root", root}, {"configuration", json::Object(*config)}, {"configuration_identity", identity(*config)},
     {"files", std::move(inventory)}, {"definitions", std::move(definitions)}, {"sources", std::move(provenance)},
@@ -810,7 +810,7 @@ FailureOr<LoadedAnchor> loadVerifiedAnchor(StringRef directory, MLIRContext &con
   auto &document = *parsed;
   auto config = document.getObject("configuration");
   bool boundary = config && config->getObject("implementation_root");
-  bool domains = document.getInteger("schema") == 5;
+  bool domains = document.getInteger("schema") == 6;
   if (!config || (domains && !config->getArray("domain_bindings")) ||
       (!domains && config->get("domain_bindings")))
     return emitError() << "anchor domain configuration schema mismatch";

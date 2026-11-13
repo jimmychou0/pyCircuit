@@ -18,7 +18,7 @@ mlir::LogicalResult verifyLogicalStateStructure(mlir::Operation *operation) {
            << "is not a routed logical state operation";
   auto package = operation->getParentOfType<mlir::ModuleOp>();
   auto contract = package ? package->getAttrOfType<mlir::IntegerAttr>("ac.routed_contract") : mlir::IntegerAttr();
-  bool current = contract && contract.getInt() == 6;
+  bool current = contract && contract.getInt() == 7;
   unsigned expected = 3;
   mlir::Value operands[3];
   if (current) {
@@ -32,7 +32,7 @@ mlir::LogicalResult verifyLogicalStateStructure(mlir::Operation *operation) {
         (hasReset ? !polarity || (polarity.getValue() != "high" && polarity.getValue() != "low") : bool(operation->getAttr("reset_polarity"))) ||
         !init || (init.getValue() != "explicit" && init.getValue() != "unspecified") || !domain || domain.getValue().empty() ||
         !sizes || sizes.size() != 4 || sizes[0] != 1 || sizes[1] != int(hasReset) || sizes[2] != int(hasInitial) || sizes[3] != int(hasReset))
-      return operation->emitOpError() << "contract 6 state requires explicit policy, domain and exact operand segments";
+      return operation->emitOpError() << "contract 7 state requires explicit policy, domain and exact operand segments";
     expected = 1 + 2 * unsigned(hasReset) + unsigned(hasInitial);
     if (operation->getNumOperands() != expected) return operation->emitOpError() << "state operand segments disagree with operands";
     unsigned cursor = 0;

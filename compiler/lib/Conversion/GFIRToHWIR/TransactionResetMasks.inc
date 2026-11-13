@@ -251,7 +251,7 @@ FailureOr<OwningOpRef<mlir::ModuleOp>> materializeTransactionResetMasksImpl(
   if (paid.wasInterrupted()) return failure();
   OwningOpRef<mlir::ModuleOp> candidate = cast<mlir::ModuleOp>(routed->clone());
   auto contract = routed->getAttrOfType<IntegerAttr>("ac.routed_contract");
-  if (contract && contract.getInt() == 6)
+  if (contract && contract.getInt() == 7)
     candidate->walk([&](ac::RuleOp rule) { addResetMask(rule); });
   return std::move(candidate);
 }

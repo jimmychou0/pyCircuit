@@ -233,19 +233,13 @@ class Resolver {
         if (failed(d))
           return failure();
         result.insert(*d);
-      } else if (isa<AsyncRegOp>(op)) {
-        auto d = domain(op, "target_domain", scope);
-        if (failed(d))
-          return failure();
-        result.insert(*d);
-      } else if (isa<AsyncFIFOOp>(op)) {
-        auto d =
-            domain(op,
-                   cast<OpResult>(value).getResultNumber() == 1 ? "write_domain"
-                                                                : "read_domain",
-                   scope);
-        if (failed(d))
-          return failure();
+      } else if (auto instance = dyn_cast<InstanceOp>(op); isCDCInstance(instance)) {
+        auto layout = getCDCPrimitiveLayout(instance, scope.bindings);
+        if (failed(layout)) return failure();
+        auto d = domain(op, layout->isFIFO()
+              ? (value == layout->writeAvailable() ? "write_domain" : "read_domain")
+              : "target_domain", scope);
+        if (failed(d)) return failure();
         result.insert(*d);
       } else if (isa<InstanceOp, CollectionOp>(op) &&
                  scope.children.count(op)) {
@@ -345,7 +339,7 @@ class Resolver {
         if (state.getStateReset())
           scope.controls.insert(state.getStateReset());
       }
-      if (isa<AsyncRegOp, AsyncFIFOOp, CDCRefinementOp>(op))
+      if (isCDCInstance(dyn_cast<InstanceOp>(op)) || isa<CDCRefinementOp>(op))
         scope.controls.insert(op.getOperand(2));
     }
     for (auto arg : module.getBody().front().getArguments())
@@ -375,7 +369,19 @@ class Resolver {
         callee = analysis.resolveCallee(instance);
       if (auto collection = dyn_cast<CollectionOp>(op))
         callee = analysis.resolveCallee(collection);
-      if (callee) {
+      if (isCDCInstance(dyn_cast<InstanceOp>(op))) {
+        auto layout = getCDCPrimitiveLayout(cast<InstanceOp>(op), scope.bindings);
+        if (failed(layout)) return failure();
+        auto first = domain(&op, layout->isFIFO() ? "write_domain" : "target_domain", scope);
+        auto second = domain(&op, layout->isFIFO() ? "read_domain" : "target_domain", scope);
+        if (failed(first) || failed(second)) return failure();
+        scope.values[layout->output()] = {*second};
+        if (layout->isFIFO()) {
+          scope.values[layout->writeAvailable()] = {*first};
+          scope.values[layout->readAvailable()] = {*second};
+        }
+        scope.controls.insert(layout->reset());
+      } else if (callee) {
         auto kind = analysis.getPrimitiveKind(callee);
         if (!kind.empty()) {
           auto actual = clock(op.getOperand(0), scope);
@@ -507,7 +513,7 @@ class Resolver {
         callee = analysis.resolveCallee(instance);
       if (auto collection = dyn_cast<CollectionOp>(op))
         callee = analysis.resolveCallee(collection);
-      if (callee && !op.hasAttr("ac.cdc_component")) {
+      if (callee && !isCDCInstance(dyn_cast<InstanceOp>(op)) && !op.hasAttr("ac.cdc_component")) {
         auto kind = analysis.getPrimitiveKind(callee);
         if (!kind.empty() && kind!="dff" && kind!="dffe") {
           auto actual=clock(op.getOperand(0),scope);
@@ -541,11 +547,16 @@ class Resolver {
                     check(update.getStateWriteIntent(), *expected, scope, update, true)))
               return failure();
       }
-      if (isa<AsyncRegOp, AsyncFIFOOp, CDCRefinementOp>(op)) {
-        bool reg = isa<AsyncRegOp>(op) ||
-                   (isa<CDCRefinementOp>(op) &&
-                    op.getAttrOfType<StringAttr>("logical_kind").getValue() ==
-                        "async_reg");
+      if (isCDCInstance(dyn_cast<InstanceOp>(op)) || isa<CDCRefinementOp>(op)) {
+        auto instance = dyn_cast<InstanceOp>(op);
+        std::optional<CDCPrimitiveLayout> layout;
+        if (isCDCInstance(instance)) {
+          auto checked = getCDCPrimitiveLayout(instance, scope.bindings);
+          if (failed(checked)) return failure();
+          layout = *checked;
+        }
+        bool reg = layout ? !layout->isFIFO()
+                          : op.getAttrOfType<StringAttr>("logical_kind").getValue() == "async_reg";
         auto a = domain(&op, reg ? "source_domain" : "write_domain", scope),
              b = domain(&op, reg ? "target_domain" : "read_domain", scope);
         auto ac = clock(op.getOperand(0), scope),
@@ -561,15 +572,11 @@ class Resolver {
               failed(check(op.getOperand(4), *a, scope, &op, true)) ||
               failed(check(op.getOperand(5), *b, scope, &op, true)))
             return failure();
-        } else if (auto fifo = dyn_cast<AsyncFIFOOp>(op))
-          for (auto *user : fifo.getHead().getUsers())
-            if (auto update = dyn_cast<AsyncFIFOUpdateOp>(user);
-                update && update.getHead() == fifo.getHead())
-              if (failed(check(update.getPushPayload(), *a, scope, update)) ||
-                  failed(
-                      check(update.getPushIntent(), *a, scope, update, true)) ||
-                  failed(check(update.getPopIntent(), *b, scope, update, true)))
-                return failure();
+        } else if (layout) {
+          if (failed(check(layout->input(), *a, scope, &op)) ||
+              failed(check(layout->pushIntent(), *a, scope, &op, true)) ||
+              failed(check(layout->popIntent(), *b, scope, &op, true))) return failure();
+        }
       }
     }
     if (defaultDomain) {
@@ -589,7 +596,7 @@ public:
   FailureOr<HardwareDomainPlan> run() {
     auto contract =
         analysis.getPackage()->getAttrOfType<IntegerAttr>("ac.routed_contract");
-    if (!contract || contract.getInt() != 6)
+    if (!contract || contract.getInt() != 7)
       return std::move(plan);
     auto bindings = detail::resolveHardwareRootBindings(analysis);
     if (failed(bindings))
@@ -600,7 +607,7 @@ public:
     auto clocks =
         plan.root->getAttrOfType<DictionaryAttr>("ac.domain_clock_inputs");
     if (!clocks)
-      return reject(plan.root, "contract 6 root requires domain clock inputs");
+      return reject(plan.root, "contract 7 root requires domain clock inputs");
     DenseMap<Value, unsigned> values;
     auto ports = getModulePortLayout(plan.root);
     if (failed(ports))

@@ -140,6 +140,15 @@ def ACIR_BitsConstantOp : ACIR_Op<"bits.constant", [Pure]> {
 }
 
 def ACIR_ValueZeroOp : ACIR_Op<"value.zero", [Pure]> {
+  let summary = "Carry known packed zero through a shared generic definition";
+  let description = [{
+    The result has all storage bits known zero, without enum membership or
+    nominal constructor semantics. It does not initialize storage or request
+    reset. CDC graph construction uses this carrier only at opaque type
+    parameter leaves, preserving one shared definition for distinct actual
+    payload types. Concrete Bits, Enum, Struct and Table zeros compose existing
+    constant, enum.from_bits, struct.create and table.splat operations.
+  }];
   let results = (outs ACIR_HardwareType:$result);
   let hasVerifier = 1;
 }
@@ -394,36 +403,18 @@ def ACIR_SourceStateOp : ACIR_Op<"state", [
 
 def ACIR_CDCRefinementOp : ACIR_Op<"cdc.refinement", [
     DeclareOpInterfaceMethods<MemoryEffectsOpInterface>]> {
+  let summary = "Bind a native CDC allocation to its ordinary physical graph";
+  let description = [{
+    A contract-7 component witness retains the logical resource identity,
+    endpoint policies, external pins and selected recipe. ac.cdc_source records
+    exact source instance and declaration attribute assembly as inert strings;
+    it never keeps live references to the removed native resource import.
+    Standalone verification reconstructs the physical equations and ownership;
+    logical-to-final correspondence separately authenticates source provenance.
+    This operation neither allocates a resource nor authorizes a crossing.
+  }];
   let arguments = (ins Variadic<ACIR_HardwareType>:$values,
       StrAttr:$logical_kind, I64Attr:$implementation);
-  let hasVerifier = 1;
-}
-
-def ACIR_AsyncRegOp : ACIR_Op<"async_reg", [
-    DeclareOpInterfaceMethods<MemoryEffectsOpInterface>]> {
-  let arguments = (ins ACIR_BitsType:$source_clock, ACIR_BitsType:$target_clock,
-      ACIR_BitsType:$whole_reset, ACIR_BitsType:$input,
-      StrAttr:$instance_name, DictionaryAttr:$occurrence,
-      StrAttr:$source_domain, StrAttr:$target_domain, StrAttr:$target_edge,
-      StrAttr:$reset_polarity, I64Attr:$resource_contract);
-  let results = (outs ACIR_BitsType:$output);
-  let hasVerifier = 1;
-}
-def ACIR_AsyncFIFOOp : ACIR_Op<"async_fifo", [
-    DeclareOpInterfaceMethods<MemoryEffectsOpInterface>]> {
-  let arguments = (ins ACIR_BitsType:$write_clock, ACIR_BitsType:$read_clock,
-      ACIR_BitsType:$whole_reset, StrAttr:$instance_name,
-      DictionaryAttr:$occurrence, StrAttr:$write_domain, StrAttr:$read_domain,
-      StrAttr:$write_edge, StrAttr:$read_edge, StrAttr:$reset_polarity,
-      I64Attr:$depth, I64Attr:$resource_contract);
-  let results = (outs ACIR_HardwareType:$head, ACIR_BitsType:$write_available,
-      ACIR_BitsType:$read_available);
-  let hasVerifier = 1;
-}
-def ACIR_AsyncFIFOUpdateOp : ACIR_Op<"async_fifo.update", [
-    DeclareOpInterfaceMethods<MemoryEffectsOpInterface>]> {
-  let arguments = (ins ACIR_HardwareType:$head, ACIR_HardwareType:$push_payload,
-      ACIR_BitsType:$push_intent, ACIR_BitsType:$pop_intent);
   let hasVerifier = 1;
 }
 

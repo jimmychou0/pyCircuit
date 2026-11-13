@@ -1,5 +1,6 @@
 #include "ACIRSourceContracts.h"
 #include "pycircuit/Dialect/ACIR/HardwareAnalysis.h"
+#include "pycircuit/Dialect/ACIR/HardwareCDC.h"
 using namespace mlir;
 namespace acir::ac {
 mlir::FailureOr<Value> getVerifiedTransactionResetMask(RuleOp rule) {
@@ -57,6 +58,8 @@ LogicalResult primitiveSchema(const HardwareAnalysis &analysis,
     return op.emitOpError("register contract requires a DFF/DFFE import");
   if (kind.empty())
     return success();
+  if (isCDCPrimitive(op))
+    return verifyCDCPrimitiveDeclaration(analysis, op);
   unsigned registerVersion = 1;
   if (reg) {
     auto version = getRegisterContract(op);

@@ -15,7 +15,7 @@
 final 验证、C++ Runtime 和 Verilog 导出。Python 语法、静态容器解析、
 默认域选择及源级 Method 路由由锚点生产侧完成。
 
-交付范围覆盖本文件全部后端要求。完整候选使用 routed contract 6、保存 schema 5；
+交付范围覆盖本文件全部后端要求。完整候选使用 routed contract 7、保存 schema 6；
 GFIR 承载逻辑状态，主干 contract 4/5 保持既有语义；
 逻辑 clock/reset SSA 与域属性共同描述逻辑事件，不承诺物理端口或同步器拓扑。
 Python 作者接口及其默认参数捕获仍由 #400 的生产侧负责；后端直接使用手写 IR 验证。
@@ -647,7 +647,7 @@ PREPARE、COMMIT、Xfer 和 NBA 是目标执行机制，不写回逻辑锚点。
 
 ### 7. Physical 导出单独验收
 
-**实现扩展**：contract 6 使用内部事件批次协调；旧版本保持既有单域路径。
+**实现扩展**：contract 7 使用内部事件批次协调；旧版本保持既有单域路径。
 公开接口仍为普通 clock/reset/data，不要求作者驱动 PREPARE／COMMIT。
 
 支持的激励合同为：数据及功能控制先稳定，同一批 clock/reset 变化在同一调度区提交；
@@ -710,9 +710,9 @@ Physical 功能与综合展开分别收集证据。
 
 ## 实施定案与精确 IR 接口
 
-完整候选采用 routed contract 6／schema 5，保留主干 4／3、5／4 的读取语义；旧的 2／1、3／2 继续拒绝。
+完整候选采用 routed contract 7／schema 6，保留主干 4／3、5／4 的读取语义；已替换的实验 6／5 与旧的 2／1、3／2 均拒绝，不提供迁移回退。
 实例域绑定在锚点中必须完整；默认继承由锚点生产侧规范化，不在 reload 时重新选择。
-schema 5 的配置增加实际实例路径、formal、根 clock input 的规范绑定列表，加载时独立重推。
+schema 6 的配置增加实际实例路径、formal、根 clock input 的规范绑定列表，加载时独立重推。
 
 下面是实际 generic IR 的操作片段；`%clk`、`%rst_n` 和常量须由所属 Module 定义：
 
@@ -732,29 +732,48 @@ schema 5 的配置增加实际实例路径、formal、根 clock input 的规范�
 属性中的逻辑域必须和 clock SSA 解析出的实际实例来源一致。
 
 ```mlir
-%level = "ac.async_reg"(%src_clk, %dst_clk, %reset, %input) {
+%level = "ac.instance"(%src_clk, %dst_clk, %reset, %input) {
   instance_name = "status", occurrence = #status_occ,
+  callee = @"pycircuit.__builtins__.async_reg", parameters = [], type_arguments = [],
   source_domain = "W", target_domain = "R", target_edge = "posedge",
   reset_polarity = "high", resource_contract = 1 : i64
 } : (!b1, !b1, !b1, !b1) -> !b1
 
 %head, %push_available, %pop_available =
-  "ac.async_fifo"(%src_clk, %dst_clk, %reset) {
+  "ac.instance"(%src_clk, %dst_clk, %reset, %payload, %push_fire, %pop_fire) {
     instance_name = "requests", occurrence = #queue_occ,
+    callee = @"pycircuit.__builtins__.async_fifo", parameters = [#depth4],
+    type_arguments = [!payload],
     write_domain = "W", read_domain = "R",
     write_edge = "posedge", read_edge = "negedge",
-    reset_polarity = "high", depth = 4 : i64, resource_contract = 1 : i64
-  } : (!b1, !b1, !b1) -> (!payload, !b1, !b1)
-"ac.async_fifo.update"(%head, %payload, %push_fire, %pop_fire)
-  : (!payload, !payload, !b1, !b1) -> ()
+    reset_polarity = "high", resource_contract = 1 : i64
+  } : (!b1, !b1, !b1, !payload, !b1, !b1) -> (!payload, !b1, !b1)
 ```
 
-push／pop 分别绑定经认证的本地域事务和 admission；以上配对不建立跨域原子事务。
+上述片段依赖完整 canonical `ac.module.import` 声明，不能只凭 primitive 标签放行：
+`pycircuit.__builtins__.async_reg` 的 kind 为 `async_reg`，无类型或整数 formal，
+四个输入和一个输出均为 Bits1，顺序如上。
+`pycircuit.__builtins__.async_fifo` 的 kind 为 `async_fifo`，一个 T 和必填且无默认值的 DEPTH；
+六输入依次为 write_clock、read_clock、whole_reset、push_payload:T、push_intent、pop_intent，
+三输出为 head:T、write_available:Bits1、read_available:Bits1。
+`#depth4` 是值为 4 的普通 StaticExpr actual，不另存 depth 属性。
+导入声明还须认证完整 temporal dependency summary，实例保留 resource_contract=1、occurrence、
+域、边沿和 whole-reset 极性。所有 clock／payload／intent 都是所属 Module 的实际 SSA。
+
+push／pop 分别绑定经认证的本地域 sampled Rule final fire 和本地 availability；
+静态传递 effect reset 集掩蔽正常提交，已知零 intent 表示休眠。
+不能把远端 pop 作为即时写容量，也不建立跨域原子事务。
 AsyncReg 公共实现包含两级数据同步和独立的目标域两级释放，释放前数据级保持零，
 不等待源时钟。FIFO 使用两侧本地释放与对端释放同步，不共享跨域 occupancy。
 首个 FIFO 实现接受 2 的幂且至少 2 的容量；其他正容量保持逻辑合法并在物理化时拒绝。
 final 保留自足的 `ac.cdc.refinement` 见证；重新加载 final 也必须重建并核对完整电路及端点，
-不能凭 CDC 标签跳过域检查。通用 `ac.value.zero` 仅表示存储位全零，不证明 nominal 值合法。
+不能凭 CDC 标签跳过域检查。独立 correspondence 核对原生实例的全部输入／结果和被移除的
+逻辑 import，包括 AsyncReg 物理电路不用的 source_clock。
+具体 payload 的 packed zero 用已有 Bits constant、`enum.from_bits`、递归 `struct.create` 和
+`table.splat` 表达，不采用 nominal 默认值或第一个 Enum member。
+`ac.value.zero` 仅保留给可复用定义中未解析的 opaque TypeParam 叶子；
+不能用首个 actual 固化共享 body，Bits 与 Struct actual 必须保留各自类型和实例状态。
+零位不证明 nominal 值合法；payload bank 保持 unspecified 初始化，empty head 为已知 packed zero。
 
 ## 候选与证据
 

@@ -1,5 +1,7 @@
 #include "pycircuit/Dialect/ACIR/HardwareCDC.h"
 #include "HardwareCDCLocalVerification.h"
+#include "ACIRSourceContracts.h"
+#include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
 using namespace mlir;
@@ -43,28 +45,170 @@ LogicalResult verifyCDCRefinementIntents(
                           bindings);
 }
 
+bool isCDCPrimitive(Operation *declaration) {
+  auto imported = dyn_cast_or_null<ModuleImportOp>(declaration);
+  auto kind = imported ? imported.getPrimitiveKindAttr() : StringAttr();
+  return kind && (kind.getValue() == "async_reg" || kind.getValue() == "async_fifo");
+}
+bool isCDCInstance(InstanceOp instance) {
+  return instance && (instance.getCallee() == "pycircuit.__builtins__.async_reg" ||
+                      instance.getCallee() == "pycircuit.__builtins__.async_fifo");
+}
+LogicalResult verifyCDCPrimitiveDeclaration(const HardwareAnalysis &analysis,
+                                            ModuleImportOp declaration) {
+  auto reject = [&]() -> LogicalResult { return declaration.emitOpError("invalid canonical CDC primitive declaration"); };
+  if (!isCDCPrimitive(declaration) || declaration.getSemanticKind() != "hardware") return reject();
+  StringRef kind = declaration.getPrimitiveKindAttr().getValue();
+  bool fifo = kind == "async_fifo";
+  if (declaration.getSymName() != (Twine("pycircuit.__builtins__.") + kind).str()) return reject();
+  auto signature = declaration.getFunctionType();
+  auto typeParameters = declaration.getTypeParameters();
+  auto parameters = declaration.getParameters();
+  if (signature.getNumInputs() != (fifo ? 6u : 4u) ||
+      signature.getNumResults() != (fifo ? 3u : 1u) ||
+      typeParameters.size() != (fifo ? 1u : 0u) || parameters.size() != (fifo ? 1u : 0u)) return reject();
+  if (fifo) {
+    auto typeName = dyn_cast<StringAttr>(typeParameters[0]);
+    auto parameter = dyn_cast<DictionaryAttr>(parameters[0]);
+    auto name = parameter ? parameter.getAs<StringAttr>("name") : StringAttr();
+    auto type = parameter ? parameter.getAs<TypeAttr>("type") : TypeAttr();
+    if (!typeName || typeName.getValue() != "T" || !name ||
+        name.getValue() != "DEPTH" || !type ||
+        !isa<MathIntType>(type.getValue()) || parameter.size() != 2)
+      return reject();
+  }
+  SmallVector<StringRef> inputNames = fifo
+      ? SmallVector<StringRef>{"write_clock", "read_clock", "whole_reset", "push_payload", "push_intent", "pop_intent"}
+      : SmallVector<StringRef>{"source_clock", "target_clock", "whole_reset", "input"};
+  SmallVector<StringRef> outputNames = fifo
+      ? SmallVector<StringRef>{"head", "write_available", "read_available"}
+      : SmallVector<StringRef>{"output"};
+  if (declaration.getInputNames().size() != inputNames.size() ||
+      declaration.getOutputNames().size() != outputNames.size()) return reject();
+  for (auto [raw, name] : llvm::zip(declaration.getInputNames(), inputNames))
+    if (dyn_cast<StringAttr>(raw) != StringAttr::get(declaration.getContext(), name)) return reject();
+  for (auto [raw, name] : llvm::zip(declaration.getOutputNames(), outputNames))
+    if (dyn_cast<StringAttr>(raw) != StringAttr::get(declaration.getContext(), name)) return reject();
+  auto bit = [&](Type type) -> LogicalResult {
+    auto bits = dyn_cast<BitsType>(type);
+    if (!bits) return reject();
+    auto width = analysis.evaluateStatic(bits.getWidth(), {}, declaration);
+    auto number = succeeded(width) ? dyn_cast<MathIntAttr>(*width) : MathIntAttr();
+    return number && number.getCanonicalValue() == "1" ? success() : reject();
+  };
+  auto payload = TypeParamType::get(declaration.getContext(),
+      FlatSymbolRefAttr::get(declaration.getContext(), declaration.getSymName()),
+      StringAttr::get(declaration.getContext(), "T"));
+  for (auto [index, type] : llvm::enumerate(signature.getInputs())) {
+    if (fifo && index == 3) { if (type != payload) return reject(); }
+    else if (failed(bit(type))) return failure();
+  }
+  for (auto [index, type] : llvm::enumerate(signature.getResults())) {
+    if (fifo && index == 0) { if (type != payload) return reject(); }
+    else if (failed(bit(type))) return failure();
+  }
+  auto dependencies = analysis.getImportDependencies(declaration, {});
+  if (failed(dependencies)) return failure();
+  for (const auto &dependency : *dependencies)
+    if (!dependency.inputs.empty()) return reject();
+  return success();
+}
+FailureOr<CDCPrimitiveLayout> getCDCPrimitiveLayout(
+    InstanceOp instance, const HardwareBindings &parent) {
+  if (!isCDCInstance(instance)) return instance.emitOpError("requires a canonical CDC instance");
+  auto owner = dyn_cast_or_null<ModuleOp>(instance->getParentOp());
+  auto package = instance->getParentOfType<mlir::ModuleOp>();
+  auto stage = package ? package->getAttrOfType<StringAttr>("ac.stage") : StringAttr();
+  auto contract = package ? package->getAttrOfType<IntegerAttr>("ac.routed_contract") : IntegerAttr();
+  if (!owner || !stage || stage.getValue() != "routed" || !contract || contract.getInt() != 7)
+    return instance.emitOpError("logical CDC requires a contract-7 routed module graph");
+  HardwareAnalysis analysis(package);
+  auto bindings = analysis.bindInstance(instance, parent);
+  if (failed(bindings)) return failure();
+  auto primitive = dyn_cast_or_null<ModuleImportOp>(bindings->owner);
+  if (!primitive || failed(verifyCDCPrimitiveDeclaration(analysis, primitive))) return failure();
+  CDCPrimitiveLayout result;
+  result.allocation = instance;
+  result.primitive = primitive;
+  result.bindings = *bindings;
+  result.kind = primitive.getPrimitiveKindAttr().getValue();
+  bool fifo = result.isFIFO();
+  if (instance.getNumOperands() != (fifo ? 6u : 4u) || instance.getNumResults() != (fifo ? 3u : 1u))
+    return instance.emitOpError("CDC instance differs from its canonical signature");
+  result.payloadType = instance.getOperand(3).getType();
+  auto signature = primitive.getFunctionType();
+  auto checkType = [&](Type actual, Type expected) -> LogicalResult {
+    auto a = analysis.resolveType(actual, parent, instance);
+    auto e = analysis.resolveType(expected, *bindings, instance);
+    if (failed(a) || failed(e)) return failure();
+    if (!areEquivalentHardwareTypes(*a, *e))
+      return instance.emitOpError("CDC pin type differs from canonical signature");
+    return success();
+  };
+  for (auto [actual, expected] : llvm::zip(instance.getOperandTypes(), signature.getInputs()))
+    if (failed(checkType(actual, expected))) return failure();
+  for (auto [actual, expected] : llvm::zip(instance.getResultTypes(), signature.getResults()))
+    if (failed(checkType(actual, expected))) return failure();
+  auto version = instance->getAttrOfType<IntegerAttr>("resource_contract");
+  if (!version || !version.getType().isSignlessInteger(64) || version.getInt() != 1 || instance->hasAttr("depth"))
+    return instance.emitOpError("requires resource_contract = 1 and canonical parameter authority");
+  if (instance.getInstanceName().empty())
+    return instance.emitOpError("CDC resource requires a nonempty instance name");
+  auto domains = owner->getAttrOfType<ArrayAttr>("ac.domain_params");
+  for (StringRef name : fifo ? ArrayRef<StringRef>{"write_domain", "read_domain"}
+                            : ArrayRef<StringRef>{"source_domain", "target_domain"}) {
+    auto value = instance->getAttrOfType<StringAttr>(name);
+    if (!value || !domains || !llvm::is_contained(domains, value))
+      return instance.emitOpError("CDC endpoint must name a declared logical domain");
+  }
+  for (StringRef name : fifo ? ArrayRef<StringRef>{"write_edge", "read_edge"}
+                            : ArrayRef<StringRef>{"target_edge"}) {
+    auto value = instance->getAttrOfType<StringAttr>(name);
+    if (!value || (value.getValue() != "posedge" && value.getValue() != "negedge"))
+      return instance.emitOpError("CDC endpoint requires an explicit edge");
+  }
+  auto polarity = instance->getAttrOfType<StringAttr>("reset_polarity");
+  if (!polarity || (polarity.getValue() != "high" && polarity.getValue() != "low"))
+    return instance.emitOpError("CDC resource requires whole-reset polarity");
+  if (failed(detail::verifyOccurrence(instance.getOccurrence(), [&] { return instance.emitOpError(); }))) return failure();
+  for (auto &other : owner.getBody().front())
+    if (&other != instance.getOperation() && (other.getAttr("instance_name") == instance.getInstanceNameAttr() ||
+                              other.getAttr("occurrence") == instance.getOccurrence()))
+      return instance.emitOpError("CDC resource identity must be unique within its owner");
+  if (fifo) {
+    Attribute depth = bindings->integers.lookup("DEPTH");
+    if (auto expression = dyn_cast_or_null<StaticExprAttr>(depth)) {
+      if (!analysis.isStaticEvaluable(expression, *bindings)) return result;
+      auto value = analysis.evaluateStatic(expression, *bindings, instance);
+      if (failed(value)) return failure();
+      depth = *value;
+    }
+    auto number = dyn_cast_or_null<MathIntAttr>(depth);
+    if (!number) return instance.emitOpError("CDC FIFO requires an integer DEPTH");
+    llvm::APSInt value(number.getCanonicalValue());
+    if (value.isNegative() || value.isZero() || value.getActiveBits() > 64)
+      return instance.emitOpError("CDC FIFO DEPTH must be positive and fit u64");
+    result.depth = value.getZExtValue();
+  }
+  return result;
+}
 bool hasLogicalCDC(Operation *root) {
   bool found = false;
-  root->walk([&](Operation *op) {
-    found |= isa<AsyncRegOp, AsyncFIFOOp, AsyncFIFOUpdateOp>(op);
-  });
+  root->walk([&](InstanceOp instance) { found |= isCDCInstance(instance); });
   return found;
 }
 LogicalResult verifyBoundHardwareCDCOperation(
     const HardwareAnalysis &analysis, Operation *op,
     const HardwareBindings &bindings) {
   SmallVector<Value> controls;
-  if (auto reg = dyn_cast<AsyncRegOp>(op)) {
-    controls.append(op->getOperands().begin(), op->getOperands().begin() + 4);
-    controls.push_back(reg.getOutput());
-  } else if (auto fifo = dyn_cast<AsyncFIFOOp>(op)) {
-    controls.append(op->getOperands().begin(), op->getOperands().begin() + 3);
-    controls.append({fifo.getWriteAvailable(), fifo.getReadAvailable()});
-  } else if (auto update = dyn_cast<AsyncFIFOUpdateOp>(op)) {
-    controls.append({update.getPushIntent(), update.getPopIntent()});
-    if (failed(verifyFIFOIntents(analysis, update.getHead().getDefiningOp(),
-                                 {update.getPushIntent(), update.getPopIntent()}, bindings)))
-      return failure();
+  if (auto instance = dyn_cast<InstanceOp>(op); isCDCInstance(instance)) {
+    auto layout = getCDCPrimitiveLayout(instance, bindings);
+    if (failed(layout)) return failure();
+    controls.append({layout->sourceClock(), layout->targetClock(), layout->reset()});
+    if (layout->isFIFO()) {
+      controls.append({layout->pushIntent(), layout->popIntent(), layout->writeAvailable(), layout->readAvailable()});
+      if (failed(verifyFIFOIntents(analysis, op, {layout->pushIntent(), layout->popIntent()}, bindings))) return failure();
+    } else controls.append({layout->input(), layout->output()});
   } else if (auto witness = dyn_cast<CDCRefinementOp>(op)) {
     if (failed(verifyCDCRefinementContract(op))) return failure();
     bool reg = witness.getLogicalKind() == "async_reg";
@@ -113,22 +257,21 @@ getAsyncFIFOEndpointEffects(RuleOp rule) {
       row ? row.getAs<IntegerAttr>("clock_capture") : IntegerAttr();
   for (auto result : rule.getResults())
     for (auto &use : result.getUses()) {
-      auto update = dyn_cast<AsyncFIFOUpdateOp>(use.getOwner());
+      auto instance = dyn_cast<InstanceOp>(use.getOwner());
       auto witness = dyn_cast<CDCRefinementOp>(use.getOwner());
-      bool logical = update && (use.getOperandNumber() == 2 ||
-                                use.getOperandNumber() == 3);
-      bool physical =
-          witness && witness.getLogicalKind() == "async_fifo" &&
-          (use.getOperandNumber() == 4 || use.getOperandNumber() == 5);
-      if (!logical && !physical)
-        continue;
-      bool write = use.getOperandNumber() == (logical ? 2u : 4u);
-      Operation *resource =
-          logical ? update.getHead().getDefiningOp() : witness.getOperation();
-      if (!resource || !isa<AsyncFIFOOp, CDCRefinementOp>(resource) ||
-          resource->getNumOperands() < (logical ? 3u : 9u))
-        return rule.emitOpError("invalid CDC resource declaration");
-      auto fifo = dyn_cast<AsyncFIFOOp>(resource);
+      bool logical = isCDCInstance(instance) && (use.getOperandNumber() == 4 || use.getOperandNumber() == 5);
+      bool physical = witness && witness.getLogicalKind() == "async_fifo" &&
+                      (use.getOperandNumber() == 4 || use.getOperandNumber() == 5);
+      if (!logical && !physical) continue;
+      bool write = use.getOperandNumber() == 4;
+      Operation *resource = use.getOwner();
+      std::optional<CDCPrimitiveLayout> layout;
+      if (logical) {
+        auto checked = getCDCPrimitiveLayout(instance);
+        if (failed(checked)) return failure();
+        if (!checked->isFIFO()) return rule.emitOpError("invalid CDC endpoint resource");
+        layout = *checked;
+      } else if (failed(verifyCDCRefinementContract(witness))) return failure();
       if (!fire || fire.getInt() < 0 ||
           uint64_t(fire.getInt()) >= rule.getNumResults() ||
           result != rule.getResult(fire.getInt()) || !clockCapture ||
@@ -136,12 +279,15 @@ getAsyncFIFOEndpointEffects(RuleOp rule) {
           uint64_t(clockCapture.getInt()) >= rule.getCaptures().size())
         return rule.emitOpError("CDC transfer intent must be its endpoint "
                                 "transaction's authenticated final fire");
-      auto expectedClock = resource->getOperand(write ? 0 : 1);
+      auto expectedClock = layout
+          ? (write ? layout->sourceClock() : layout->targetClock())
+          : resource->getOperand(write ? 0 : 1);
+      auto wholeReset = layout ? layout->reset() : resource->getOperand(2);
       auto edge = resource->getAttrOfType<StringAttr>(write ? "write_edge"
                                                             : "read_edge");
       auto polarity = resource->getAttrOfType<StringAttr>("reset_polarity");
       if (!edge || !polarity ||
-          resource->getNumOperands() < (logical ? 3u : 9u))
+          resource->getNumOperands() < (logical ? 6u : 9u))
         return rule.emitOpError("invalid CDC endpoint contract");
       // Actual clock identity is proved for every instantiated writer by the
       // common effect-footprint proof; distinct formal pins may alias there.
@@ -155,7 +301,7 @@ getAsyncFIFOEndpointEffects(RuleOp rule) {
               reset ? reset.getAs<IntegerAttr>("capture") : IntegerAttr();
           if (capture && capture.getInt() >= 0 &&
               uint64_t(capture.getInt()) < rule.getCaptures().size() &&
-              rule.getCaptures()[capture.getInt()] == resource->getOperand(2) &&
+              rule.getCaptures()[capture.getInt()] == wholeReset &&
               reset.getAs<StringAttr>("kind") ==
                   StringAttr::get(rule.getContext(), "async") &&
               reset.getAs<StringAttr>("polarity") == polarity)
@@ -166,7 +312,7 @@ getAsyncFIFOEndpointEffects(RuleOp rule) {
                                 "actual whole asynchronous reset");
       auto yielded = cast<YieldOp>(rule.getBody().front().back());
       auto available =
-          logical ? (write ? fifo.getWriteAvailable() : fifo.getReadAvailable())
+          logical ? (write ? layout->writeAvailable() : layout->readAvailable())
                   : resource->getOperand(write ? 7 : 8);
       DenseSet<Value> admissionVisits;
       if (!containsAdmission(yielded.getOperand(fire.getInt()), available, rule,
@@ -174,7 +320,7 @@ getAsyncFIFOEndpointEffects(RuleOp rule) {
         return rule.emitOpError(
             "CDC endpoint fire must include its actual local availability");
       effects.push_back(
-          {resource, expectedClock, resource->getOperand(2), result, available,
+          {resource, expectedClock, wholeReset, result, available,
            edge.getValue() == "posedge" ? RegisterEdge::Posedge
                                         : RegisterEdge::Negedge,
            polarity.getValue() == "high" ? RegisterResetPolarity::High

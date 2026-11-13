@@ -27,6 +27,7 @@ class Equations {
   bool valid = true;
   BitsType bit;
   Ref zeroBit, oneBit;
+  llvm::SmallVector<Value> inputs;
   StaticExprAttr literal(uint64_t n) {
     auto provenance = bit.getWidth().getTree();
     auto number = MathIntAttr::get(b.getContext(),
@@ -92,8 +93,35 @@ class Equations {
     return result;
   }
   Ref zero(Type type) {
+    if (!valid)
+      return zeroBit;
     if (auto bits = dyn_cast<BitsType>(type))
       return constant(bits, 0);
+    if (auto enumeration = dyn_cast<EnumType>(type)) {
+      auto declaration = analysis.resolveEnum(enumeration, circuit.source);
+      if (failed(declaration)) {
+        valid = false;
+        return zeroBit;
+      }
+      auto carrier = BitsType::get(b.getContext(), literal(declaration->width));
+      // Membership is deliberately unused: raw zero need not be a member.
+      return node(EnumFromBitsOp::getOperationName(), {type, bit},
+                  {constant(carrier, 0)});
+    }
+    if (auto record = dyn_cast<StructType>(type)) {
+      SmallVector<Ref> fields;
+      for (auto raw : analysis.lookupStruct(record).getFields()) {
+        auto field = cast<DictionaryAttr>(raw);
+        fields.push_back(zero(field.getAs<TypeAttr>("type").getValue()));
+      }
+      return node(StructCreateOp::getOperationName(), {type}, fields);
+    }
+    if (auto table = dyn_cast<TableType>(type))
+      return node(TableSplatOp::getOperationName(), {type},
+                  {zero(table.getElementType())},
+                  {b.getNamedAttr("shape", table.getShape())});
+    // Preserve a shared generic body; never substitute its first actual here.
+    assert(isa<TypeParamType>(type));
     return node(ValueZeroOp::getOperationName(), {type});
   }
   Ref storage(StringRef role, Type type, Ref clock, Ref reset, StringRef edge,
@@ -177,32 +205,29 @@ class Equations {
   }
 
 public:
-  Equations(Operation *source, detail::SourceCheckBudget &budget)
-      : circuit{source, {}, {}}, b(source->getContext()),
-        analysis(source->getParentOfType<mlir::ModuleOp>()), budget(budget) {
+  Equations(Operation *source, StringRef kind, std::optional<uint64_t> depth,
+            ArrayRef<Value> inputs, detail::SourceCheckBudget &budget)
+      : circuit{source, kind.str(), depth, {}, {}}, b(source->getContext()),
+        analysis(source->getParentOfType<mlir::ModuleOp>()), budget(budget),
+        inputs(inputs) {
     bit = cast<BitsType>(source->getOperand(0).getType());
     zeroBit = constant(bit, 0);
     oneBit = constant(bit, 1);
   }
   FailureOr<Circuit> run() {
     auto *source = circuit.source;
-    Ref reset(source->getOperand(2));
-    if (isa<AsyncRegOp>(source) ||
-        (source->getAttrOfType<StringAttr>("logical_kind") &&
-         source->getAttrOfType<StringAttr>("logical_kind").getValue() ==
-             "async_reg")) {
-      Ref clock(source->getOperand(1));
+    Ref reset(inputs[2]);
+    if (circuit.kind == "async_reg") {
+      Ref clock(inputs[1]);
       auto edge = source->getAttrOfType<StringAttr>("target_edge").getValue();
       auto released = sync("release", oneBit, clock, reset, edge);
       auto first = storage("data.stage1", bit, clock, reset, edge, zeroBit);
       auto second = storage("data.stage2", bit, clock, reset, edge, zeroBit);
-      drive(first, merge(released, Ref(source->getOperand(3)), zeroBit),
-            oneBit);
+      drive(first, merge(released, Ref(inputs[3]), zeroBit), oneBit);
       drive(second, merge(released, first, zeroBit), oneBit);
       circuit.outputs.push_back(second);
     } else {
-      auto fifo = dyn_cast<AsyncFIFOOp>(source);
-      uint64_t depth = source->getAttrOfType<IntegerAttr>("depth").getInt();
+      uint64_t depth = *circuit.depth;
       if (depth < 2 || !llvm::isPowerOf2_64(depth))
         return source->emitOpError("selected CDC FIFO implementation supports "
                                    "power-of-two depth >= 2");
@@ -211,7 +236,7 @@ public:
       auto pointerType = bits(pointerWidth);
       auto pointerZero = constant(pointerType, 0),
            pointerOne = constant(pointerType, 1);
-      Ref writeClock(source->getOperand(0)), readClock(source->getOperand(1));
+      Ref writeClock(inputs[0]), readClock(inputs[1]);
       auto writeEdge =
           source->getAttrOfType<StringAttr>("write_edge").getValue();
       auto readEdge = source->getAttrOfType<StringAttr>("read_edge").getValue();
@@ -241,19 +266,9 @@ public:
           "and", binary("and", writeReleased, peerReadReleased), invert(full));
       auto readAvailable = binary(
           "and", binary("and", readReleased, peerWriteReleased), invert(empty));
-      AsyncFIFOUpdateOp update;
-      if (fifo)
-        for (Operation *user : fifo.getHead().getUsers()) {
-          auto candidate = dyn_cast<AsyncFIFOUpdateOp>(user);
-          if (candidate && candidate.getHead() == fifo.getHead())
-            update = candidate;
-        }
-      if (fifo && !update)
-        return source->emitOpError("missing FIFO update");
-      Value pushPayload =
-          fifo ? update.getPushPayload() : source->getOperand(3);
-      Value pushIntent = fifo ? update.getPushIntent() : source->getOperand(4);
-      Value popIntent = fifo ? update.getPopIntent() : source->getOperand(5);
+      Value pushPayload = inputs[3];
+      Value pushIntent = inputs[4];
+      Value popIntent = inputs[5];
       Type payloadType = pushPayload.getType();
       auto asserted =
           source->getAttrOfType<StringAttr>("reset_polarity").getValue() ==
@@ -301,7 +316,30 @@ public:
 
 namespace detail::cdc {
 FailureOr<Circuit> getCircuit(Operation *source, SourceCheckBudget &budget) {
-  return Equations(source, budget).run();
+  if (auto instance = dyn_cast<InstanceOp>(source)) {
+    auto layout = getCDCPrimitiveLayout(instance);
+    if (failed(layout))
+      return failure();
+    if (layout->isFIFO() && !layout->depth)
+      return source->emitOpError("CDC recipe requires a resolved lexical DEPTH");
+    SmallVector<Value> inputs{layout->sourceClock(), layout->targetClock(),
+                              layout->reset(), layout->input()};
+    if (layout->isFIFO()) {
+      inputs.push_back(layout->pushIntent());
+      inputs.push_back(layout->popIntent());
+    }
+    return Equations(source, layout->kind, layout->depth, inputs, budget).run();
+  }
+  auto kind = source->getAttrOfType<StringAttr>("logical_kind");
+  if (!isa<CDCRefinementOp>(source) || !kind)
+    return failure();
+  std::optional<uint64_t> depth;
+  if (kind.getValue() == "async_fifo")
+    depth = source->getAttrOfType<IntegerAttr>("depth").getInt();
+  SmallVector<Value> inputs;
+  llvm::append_range(inputs, source->getOperands().take_front(
+                                kind.getValue() == "async_fifo" ? 6 : 4));
+  return Equations(source, kind.getValue(), depth, inputs, budget).run();
 }
 Value resolve(Ref ref, const SmallVector<Operation *, 0> &nodes,
               const IRMapping &mapping) {

@@ -9,6 +9,7 @@
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/SymbolTable.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/Support/raw_ostream.h"
 
 using namespace mlir;
 namespace acir::ac {
@@ -57,10 +58,47 @@ Operation *registerImport(Operation *resource) {
                 b.getNamedAttr("inputs", b.getArrayAttr({}))})}))});
   return Operation::create(state);
 }
+// Source authority is exact, inert attribute assembly: even unknown extension
+// attributes can contain symbol/type references to the removed declaration.
+// Keeping the whole dictionary also avoids collisions between a source custom
+// attribute and a dictionary chosen to encode that attribute.
+StringAttr provenance(Attribute value, Builder &b) {
+  std::string assembly;
+  llvm::raw_string_ostream stream(assembly);
+  value.print(stream);
+  return b.getStringAttr(stream.str());
+}
+DictionaryAttr witnessAttributes(const Circuit &circuit) {
+  auto *source = circuit.source;
+  Builder b(source->getContext());
+  NamedAttrList attributes;
+  // These checked fields drive the retained public component contract. All
+  // remaining attributes are preserved losslessly in the source snapshot.
+  for (auto name : {"instance_name", "occurrence", "resource_contract", "source_domain",
+                    "target_domain", "write_domain", "read_domain",
+                    "source_edge", "target_edge", "write_edge", "read_edge",
+                    "reset_polarity", "reset_policy", "release_cycles"})
+    if (auto value = source->getAttr(name))
+      attributes.set(name, value);
+  auto instance = cast<InstanceOp>(source);
+  HardwareAnalysis analysis(source->getParentOfType<mlir::ModuleOp>());
+  auto *declaration = analysis.resolveCallee(instance);
+  attributes.set(
+      "ac.cdc_source",
+      b.getDictionaryAttr({
+          b.getNamedAttr("instance", provenance(source->getAttrDictionary(), b)),
+          b.getNamedAttr("declaration",
+                         provenance(declaration->getAttrDictionary(), b))}));
+  attributes.set("logical_kind", b.getStringAttr(circuit.kind));
+  attributes.set("implementation", b.getI64IntegerAttr(1));
+  if (circuit.depth)
+    attributes.set("depth", b.getI64IntegerAttr(*circuit.depth));
+  return attributes.getDictionary(b.getContext());
+}
 Operation *firstResource(mlir::ModuleOp package) {
   Operation *first = nullptr;
   package.walk([&](Operation *op) {
-    if (!first && isa<AsyncRegOp, AsyncFIFOOp>(op))
+    if (!first && isCDCInstance(dyn_cast<InstanceOp>(op)))
       first = op;
   });
   return first;
@@ -76,7 +114,7 @@ materializeHardwareCDC(mlir::ModuleOp logical,
   SmallVector<Circuit, 0> circuits;
   LogicalResult valid = success();
   logical.walk([&](Operation *op) {
-    if (!isa<AsyncRegOp, AsyncFIFOOp>(op) || failed(valid))
+    if (!isCDCInstance(dyn_cast<InstanceOp>(op)) || failed(valid))
       return;
     auto spec = getCircuit(op, budget);
     if (failed(spec))
@@ -99,14 +137,13 @@ materializeHardwareCDC(mlir::ModuleOp logical,
   IRMapping mapping;
   OwningOpRef<mlir::ModuleOp> result =
       cast<mlir::ModuleOp>(logical->clone(mapping));
-  if (circuits.empty())
-    return std::move(result);
-  if (SymbolTable::lookupSymbolIn(logical, registerSymbol))
+  if (!circuits.empty() && SymbolTable::lookupSymbolIn(logical, registerSymbol))
     return logical.emitError(
         "CDC register symbol collides with logical declaration");
   OpBuilder b(logical.getContext());
   b.setInsertionPointToStart(result->getBody());
-  b.insert(registerImport(circuits.front().source));
+  if (!circuits.empty())
+    b.insert(registerImport(circuits.front().source));
   // Declare all nodes and logical-result replacements before binding any input.
   // SSA graph regions allow feedback through committed storage cuts.
   SmallVector<SmallVector<Operation *, 0>, 0> realized;
@@ -135,43 +172,28 @@ materializeHardwareCDC(mlir::ModuleOp logical,
         inputs.push_back(resolve(ref, nodes, mapping));
       operation->setOperands(inputs);
     }
-    if (auto fifo = dyn_cast<AsyncFIFOOp>(circuit.source)) {
-      for (auto *user : fifo.getHead().getUsers())
-        if (auto update = dyn_cast<AsyncFIFOUpdateOp>(user);
-            update && update.getHead() == fifo.getHead()) {
-          mapping.lookup(update.getOperation())->erase();
-          break;
-        }
-    }
     auto *declaration = mapping.lookup(circuit.source);
     OpBuilder witnessBuilder(declaration);
     SmallVector<Value> witnessInputs;
     for (auto input : circuit.source->getOperands())
       witnessInputs.push_back(mapping.lookup(input));
-    if (auto fifo = dyn_cast<AsyncFIFOOp>(circuit.source)) {
-      for (auto *user : fifo.getHead().getUsers())
-        if (auto update = dyn_cast<AsyncFIFOUpdateOp>(user);
-            update && update.getHead() == fifo.getHead()) {
-          for (Value input : SmallVector<Value>{update.getPushPayload(),
-                                                update.getPushIntent(),
-                                                update.getPopIntent()})
-            witnessInputs.push_back(mapping.lookup(input));
-          break;
-        }
-    }
     for (auto output : circuit.outputs)
       witnessInputs.push_back(resolve(output, nodes, mapping));
     OperationState witness(circuit.source->getLoc(), "ac.cdc.refinement");
     witness.addOperands(witnessInputs);
-    witness.addAttributes(circuit.source->getAttrs());
-    witness.addAttribute(
-        "logical_kind",
-        witnessBuilder.getStringAttr(
-            isa<AsyncRegOp>(circuit.source) ? "async_reg" : "async_fifo"));
-    witness.addAttribute("implementation", witnessBuilder.getI64IntegerAttr(1));
+    witness.addAttributes(witnessAttributes(circuit).getValue());
     witnessBuilder.create(witness);
     declaration->erase();
   }
+  // Canonical logical declarations have no final-package meaning, including
+  // unused imports. Every corresponding instance has already been expanded.
+  SmallVector<Operation *> imports;
+  result->walk([&](ModuleImportOp imported) {
+    if (isCDCPrimitive(imported))
+      imports.push_back(imported);
+  });
+  for (auto *imported : imports)
+    imported->erase();
   return std::move(result);
 }
 namespace {
@@ -231,9 +253,9 @@ class Correspondence {
           }
         }
         for (auto &op : a) {
-          if (isa<AsyncFIFOUpdateOp>(op))
+          if (isCDCPrimitive(&op))
             continue;
-          if (isa<AsyncRegOp, AsyncFIFOOp>(op)) {
+          if (isCDCInstance(dyn_cast<InstanceOp>(&op))) {
             auto equations = getCircuit(&op, budget);
             if (failed(equations))
               return failure();
@@ -304,8 +326,8 @@ public:
         if (mapping.lookupOrNull(a) != b)
           return reject("surrounding successor differs");
     }
-    // Complete the surrounding SSA map before checking resource inputs: a FIFO
-    // update or another resource may refer forward to a later graph operation.
+    // Complete the surrounding SSA map before checking resource inputs: another
+    // resource may refer forward to a later graph operation.
     // Final-only legality cannot prove that the witness retained the source
     // endpoint identities, including controls unused by the selected circuit.
     for (auto &expansion : expansions) {
@@ -315,30 +337,12 @@ public:
                                      source->getNumResults(),
                              source)))
         return failure();
-      Builder b(source->getContext());
-      NamedAttrList attributes(source->getAttrs());
-      attributes.set(
-          "logical_kind",
-          b.getStringAttr(isa<AsyncRegOp>(source) ? "async_reg" : "async_fifo"));
-      attributes.set("implementation", b.getI64IntegerAttr(1));
-      if (witness->getAttrDictionary() !=
-              attributes.getDictionary(source->getContext()) ||
+      auto attributes = witnessAttributes(expansion.circuit);
+      if (witness->getAttrDictionary() != attributes ||
           witness->getLoc() != source->getLoc() || witness->getNumResults() ||
           witness->getNumRegions() || witness->getNumSuccessors())
         return reject("resource witness policy/identity differs");
       SmallVector<Value> inputs(source->getOperands());
-      if (auto fifo = dyn_cast<AsyncFIFOOp>(source)) {
-        AsyncFIFOUpdateOp update;
-        for (auto *user : fifo.getHead().getUsers())
-          if (auto candidate = dyn_cast<AsyncFIFOUpdateOp>(user);
-              candidate && candidate.getHead() == fifo.getHead())
-            update = candidate;
-        if (!update)
-          return reject("missing logical FIFO update");
-        inputs.push_back(update.getPushPayload());
-        inputs.push_back(update.getPushIntent());
-        inputs.push_back(update.getPopIntent());
-      }
       llvm::append_range(inputs, source->getResults());
       if (inputs.size() != witness->getNumOperands())
         return reject("resource witness pin inventory differs");

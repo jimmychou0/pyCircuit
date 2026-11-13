@@ -21,7 +21,7 @@ mlir::FailureOr<StateLayout> getStateLayout(Operation *state) {
   int64_t version = contract ? contract.getInt() : 4;
   auto policy = getRegisterPolicy(state);
   if (failed(policy)) return failure();
-  bool current = version == 6 && isa<LogicalStateOpInterface>(state);
+  bool current = version == 7 && isa<LogicalStateOpInterface>(state);
   auto operand = [&](unsigned segment) -> Value {
     if (current) {
       auto sizes = state->getAttrOfType<DenseI32ArrayAttr>("operandSegmentSizes");

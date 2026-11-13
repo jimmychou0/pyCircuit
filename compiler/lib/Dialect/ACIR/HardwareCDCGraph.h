@@ -9,6 +9,8 @@
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+#include <cstdint>
+#include <optional>
 #include <string>
 
 namespace acir::ac::detail {
@@ -33,6 +35,8 @@ struct Node {
 };
 struct Circuit {
   mlir::Operation *source;
+  std::string kind;
+  std::optional<uint64_t> depth;
   llvm::SmallVector<Node, 0> nodes;
   llvm::SmallVector<Ref> outputs;
 };

@@ -5,7 +5,7 @@ include "mlir/IR/OpBase.td"
 
 // Common routed-logical-state contracts shared by staged analysis. These
 // Accessors expose actual SSA operands, results and declaration attributes.
-// Contract 4/5 uses clock/reset/initial at 0/1/2; contract 6 uses the exact
+// Contract 4/5 uses clock/reset/initial at 0/1/2; contract 7 uses the exact
 // four clock/reset/initial/reset-value segments, with optional reset and init.
 // Structural decoding validates each getter before staged admission.
 

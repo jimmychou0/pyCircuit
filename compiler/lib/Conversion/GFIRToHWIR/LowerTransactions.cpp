@@ -159,7 +159,7 @@ FailureOr<OwningOpRef<mlir::ModuleOp>> refineRoutedHardware(
   OwningOpRef<mlir::ModuleOp> normalized, expanded;
   mlir::ModuleOp stateSource = routed;
   auto contract = routed->getAttrOfType<IntegerAttr>("ac.routed_contract");
-  if (contract && contract.getInt() == 6) {
+  if (contract && contract.getInt() == 7) {
     SourceCheckBudget resetBudget(limits);
     auto masks = materializeTransactionResetMasks(routed, resetBudget);
     if (failed(masks) || failed(verifyTransactionResetMaskMaterialization(

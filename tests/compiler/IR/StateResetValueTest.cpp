@@ -1,4 +1,5 @@
 #include "Compiler/AnchorArtifact.h"
+#include "Compiler/SourceUnit.h"
 #include "Dialect/ACIR/HardwareSourceCheckPreflight.h"
 #include "pycircuit/Conversion/GFIRToHWIR.h"
 #include "pycircuit/Dialect/ACIR/GFIRPackageValidation.h"
@@ -49,7 +50,7 @@ std::string stateIR(bool routed) {
             ">}, origin = #occ, location = #span}>\n";
   text += "!b1 = !ac.bits<#w1>\n!b9 = !ac.bits<#w9>\n";
   text += routed
-              ? "module attributes {ac.stage = \"routed\", ac.routed_contract = 6 : i64, ac.source_units = [#owner]} {\n"
+              ? "module attributes {ac.stage = \"routed\", ac.routed_contract = 7 : i64, ac.source_units = [#owner]} {\n"
               : "module attributes {ac.stage = \"source\", ac.unit_kind = \"implementation\", ac.source_owner = #owner, ac.interfaces = [#owner], ac.exports = [], ac.import_bindings = []} {\n";
   text += R"ir(
   "ac.module"() ({
@@ -272,8 +273,9 @@ TEST_F(StateResetValueTest, SavedLogicalStateRetainsDistinctInitializationAndRes
   }
 
   // A well-typed but semantically wrong reset must fail correspondence proof.
-  // Contract 6 normalizes the transaction reset mask before state refinement;
-  // isolate this proof boundary so a different earlier pass cannot reject it.
+  // The native-resource contract normalizes the transaction reset mask before
+  // state refinement; isolate this proof boundary so an earlier pass cannot
+  // reject it for a different reason.
   ac::HardwareSourceCheckLimits limits;
   ac::detail::SourceCheckBudget maskBudget(limits);
   auto normalized = acir::detail::materializeTransactionResetMasks(
@@ -305,7 +307,7 @@ TEST_F(StateResetValueTest, TableResetValueRetainsItsTypedLanesThroughRefinement
   text += R"ir(
 #extent = #ac.static_expr<{kind = "literal", value = {kind = "integer", value = #ac.math_int<2>}, origin = #occ, location = #span}>
 !lanes = !ac.table<[#extent], !b9>
-module attributes {ac.stage = "routed", ac.routed_contract = 6 : i64, ac.source_units = [#owner]} {
+module attributes {ac.stage = "routed", ac.routed_contract = 7 : i64, ac.source_units = [#owner]} {
   "ac.module"() ({
   ^bb0(%clk: !b1, %rst: !b1):
     %five = "ac.bits.constant"() {value = #w5} : () -> !b9
@@ -346,7 +348,7 @@ module attributes {ac.stage = "routed", ac.routed_contract = 6 : i64, ac.source_
   EXPECT_EQ(print(routed->getOperation()), before);
 }
 
-TEST_F(StateResetValueTest, ContractSixStatePoliciesSurviveIndependentRefinement) {
+TEST_F(StateResetValueTest, NativeResourceStatePoliciesSurviveIndependentRefinement) {
   const auto scalar = stateIR(true);
   const auto preamble = scalar.substr(0, scalar.find("module attributes"));
   struct Policy {
@@ -371,7 +373,7 @@ TEST_F(StateResetValueTest, ContractSixStatePoliciesSurviveIndependentRefinement
     if (policy.initial) { inputs += ", %five"; types += ", !b9"; }
     if (reset) { inputs += ", %zero"; types += ", !b9"; }
     std::string text = preamble + R"ir(
-module attributes {ac.stage = "routed", ac.routed_contract = 6 : i64, ac.source_units = [#owner]} {
+module attributes {ac.stage = "routed", ac.routed_contract = 7 : i64, ac.source_units = [#owner]} {
   "ac.module"() ({
   ^bb0(%clk: !b1, %rst: !b1):
     %five = "ac.bits.constant"() {value = #w5} : () -> !b9
@@ -423,6 +425,39 @@ TEST_F(StateResetValueTest, PublishAsyncNegativeStateForIndependentConsumers) {
 }
 
 #include "StateResetCDCFixture.inc"
+
+TEST_F(StateResetValueTest, NativeCDCRejectsMalformedCanonicalDeclaration) {
+  auto routed = mlir::parseSourceString<mlir::ModuleOp>(asyncRegSystemIR(true), &context);
+  ASSERT_TRUE(routed);
+  ASSERT_TRUE(mlir::succeeded(ac::verifyRoutedPackage(*routed)));
+  ac::ModuleImportOp declaration;
+  routed->walk([&](ac::ModuleImportOp imported) {
+    if (imported.getSymName() == "pycircuit.__builtins__.async_reg")
+      declaration = imported;
+  });
+  ASSERT_TRUE(declaration);
+  // Keep the signature, kind and instance well-typed while violating the
+  // canonical endpoint schema. A primitive label cannot authenticate its pins.
+  mlir::OpBuilder builder(&context);
+  llvm::SmallVector<mlir::Attribute> names(
+      declaration.getInputNames().begin(), declaration.getInputNames().end());
+  names[0] = builder.getStringAttr("unrecognized_source_clock");
+  declaration->setAttr("input_names", builder.getArrayAttr(names));
+  mlir::ScopedDiagnosticHandler expectedFailure(
+      &context, [](mlir::Diagnostic &) { return mlir::success(); });
+  EXPECT_TRUE(mlir::failed(ac::verifyRoutedPackage(*routed)));
+}
+
+TEST_F(StateResetValueTest, SupersededExperimentalRoutedContractRejects) {
+  auto routed = mlir::parseSourceString<mlir::ModuleOp>(stateIR(true), &context);
+  ASSERT_TRUE(routed);
+  ASSERT_TRUE(mlir::succeeded(ac::verifyRoutedPackage(*routed)));
+  mlir::OpBuilder builder(&context);
+  (*routed)->setAttr("ac.routed_contract", builder.getI64IntegerAttr(6));
+  mlir::ScopedDiagnosticHandler expectedFailure(
+      &context, [](mlir::Diagnostic &) { return mlir::success(); });
+  EXPECT_TRUE(mlir::failed(ac::verifyRoutedPackage(*routed)));
+}
 
 std::string mixedResetIR(bool routed) {
   auto text = routed ? asyncNegativeStateIR() : stateIR(false);

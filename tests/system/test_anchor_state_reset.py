@@ -251,7 +251,9 @@ endmodule
 
 
 @pytest.mark.parametrize("boundary", [False, True], ids=["direct", "entry_boundary"])
-def test_contract_six_async_negative_public_consumers(tmp_path, monkeypatch, boundary):
+def test_native_contract_async_negative_public_consumers(
+    tmp_path, monkeypatch, boundary
+):
     producer = Path(os.environ["PYC_BUILD_DIR"]) / "bin/ACIRAnchorArtifactTests"
     anchor = tmp_path / "anchor"
     variable = (
@@ -260,7 +262,7 @@ def test_contract_six_async_negative_public_consumers(tmp_path, monkeypatch, bou
         else "PYCIRCUIT_TEST_ASYNC_STATE_ANCHOR"
     )
     fixture = (
-        "PublishContractSixEntryBoundaryForIndependentConsumers"
+        "PublishNativeEntryBoundaryForIndependentConsumers"
         if boundary
         else "PublishAsyncNegativeStateForIndependentConsumers"
     )
@@ -275,7 +277,7 @@ def test_contract_six_async_negative_public_consumers(tmp_path, monkeypatch, bou
     )
     monkeypatch.delenv(variable)
     manifest = json.loads((anchor / "anchor.json").read_text())
-    assert (manifest["schema"], manifest["routed_contract"]) == (5, 6)
+    assert (manifest["schema"], manifest["routed_contract"]) == (6, 7)
     configuration = manifest["configuration"]
     assert configuration["root"]["definition"] == '@"reset_value.fixture.Held"'
     if boundary:
@@ -514,18 +516,26 @@ def test_mixed_reset_whole_transaction_public_consumers(tmp_path, monkeypatch):
     assert hashlib.sha256(final.read_bytes()).hexdigest() == digest
 
 
-def _fifo_scoreboard(records, *, zero_payload=False):
+def _fifo_scoreboard(
+    records, *, zero_payload=False, push_instance=None, pop_event="fifo pop"
+):
     rows, stopped_release = _fifo_rows()
     observations = {}
     for record in records:
         if record.get("kind") != "log":
             continue
         event = record["spec"]["event"]
-        if event not in ("fifo push", "fifo pop"):
+        if event not in ("fifo push", pop_event):
             continue
+        if event == "fifo push" and push_instance is not None:
+            if record["instance"] != push_instance:
+                continue
+        values = tuple(int(value["value"]) for value in record["values"])
+        if event == pop_event:
+            event = "fifo pop"
         key = (int(record["evaluation_epoch"]), event)
         assert key not in observations
-        observations[key] = tuple(int(value["value"]) for value in record["values"])
+        observations[key] = values
     queue = deque()
     previous = (0, 0, 0)
     next_token = pushes = pops = max_depth = 0
@@ -539,15 +549,19 @@ def _fifo_scoreboard(records, *, zero_payload=False):
             assert push is None and pop is None, "stopped peer must prevent release"
         # Process reads against the old queue: same-epoch writes cannot bypass.
         if pop is not None:
-            value, checksum, clock, reset = pop
+            if pop_event == "scalar fifo pop":
+                value, clock, reset = pop
+            else:
+                value, checksum, clock, reset = pop
             assert (clock, reset) == (row[1], row[2])
             if clock and not previous[1] and not reset:
                 assert queue, "accepted read from an empty queue"
                 assert value == queue.popleft(), "FIFO reordered or duplicated data"
-                expected_checksum = 0 if zero_payload else value ^ 511
-                assert (
-                    checksum == expected_checksum
-                ), "FIFO corrupted a separate payload field"
+                if pop_event != "scalar fifo pop":
+                    expected_checksum = 0 if zero_payload else value ^ 511
+                    assert (
+                        checksum == expected_checksum
+                    ), "FIFO corrupted a separate payload field"
                 pops += 1
         if push is not None:
             value, clock, reset = push
@@ -599,6 +613,47 @@ def test_fifo_system_saved_anchor_independent_scoreboard(
         _fifo_scoreboard(records, zero_payload=generic)
         for records in _system_target_records(final, tmp_path)
     ]
+    assert traces[0] == traces[1] == traces[2]
+    assert hashlib.sha256(final.read_bytes()).hexdigest() == digest
+
+
+def test_mixed_actual_fifo_saved_anchor_independent_scoreboards(tmp_path, monkeypatch):
+    producer = Path(os.environ["PYC_BUILD_DIR"]) / "bin/ACIRAnchorArtifactTests"
+    anchor = tmp_path / "anchor"
+    variable = "PYCIRCUIT_TEST_MIXED_ACTUAL_FIFO_ANCHOR"
+    monkeypatch.setenv(variable, str(anchor))
+    _ok(
+        _run(
+            [
+                str(producer),
+                "--gtest_filter=StateResetValueTest."
+                "PublishMixedActualFIFOSystemForIndependentScoreboards",
+            ]
+        )
+    )
+    monkeypatch.delenv(variable)
+    _ok(_cli("link", "--from-anchor", str(anchor), "--verify-only"))
+    final = tmp_path / "mixed_fifo.ac"
+    _ok(
+        _cli(
+            "link", "--from-anchor", str(anchor), "--target", "final", "-o", str(final)
+        )
+    )
+    digest = hashlib.sha256(final.read_bytes()).hexdigest()
+    traces = []
+    for records in _system_target_records(final, tmp_path):
+        packet = _fifo_scoreboard(
+            records, zero_payload=True, push_instance="root/generic_fifo"
+        )
+        scalar = _fifo_scoreboard(
+            records,
+            zero_payload=True,
+            push_instance="root/scalar_fifo",
+            pop_event="scalar fifo pop",
+        )
+        # Each scoreboard independently requires pushes, reads, wrap, full,
+        # backpressure and final drain; an unused specialization cannot pass.
+        traces.append((packet, scalar))
     assert traces[0] == traces[1] == traces[2]
     assert hashlib.sha256(final.read_bytes()).hexdigest() == digest
 
@@ -868,7 +923,7 @@ def test_ir_anchor_reset_value_public_consumers(tmp_path, monkeypatch):
     )
     monkeypatch.delenv("PYCIRCUIT_TEST_STATE_RESET_ANCHOR")
     manifest = json.loads((anchor / "anchor.json").read_text())
-    assert (manifest["schema"], manifest["routed_contract"]) == (5, 6)
+    assert (manifest["schema"], manifest["routed_contract"]) == (6, 7)
     original = {
         p.relative_to(anchor): p.read_bytes() for p in anchor.rglob("*") if p.is_file()
     }

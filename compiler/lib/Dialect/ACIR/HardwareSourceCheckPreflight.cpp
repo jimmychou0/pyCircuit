@@ -26,6 +26,9 @@ struct Allocation {
   uint64_t count = 1;
   HardwareCheckCommitEndpointForm form = HardwareCheckCommitEndpointForm::Physical;
   bool combinationalExternal = false;
+  // A routed native resource is validated here, but its physical storage
+  // endpoints exist only after GFIRToHWIR has expanded the component.
+  bool deferredLogicalResource = false;
 };
 struct BoundDefinition {
   ModuleOp definition;
@@ -1485,7 +1488,8 @@ private:
       // uninstantiated module cannot bypass the original rejection boundary.
       auto lexical = definition.walk([&](Operation *op) {
         LogicalResult result = success();
-        if (isa<AsyncRegOp, AsyncFIFOOp, AsyncFIFOUpdateOp, CDCRefinementOp>(op))
+        if (isa<CDCRefinementOp>(op) ||
+            isCDCInstance(dyn_cast<InstanceOp>(op)))
           result = verifyBoundHardwareCDCOperation(analysis, op, local);
         else if (isa<EnumCreateOp, EnumToBitsOp, EnumFromBitsOp>(op))
           result = analysis.verifyEnumValueOperation(op, local);
@@ -1697,6 +1701,7 @@ private:
           if (failed(analysis.verifyImport(cast<ModuleImportOp>(child->owner))))
             return failure();
           edge.primitive = StringAttr::get(definition.getContext(), primitive);
+          edge.deferredLogicalResource = isCDCPrimitive(child->owner);
         } else {
           auto childDefinition = dyn_cast<ModuleOp>(child->owner);
           if (!childDefinition) {
@@ -1751,7 +1756,7 @@ private:
             Budget::add(
                 1, Budget::bytes(sizeof(HardwareCheckSamplingOccurrence)))));
     for (auto &edge : node.allocations) {
-      if (edge.combinationalExternal) continue;
+      if (edge.combinationalExternal || edge.deferredLogicalResource) continue;
       for (uint64_t extent : edge.shape)
         edge.count = Budget::multiply(edge.count, extent);
       if (edge.child) {
@@ -1841,7 +1846,7 @@ private:
           {bindingIndex, owner, reset, plan.checks.size(), samplingOccurrence});
     }
     for (const auto &edge : node.allocations) {
-      if (edge.combinationalExternal) continue;
+      if (edge.combinationalExternal || edge.deferredLogicalResource) continue;
       for (uint64_t lane = 0; lane < edge.count; ++lane) {
         // Debit before creating either coordinate or copied path payload.
         if (failed(budget.debit(edge.shape.size(), edge.operation)))

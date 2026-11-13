@@ -40,7 +40,7 @@ hardwareStatePrimitives(mlir::ModuleOp routed, SourceCheckBudget &budget) {
     for (auto state : module.getBody().front().getOps<gfir::StateOp>()) {
       if (!charge(budget, state)) return failure();
       auto contract = routed->getAttrOfType<IntegerAttr>("ac.routed_contract");
-      if (contract && contract.getInt() == 6) result.policyState = state;
+      if (contract && contract.getInt() == 7) result.policyState = state;
       else hasState = true;
     }
   if (hasState && (!result.dffe || dffeCount != 1))
