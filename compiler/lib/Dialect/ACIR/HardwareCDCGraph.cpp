@@ -65,13 +65,17 @@ class Equations {
   StaticExprAttr addressWidth() {
     SmallVector<StaticExprAttr> terms;
     auto depth = cast<StaticExprAttr>(circuit.depth);
-    for (unsigned k = 0; k < 64; ++k)
+    // Admitted D = 2^n, 1 <= n <= 63: k=63 is always false.
+    // Omitting it keeps generated thresholds in the signed-64 static domain.
+    for (unsigned k = 0; k < 63; ++k)
       terms.push_back(select(arithmetic("gt", depth, literal(uint64_t(1) << k)),
                              literal(1), literal(0)));
     while (terms.size() > 1) {
       SmallVector<StaticExprAttr> next;
       for (unsigned i = 0; i < terms.size(); i += 2)
-        next.push_back(arithmetic("add", terms[i], terms[i + 1]));
+        next.push_back(i + 1 < terms.size()
+                           ? arithmetic("add", terms[i], terms[i + 1])
+                           : terms[i]);
       terms = std::move(next);
     }
     return select(arithmetic("gt", depth, literal(1)), terms[0], literal(1));

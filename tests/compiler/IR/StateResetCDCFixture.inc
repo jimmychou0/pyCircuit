@@ -617,8 +617,26 @@ std::string fifoExternalPayloadIR(bool routed) {
     // adapter needs no generated System log instrumentation or observation rows.
     replace("observations = [{id = #wo, value_count = 3 : i64, path = {}}]",
             "observations = []");
-    replace("observations = [{id = #ro, value_count = 4 : i64, path = {}}]",
-            "observations = []");
+    // With no observations the closed raw layout is fire+1 followed by one
+    // guard/path pair: push has two candidate results then fire (five total),
+    // and pop starts with fire (three total). No observer snapshots remain.
+    replace("%next, %wen, %wf, %wp, %wv, %wc, %wr, %wg, %wreach =",
+            "%next, %wen, %wf, %wg, %wreach =");
+    replace("\"ac.yield\"(%w_next, %w_enabled, %w_fire, %w_fire, %w_old, %w_clock, %w_reset, %w_one, %w_one) : (!b9, !b1, !b1, !b1, !b9, !b1, !b1, !b1, !b1)",
+            "\"ac.yield\"(%w_next, %w_enabled, %w_fire, %w_one, %w_one) : (!b9, !b1, !b1, !b1, !b1)");
+    replace("(!b1, !b1, !b9, !b1) -> (!b9, !b1, !b1, !b1, !b9, !b1, !b1, !b1, !b1)",
+            "(!b1, !b1, !b9, !b1) -> (!b9, !b1, !b1, !b1, !b1)");
+    const auto popStart = text.find("    %rf, %rp");
+    const auto popEnd = text.find("    \"gfir.state.update\"", popStart);
+    text.replace(popStart, popEnd - popStart, R"ir(
+    %rf, %rg, %rreach = "ac.rule"(%rclk, %rst, %ra) ({
+    ^bb0(%r_clock: !b1, %r_reset: !b1, %r_available: !b1):
+      %r_one = "ac.bits.constant"() {value = #w1} : () -> !b1
+      %r_guard = "ac.bits.compare"(%r_one, %r_one) {predicate = "case_eq"} : (!b1, !b1) -> !b1
+      %r_fire = "ac.bits.binary"(%r_guard, %r_available) {opcode = "and"} : (!b1, !b1) -> !b1
+      "ac.yield"(%r_fire, %r_one, %r_one) : (!b1, !b1, !b1) -> ()
+    }) {name = "pop", occurrence = #reader, ac.required_checks = [{id = #rid, kind = "guard_known", location = #span}], ac.sampled_admission = {clock_capture = 0 : i64, edge = "posedge", resets = [{capture = 1 : i64, kind = "async", polarity = "high"}], fire_result = 0 : i64, controls = [{kind = "callable_guard", id = #rid, invocation = [], predecessor = -1 : i64, path = {}}], body_checks = [], observations = []}} : (!b1, !b1, !b1) -> (!b1, !b1, !b1)
+)ir");
     size_t observation;
     while ((observation = text.find("    \"ac.observe\"")) != std::string::npos)
       text.erase(observation, text.find('\n', observation) - observation + 1);
