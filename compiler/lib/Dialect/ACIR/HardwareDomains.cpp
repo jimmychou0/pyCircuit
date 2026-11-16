@@ -18,6 +18,7 @@ class Resolver {
   detail::SourceCheckBudget budget;
   HardwareDomainPlan plan;
   DenseSet<Operation *> active;
+  bool forwardingBudgetExceeded = false;
   struct Scope {
     unsigned occurrence;
     HardwareBindings bindings;
@@ -33,6 +34,12 @@ class Resolver {
     return op->emitOpError() << "logical domain: " << reason;
   }
   FailureOr<unsigned> forwardedInput(Value value, unsigned depth = 0) {
+    if (forwardingBudgetExceeded)
+      return failure();
+    if (failed(budget.debit(8, value.getParentBlock()->getParentOp()))) {
+      forwardingBudgetExceeded = true;
+      return failure();
+    }
     if (depth > 128)
       return failure();
     if (auto argument = dyn_cast<BlockArgument>(value)) {
@@ -476,6 +483,25 @@ class Resolver {
         if (failed(visit(child, *childBindings, std::move(next),
                          std::move(childClocks), depth + 1)))
           return failure();
+        auto &childScope = *scopes[scope.children.lookup(instance)];
+        // Descendants have established dedicated pin roles. Carry only those
+        // roles through actual forwarding; ordinary data dependencies stay
+        // attached to the parent values and are checked at their data uses.
+        for (auto argument : child.getBody().front().getArguments()) {
+          if (failed(budget.debit(8, instance)))
+            return failure();
+          if (!childScope.controls.contains(argument))
+            continue;
+          auto input = instance->getOperand(argument.getArgNumber());
+          scope.controls.insert(input);
+          auto forwarded = forwardedInput(input);
+          if (forwardingBudgetExceeded)
+            return failure();
+          if (succeeded(forwarded) &&
+              *forwarded < module.getBody().front().getNumArguments())
+            scope.controls.insert(
+                module.getBody().front().getArgument(*forwarded));
+        }
       }
     }
     active.erase(module);
@@ -629,11 +655,14 @@ public:
         plan.clockInputs.push_back(index);
     }
     if (failed(
-            visit(plan.root, *bindings, std::move(root), std::move(values), 0)))
+            visit(plan.root, *bindings, std::move(root), std::move(values), 0)) ||
+        forwardingBudgetExceeded)
       return failure();
     for (auto &scope : scopes)
       if (failed(validate(*scope)))
         return failure();
+    if (forwardingBudgetExceeded)
+      return failure();
     return std::move(plan);
   }
 };

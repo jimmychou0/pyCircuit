@@ -568,6 +568,32 @@ TEST_F(StateResetValueTest, PublishBoundActualFIFOSystemForIndependentScoreboard
   EXPECT_TRUE(mlir::succeeded(ac::verifyHardwarePackage(*reloaded)));
 }
 
+TEST_F(StateResetValueTest, ForwardedResetRetainsOrdinaryOutputDomainOwnership) {
+  auto logical = mlir::parseSourceString<mlir::ModuleOp>(
+      genericFIFOSystemIR(true, true, true), &context);
+  ASSERT_TRUE(logical);
+  ASSERT_TRUE(mlir::succeeded(ac::verifyHardwareDomains(*logical)));
+  ac::ModuleOp wrapper;
+  logical->walk([&](ac::ModuleOp module) {
+    if (module.getSymName() == "reset_value.fixture.ForwardedFIFO") wrapper = module;
+  });
+  ASSERT_TRUE(wrapper);
+  auto &body = wrapper.getBody().front();
+  auto reset = body.getArgument(2);
+  ac::InstanceOp fifo;
+  wrapper.walk([&](ac::InstanceOp instance) { fifo = instance; });
+  ASSERT_TRUE(fifo);
+  ASSERT_EQ(fifo->getOperand(2), reset);
+  auto yield = mlir::cast<ac::YieldOp>(body.back());
+  // The same Bits1 value still supplies the child's dedicated reset pin, but
+  // returning it as read availability also creates an ordinary data use.
+  // Control-role forwarding must preserve that use's actual parent ownership.
+  yield->setOperand(1, reset);
+  mlir::ScopedDiagnosticHandler expectedFailure(
+      &context, [](mlir::Diagnostic &) { return mlir::success(); });
+  EXPECT_TRUE(mlir::failed(ac::verifyHardwareDomains(*logical)));
+}
+
 // Primitive test adapter: both endpoint clocks deliberately alias one actual
 // clock. Default W therefore owns the external payload and the read observation;
 // ordinary multi-domain timing remains covered by the independent scoreboards.
@@ -587,6 +613,16 @@ std::string fifoExternalPayloadIR(bool routed) {
   if (routed) {
     replace("\"ac.struct.create\"(%sequence, %checksum)",
             "\"ac.struct.create\"(%data, %checksum)");
+    // The independent drivers inspect ports directly. This ordinary hardware
+    // adapter needs no generated System log instrumentation or observation rows.
+    replace("observations = [{id = #wo, value_count = 3 : i64, path = {}}]",
+            "observations = []");
+    replace("observations = [{id = #ro, value_count = 4 : i64, path = {}}]",
+            "observations = []");
+    size_t observation;
+    while ((observation = text.find("    \"ac.observe\"")) != std::string::npos)
+      text.erase(observation, text.find('\n', observation) - observation + 1);
+
     replace("    \"ac.yield\"() : () -> ()", R"ir(
     %observed = "ac.struct.get"(%head) {field = "sequence"} : (!packet) -> !b9
     "ac.yield"(%observed, %ra) : (!b9, !b1) -> ()
