@@ -634,6 +634,53 @@ TEST_F(StateResetValueTest, FIFOEnableRegionYieldRequiresIndependentProof) {
   EXPECT_TRUE(mlir::failed(ac::verifyFinalHardwareCDCComponents(**expanded)));
 }
 
+TEST_F(StateResetValueTest, FIFOComponentRejectsMalformedForwardNodeWithoutNativeVerification) {
+  auto logical = mlir::parseSourceString<mlir::ModuleOp>(
+      genericFIFOSystemIR(true, true, true), &context);
+  ASSERT_TRUE(logical);
+  auto expanded = ac::materializeHardwareCDC(*logical);
+  ASSERT_TRUE(mlir::succeeded(expanded));
+  ac::CDCRefinementOp witness;
+  (*expanded)->walk([&](ac::CDCRefinementOp component) {
+    if (component.getLogicalKind() == "async_fifo") witness = component;
+  });
+  ASSERT_TRUE(witness);
+  ASSERT_TRUE(mlir::succeeded(ac::verifyHardwareCDCComponent(witness)));
+  mlir::Operation *forward = nullptr;
+  for (auto &operation : *witness->getBlock()) {
+    if (&operation == witness.getOperation()) break;
+    if (!mlir::isa<ac::InstanceOp>(operation) ||
+        !operation.hasAttr("ac.cdc_component")) continue;
+    for (auto input : operation.getOperands()) {
+      auto binary = input.getDefiningOp<ac::BitsBinaryOp>();
+      if (binary && binary->getBlock() == operation.getBlock() &&
+          operation.isBeforeInBlock(binary.getOperation()) &&
+          binary->isBeforeInBlock(witness.getOperation())) {
+        forward = binary;
+        break;
+      }
+    }
+    if (forward) break;
+  }
+  ASSERT_NE(forward, nullptr);
+  ASSERT_EQ(forward->getNumResults(), 1u);
+  // Keep every original SSA use alive, but replace the future node's expected
+  // position with a malformed zero-result binary. Earlier storage inputs must
+  // never index this node's missing result before the full shape preflight.
+  mlir::OpBuilder builder(forward);
+  mlir::OperationState malformed(forward->getLoc(), forward->getName().getStringRef());
+  malformed.addAttributes(forward->getAttrs());
+  malformed.addOperands(forward->getOperands());
+  builder.create(malformed);
+  forward->moveAfter(witness.getOperation());
+  mlir::ScopedDiagnosticHandler expectedFailure(
+      &context, [](mlir::Diagnostic &) { return mlir::success(); });
+  // Exercise the exported component check directly, without native validation
+  // sanitizing the malformed operation first.
+  EXPECT_TRUE(mlir::failed(ac::verifyHardwareCDCComponent(witness)));
+  EXPECT_TRUE(mlir::failed(ac::verifyFinalHardwareCDCComponents(**expanded)));
+}
+
 TEST_F(StateResetValueTest, ResourceSamplingAcceptsActualClockAliases) {
   auto text = genericFIFOSystemIR(true);
   auto replace = [&](const std::string &from, const std::string &to) {

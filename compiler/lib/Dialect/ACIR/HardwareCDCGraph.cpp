@@ -413,8 +413,6 @@ LogicalResult verifyNodes(ArrayRef<Node> equations,
         actual->getNumOperands() != equation.inputs.size() ||
         actual->getNumRegions() != (equation.body.empty() ? 0u : 1u) ||
         actual->getNumSuccessors()) return reject();
-    for (auto [ref, input] : llvm::zip(equation.inputs, actual->getOperands()))
-      if (resolve(ref, nodes, mapping, block) != input) return reject();
     if (!equation.body.empty()) {
       auto &region = actual->getRegion(0);
       if (!region.hasOneBlock()) return reject();
@@ -422,6 +420,16 @@ LogicalResult verifyNodes(ArrayRef<Node> equations,
       if (!llvm::equal(body.getArgumentTypes(), equation.arguments)) return reject();
       for (auto argument : body.getArguments())
         if (argument.getLoc() != source->getLoc()) return reject();
+    }
+  }
+  // Storage pins may refer forward. Establish every node's complete result
+  // inventory before resolving any reference in this scope, including in each
+  // independently checked TableMap body.
+  for (auto [equation, actual] : llvm::zip(equations, nodes)) {
+    for (auto [ref, input] : llvm::zip(equation.inputs, actual->getOperands()))
+      if (resolve(ref, nodes, mapping, block) != input) return reject();
+    if (!equation.body.empty()) {
+      auto &body = actual->getRegion(0).front();
       SmallVector<Operation *, 0> children;
       for (auto &child : body) children.push_back(&child);
       if (failed(verifyNodes(equation.body, children, mapping, source, budget, &body)))
