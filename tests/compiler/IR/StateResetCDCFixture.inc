@@ -488,20 +488,32 @@ std::string genericFIFOSystemIR(bool routed, bool mixed = false,
     text.insert(text.find("module attributes"), R"ir(
 #depth8 = #ac.static_expr<{kind = "literal", value = {kind = "integer", value = #ac.math_int<8>}, origin = #rootocc, location = #span}>
 #capacity = #ac.static_expr<{kind = "reference", ref = {kind = "parameter", owner = @"reset_value.fixture.GenericFIFO", name = "CAPACITY"}, origin = #occ, location = #span}>
-#root_capacity = #ac.static_expr<{kind = "reference", ref = {kind = "parameter", owner = @"reset_value.fixture.Held", name = "CAPACITY"}, origin = #rootocc, location = #span}>
+#forwarded = {site = {definition = @"reset_value.fixture.ForwardedFIFO", ast_path = []}, expansion = []}
+#forwarded_instance = {site = {definition = @"reset_value.fixture.ForwardedFIFO", ast_path = [{kind = "index", value = 1 : i64}]}, expansion = []}
+#forwarded_capacity = #ac.static_expr<{kind = "reference", ref = {kind = "parameter", owner = @"reset_value.fixture.ForwardedFIFO", name = "CAPACITY"}, origin = #forwarded, location = #span}>
 )ir");
     if (routed) replace(text, "parameters = [#fifo_depth], type_arguments = [!payload]",
             "parameters = [#capacity], type_arguments = [!payload]");
     replace(text, "source_owner = #owner, parameters = [], type_parameters = [\"T\"]",
             "source_owner = #owner, parameters = [{name = \"CAPACITY\", type = !ac.math_int, default = #fifo_depth}], type_parameters = [\"T\"]");
-    replace(text, "source_owner = #owner, parameters = [], type_parameters = []",
-            "source_owner = #owner, parameters = [{name = \"CAPACITY\", type = !ac.math_int}], type_parameters = []");
-    if (mixed)
-      replace(text, "parameters = [], type_arguments = [!b9]",
-              "parameters = [#root_capacity], type_arguments = [!b9]");
-    if (routed)
-      replace(text, "callee = @\"reset_value.fixture.Held\", parameters = [], type_arguments = []",
-              "callee = @\"reset_value.fixture.Held\", parameters = [#depth8], type_arguments = []");
+    if (mixed) {
+      // The System stays closed. This ordinary provider forwards its actual
+      // integer to the same GenericFIFO definition used directly by Packet4.
+      replace(text, "callee = @\"reset_value.fixture.GenericFIFO\", parameters = [], type_arguments = [!b9]",
+              "callee = @\"reset_value.fixture.ForwardedFIFO\", parameters = [#depth8], type_arguments = []");
+      text += R"ir(
+  "ac.module"() ({
+  ^bb0(%wclk: !b1, %rclk: !b1, %rst: !b1):
+    %head, %available = "ac.instance"(%wclk, %rclk, %rst) {instance_name = "fifo", callee = @"reset_value.fixture.GenericFIFO", parameters = [#forwarded_capacity], type_arguments = [!b9], occurrence = #forwarded_instance
+)ir";
+      if (routed) text += R"ir(, ac.domain_bindings = {W = "W", R = "R"})ir";
+      text += R"ir(} : (!b1, !b1, !b1) -> (!b9, !b1)
+    "ac.yield"(%head, %available) : (!b9, !b1) -> ()
+  }) {sym_name = "reset_value.fixture.ForwardedFIFO", source_owner = #owner, parameters = [{name = "CAPACITY", type = !ac.math_int}], type_parameters = [], function_type = (!b1, !b1, !b1) -> (!b9, !b1), input_names = ["write_clock", "pyc_clk", "pyc_rst"], output_names = ["head", "read_available"], ac.domain_inputs = {clock = 1 : i64, reset = 2 : i64}, ac.origin = #forwarded, ac.declaration_role = "definition"
+)ir";
+      if (routed) text += R"ir(, ac.domain_params = ["W", "R"], ac.default_domain = "R")ir";
+      text += "} : () -> ()\n";
+    }
   }
   return text + "}\n";
 }
@@ -571,7 +583,7 @@ std::string fifoExternalPayloadIR(bool routed) {
   const auto samplesEnd = text.find("} : () -> ()", samples);
   text.erase(samples, samplesEnd - samples);
   replace("^bb0(%wclk: !b1, %rclk: !b1, %rst: !b1):",
-          "^bb0(%wclk: !b1, %rclk: !b1, %rst: !b1, %data: !b9):");
+          "^bb0(%data: !b9, %wclk: !b1, %rclk: !b1, %rst: !b1):");
   if (routed) {
     replace("\"ac.struct.create\"(%sequence, %checksum)",
             "\"ac.struct.create\"(%data, %checksum)");
@@ -580,7 +592,7 @@ std::string fifoExternalPayloadIR(bool routed) {
     "ac.yield"(%observed, %ra) : (!b9, !b1) -> ()
 )ir");
     replace("ac.domain_clock_inputs = {W = 0 : i32, R = 1 : i32}",
-            "ac.default_domain = \"W\", ac.domain_clock_inputs = {W = 0 : i32, R = 0 : i32}");
+            "ac.default_domain = \"W\", ac.domain_clock_inputs = {W = 1 : i32, R = 1 : i32}");
     // Change operand uses, never the declaration of the otherwise unused pin.
     const auto start = text.find("    %zero =");
     const auto end = text.find("}) {sym_name", start);
@@ -598,9 +610,11 @@ std::string fifoExternalPayloadIR(bool routed) {
 )ir");
   }
   replace("function_type = (!b1, !b1, !b1) -> ()",
-          "function_type = (!b1, !b1, !b1, !b9) -> (!b9, !b1)");
+          "function_type = (!b9, !b1, !b1, !b1) -> (!b9, !b1)");
   replace("input_names = [\"write_clock\", \"pyc_clk\", \"pyc_rst\"]",
-          "input_names = [\"write_clock\", \"pyc_clk\", \"pyc_rst\", \"data\"]");
+          "input_names = [\"data\", \"write_clock\", \"pyc_clk\", \"pyc_rst\"]");
+  replace("ac.domain_inputs = {clock = 1 : i64, reset = 2 : i64}",
+          "ac.domain_inputs = {clock = 2 : i64, reset = 3 : i64}");
   replace("output_names = []", "output_names = [\"head\", \"available\"]");
   return text;
 }

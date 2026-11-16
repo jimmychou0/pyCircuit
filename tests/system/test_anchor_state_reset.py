@@ -661,7 +661,7 @@ def test_mixed_actual_fifo_saved_anchor_independent_scoreboards(
         scalar = _fifo_scoreboard(
             records,
             zero_payload=True,
-            push_instance="root/scalar_fifo",
+            push_instance="root/scalar_fifo/fifo" if bound else "root/scalar_fifo",
             pop_event="scalar fifo pop",
             capacity=8 if bound else 4,
         )
