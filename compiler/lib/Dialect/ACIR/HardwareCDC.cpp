@@ -4,6 +4,7 @@
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/Support/MathExtras.h"
 using namespace mlir;
 namespace acir::ac {
 namespace {
@@ -40,11 +41,28 @@ LogicalResult verifyCDCRefinementIntents(
     return failure();
   if (witness.getLogicalKind() != "async_fifo")
     return success();
+  if (failed(verifyCDCDepth(analysis,
+          witness->getAttrOfType<StaticExprAttr>("depth"), bindings, witness)))
+    return failure();
   return verifyFIFOIntents(analysis, witness,
                           {witness.getOperand(4), witness.getOperand(5)},
                           bindings);
 }
 
+LogicalResult verifyCDCDepth(const HardwareAnalysis &analysis,
+    StaticExprAttr depth, const HardwareBindings &bindings, Operation *site) {
+  if (!depth) return site->emitOpError("requires typed FIFO DEPTH");
+  if (!analysis.isStaticEvaluable(depth, bindings)) return success();
+  auto evaluated = analysis.evaluateStatic(depth, bindings, site);
+  if (failed(evaluated)) return failure();
+  auto number = dyn_cast<MathIntAttr>(*evaluated);
+  if (!number) return site->emitOpError("FIFO DEPTH must be an integer");
+  llvm::APSInt value(number.getCanonicalValue());
+  if (value.isNegative() || value.getActiveBits() > 64 ||
+      value.getZExtValue() < 2 || !llvm::isPowerOf2_64(value.getZExtValue()))
+    return site->emitOpError("selected CDC FIFO implementation supports power-of-two depth >= 2 fitting u64");
+  return success();
+}
 bool isCDCPrimitive(Operation *declaration) {
   auto imported = dyn_cast_or_null<ModuleImportOp>(declaration);
   auto kind = imported ? imported->getAttrOfType<StringAttr>("primitive_kind")
@@ -185,6 +203,7 @@ FailureOr<CDCPrimitiveLayout> getCDCPrimitiveLayout(
                               other.getAttr("occurrence") == instance.getOccurrence()))
       return instance.emitOpError("CDC resource identity must be unique within its owner");
   if (fifo) {
+    result.depthExpression = cast<StaticExprAttr>(instance.getParameters()[0]);
     Attribute depth = bindings->integers.lookup("DEPTH");
     if (auto expression = dyn_cast_or_null<StaticExprAttr>(depth)) {
       if (!analysis.isStaticEvaluable(expression, *bindings)) return result;

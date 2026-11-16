@@ -212,6 +212,22 @@ correspondence also authenticates AsyncReg's physically unused source clock.
 A CDC label alone never permits an otherwise illegal crossing. The first FIFO
 recipe supports power-of-two depths of at least two; other positive capacities
 reject at refinement without changing the logical request or existing outputs.
+DEPTH remains a lexical StaticExpr through refinement. A symbolic-shape
+Collection holds the payload banks, TableMap generates per-lane write enables,
+and TableGet selects the head. Address and pointer widths use the same static
+expression machinery as ordinary parameterized hardware. Each actual binding
+checks the recipe geometry, including when reloading final hardware; shared
+definitions keep their integer and payload type parameters. Refinement does not
+specialize a definition using its first actual or remove unused generic bodies.
+
+Component implementation 2 uses this recipe for both literal and symbolic
+depths, with a typed StaticExpr depth in the final witness. Obsolete experimental
+implementation-1 components reject explicitly. Logical routed contract 7 and
+saved schema 6 are unchanged. Source correspondence and standalone component
+verification reconstruct TableMap regions, argument types, captures and yields
+as well as surrounding nodes and pins. Pointer state initializes and resets to
+known zero and only advances on admitted known controls; successful reads thus
+have known addresses while preserving arbitrary X/Z payload bits.
 
 Concrete packed-zero carriers use existing Bits constants, `enum.from_bits`,
 recursive Struct construction and Table splats. Enum membership or a nominal

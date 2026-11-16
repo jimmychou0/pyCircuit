@@ -5,7 +5,6 @@
 #include "pycircuit/Dialect/ACIR/HardwareCDC.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/Support/MathExtras.h"
 
 using namespace mlir;
 namespace acir::ac {
@@ -29,6 +28,8 @@ class Equations {
   Ref zeroBit, oneBit;
   llvm::SmallVector<Value> inputs;
   StaticExprAttr literal(uint64_t n) {
+    if (failed(budget.debit(128, circuit.source)))
+      valid = false;
     auto provenance = bit.getWidth().getTree();
     auto number = MathIntAttr::get(b.getContext(),
                                    llvm::APSInt(llvm::APInt(64, n), true));
@@ -44,9 +45,38 @@ class Equations {
              b.getNamedAttr("origin", circuit.source->getAttr("occurrence")),
              b.getNamedAttr("location", provenance.get("location"))}));
   }
-  Type bits(unsigned width) {
-    return BitsType::get(b.getContext(), literal(width));
+  StaticExprAttr expression(StringRef kind, ArrayRef<NamedAttribute> fields) {
+    if (failed(budget.debit(128 + 32 * fields.size(), circuit.source)))
+      valid = false;
+    NamedAttrList tree(fields);
+    tree.set("kind", b.getStringAttr(kind));
+    tree.set("origin", circuit.source->getAttr("occurrence"));
+    tree.set("location", bit.getWidth().getTree().get("location"));
+    return StaticExprAttr::get(b.getContext(), tree.getDictionary(b.getContext()));
   }
+  StaticExprAttr arithmetic(StringRef op, StaticExprAttr lhs, StaticExprAttr rhs) {
+    return expression("binary", {b.getNamedAttr("operator", b.getStringAttr(op)),
+        b.getNamedAttr("lhs", lhs), b.getNamedAttr("rhs", rhs)});
+  }
+  StaticExprAttr select(StaticExprAttr condition, StaticExprAttr yes, StaticExprAttr no) {
+    return expression("select", {b.getNamedAttr("condition", condition),
+        b.getNamedAttr("yes", yes), b.getNamedAttr("no", no)});
+  }
+  StaticExprAttr addressWidth() {
+    SmallVector<StaticExprAttr> terms;
+    auto depth = cast<StaticExprAttr>(circuit.depth);
+    for (unsigned k = 0; k < 64; ++k)
+      terms.push_back(select(arithmetic("gt", depth, literal(uint64_t(1) << k)),
+                             literal(1), literal(0)));
+    while (terms.size() > 1) {
+      SmallVector<StaticExprAttr> next;
+      for (unsigned i = 0; i < terms.size(); i += 2)
+        next.push_back(arithmetic("add", terms[i], terms[i + 1]));
+      terms = std::move(next);
+    }
+    return select(arithmetic("gt", depth, literal(1)), terms[0], literal(1));
+  }
+  Type bits(StaticExprAttr width) { return BitsType::get(b.getContext(), width); }
   Ref node(StringRef name, TypeRange types, ArrayRef<Ref> inputs = {},
            ArrayRef<NamedAttribute> attrs = {}) {
     if (failed(budget.debit(128 + 32 * inputs.size(), circuit.source)))
@@ -64,6 +94,10 @@ class Equations {
     return value.external ? value.external.getType()
                           : circuit.nodes[value.node].types[value.result];
   }
+  Ref constant(Type type, StaticExprAttr value) {
+    return node(BitsConstantOp::getOperationName(), {type}, {},
+                {b.getNamedAttr("value", value)});
+  }
   Ref constant(Type type, uint64_t value) {
     return node(BitsConstantOp::getOperationName(), {type}, {},
                 {b.getNamedAttr("value", literal(value))});
@@ -80,7 +114,7 @@ class Equations {
     return node(BitsCompareOp::getOperationName(), {bit}, {lhs, rhs},
                 {b.getNamedAttr("predicate", b.getStringAttr(predicate))});
   }
-  Ref slice(Ref input, unsigned width) {
+  Ref slice(Ref input, StaticExprAttr width) {
     return node(BitsExtractOp::getOperationName(), {bits(width)}, {input},
                 {b.getNamedAttr("low", literal(0))});
   }
@@ -164,7 +198,7 @@ class Equations {
                 {b.getNamedAttr("resource",
                                 circuit.source->getAttr("occurrence")),
                  b.getNamedAttr("role", b.getStringAttr(role)),
-                 b.getNamedAttr("implementation", b.getI64IntegerAttr(1))}))};
+                 b.getNamedAttr("implementation", b.getI64IntegerAttr(2))}))};
     if (resettable)
       attrs.push_back(b.getNamedAttr(
           "reset_polarity", circuit.source->getAttr("reset_polarity")));
@@ -185,7 +219,7 @@ class Equations {
                 {clock, reset, oneBit, initial, initial, initial}, attrs);
   }
   void drive(Ref state, Ref data, Ref enable) {
-    if (auto table = dyn_cast<TableType>(type(state)))
+    if (auto table = dyn_cast<TableType>(type(state)); table && !isa<TableType>(type(enable)))
       enable =
           node(TableSplatOp::getOperationName(),
                {TableType::get(b.getContext(), table.getShape(), type(enable))},
@@ -205,7 +239,7 @@ class Equations {
   }
 
 public:
-  Equations(Operation *source, StringRef kind, std::optional<uint64_t> depth,
+  Equations(Operation *source, StringRef kind, Attribute depth,
             ArrayRef<Value> inputs, detail::SourceCheckBudget &budget)
       : circuit{source, kind.str(), depth, {}, {}}, b(source->getContext()),
         analysis(source->getParentOfType<mlir::ModuleOp>()), budget(budget),
@@ -227,13 +261,11 @@ public:
       drive(second, merge(released, first, zeroBit), oneBit);
       circuit.outputs.push_back(second);
     } else {
-      uint64_t depth = *circuit.depth;
-      if (depth < 2 || !llvm::isPowerOf2_64(depth))
-        return source->emitOpError("selected CDC FIFO implementation supports "
-                                   "power-of-two depth >= 2");
-      unsigned addressWidth = llvm::Log2_64(depth),
-               pointerWidth = addressWidth + 1;
-      auto pointerType = bits(pointerWidth);
+      auto depth = cast<StaticExprAttr>(circuit.depth);
+      if (failed(verifyCDCDepth(analysis, depth, {}, source)))
+        return failure();
+      auto address = addressWidth();
+      auto pointerType = bits(arithmetic("add", address, literal(1)));
       auto pointerZero = constant(pointerType, 0),
            pointerOne = constant(pointerType, 1);
       Ref writeClock(inputs[0]), readClock(inputs[1]);
@@ -260,7 +292,8 @@ public:
       auto syncedWrite = sync("read.pointer", wg, readClock, reset, readEdge);
       auto full = equal(
           wg, binary("xor", syncedRead,
-                     constant(pointerType, uint64_t(3) << (pointerWidth - 2))));
+                     constant(pointerType, arithmetic("shl", literal(3),
+                         arithmetic("sub", address, literal(1))))));
       auto empty = equal(rg, syncedWrite);
       auto writeAvailable = binary(
           "and", binary("and", writeReleased, peerReadReleased), invert(full));
@@ -288,23 +321,45 @@ public:
       drive(rb, nextRead, pop);
       drive(rg, binary("xor", nextRead, binary("lshr", nextRead, pointerOne)),
             pop);
-      auto writeAddress = slice(wb, addressWidth),
-           readAddress = slice(rb, addressWidth);
+      auto writeAddress = slice(wb, address),
+           readAddress = slice(rb, address);
       auto payloadZero = zero(payloadType);
-      auto payloadInitial = payloadZero;
-      Ref head = payloadZero;
-      for (uint64_t slot = 0; slot < depth; ++slot) {
-        if (!valid)
-          return failure();
-        auto address = constant(bits(addressWidth), slot);
-        auto bank =
-            storage(("payload." + Twine(slot)).str(), payloadType, writeClock,
-                    reset, writeEdge, payloadInitial, false);
-        drive(bank, Ref(pushPayload),
-              binary("and", push, equal(writeAddress, address)));
-        head = merge(binary("and", readAvailable, equal(readAddress, address)),
-                     bank, head);
-      }
+      auto shape = b.getArrayAttr({depth});
+      auto tableType = TableType::get(b.getContext(), shape, payloadType);
+      auto splat = [&](Ref input) {
+        return node(TableSplatOp::getOperationName(),
+                    {TableType::get(b.getContext(), shape, type(input))}, {input},
+                    {b.getNamedAttr("shape", shape)});
+      };
+      auto bank = storage("payload", tableType, writeClock, reset, writeEdge,
+                          splat(payloadZero), false);
+      auto enables = node(TableMapOp::getOperationName(),
+          {TableType::get(b.getContext(), shape, bit)}, {writeAddress, push},
+          {b.getNamedAttr("shape", shape),
+           b.getNamedAttr("operandSegmentSizes", b.getDenseI32ArrayAttr({0, 2}))});
+      auto &map = circuit.nodes[enables.node];
+      map.arguments = {bits(address), bits(address), bit};
+      if (failed(budget.debit(512, source))) valid = false;
+      Node compare;
+      compare.operation = BitsCompareOp::getOperationName().str();
+      compare.types = {bit};
+      compare.inputs = {Ref::blockArgument(0), Ref::blockArgument(1)};
+      compare.attributes.set("predicate", b.getStringAttr("eq"));
+      map.body.push_back(std::move(compare));
+      Node gate;
+      gate.operation = BitsBinaryOp::getOperationName().str();
+      gate.types = {bit};
+      gate.inputs = {Ref(0), Ref::blockArgument(2)};
+      gate.attributes.set("opcode", b.getStringAttr("and"));
+      map.body.push_back(std::move(gate));
+      Node yield;
+      yield.operation = YieldOp::getOperationName().str();
+      yield.inputs = {Ref(1)};
+      map.body.push_back(std::move(yield));
+      drive(bank, splat(Ref(pushPayload)), enables);
+      auto selected = node(TableGetOp::getOperationName(), {payloadType, bit},
+                           {bank, readAddress});
+      auto head = merge(readAvailable, selected, payloadZero);
       circuit.outputs = {head, writeAvailable, readAvailable};
     }
     if (!valid)
@@ -320,31 +375,60 @@ FailureOr<Circuit> getCircuit(Operation *source, SourceCheckBudget &budget) {
     auto layout = getCDCPrimitiveLayout(instance);
     if (failed(layout))
       return failure();
-    if (layout->isFIFO() && !layout->depth)
-      return source->emitOpError("CDC recipe requires a resolved lexical DEPTH");
     SmallVector<Value> inputs{layout->sourceClock(), layout->targetClock(),
                               layout->reset(), layout->input()};
     if (layout->isFIFO()) {
       inputs.push_back(layout->pushIntent());
       inputs.push_back(layout->popIntent());
     }
-    return Equations(source, layout->kind, layout->depth, inputs, budget).run();
+    return Equations(source, layout->kind, layout->depthExpression, inputs, budget).run();
   }
   auto kind = source->getAttrOfType<StringAttr>("logical_kind");
   if (!isa<CDCRefinementOp>(source) || !kind)
     return failure();
-  std::optional<uint64_t> depth;
-  if (kind.getValue() == "async_fifo")
-    depth = source->getAttrOfType<IntegerAttr>("depth").getInt();
+  Attribute depth = source->getAttr("depth");
   SmallVector<Value> inputs;
   llvm::append_range(inputs, source->getOperands().take_front(
                                 kind.getValue() == "async_fifo" ? 6 : 4));
   return Equations(source, kind.getValue(), depth, inputs, budget).run();
 }
 Value resolve(Ref ref, const SmallVector<Operation *, 0> &nodes,
-              const IRMapping &mapping) {
+              const IRMapping &mapping, Block *block) {
+  if (ref.argument) return block->getArgument(ref.result);
   return ref.external ? mapping.lookup(ref.external)
                       : nodes[ref.node]->getResult(ref.result);
+}
+LogicalResult verifyNodes(ArrayRef<Node> equations,
+    const SmallVector<Operation *, 0> &nodes, const IRMapping &mapping,
+    Operation *source, SourceCheckBudget &budget, Block *block) {
+  auto reject = [&]() { return source->emitOpError("CDC component equation/region correspondence differs"); };
+  if (equations.size() != nodes.size()) return reject();
+  for (auto [equation, actual] : llvm::zip(equations, nodes)) {
+    if (failed(budget.debit(64 + 16 * actual->getNumOperands() +
+                           16 * equation.arguments.size(), source))) return failure();
+    if (actual->getName().getStringRef() != equation.operation ||
+        actual->getAttrDictionary() != equation.attributes.getDictionary(source->getContext()) ||
+        !llvm::equal(actual->getResultTypes(), equation.types) ||
+        actual->getLoc() != source->getLoc() ||
+        actual->getNumOperands() != equation.inputs.size() ||
+        actual->getNumRegions() != (equation.body.empty() ? 0u : 1u) ||
+        actual->getNumSuccessors()) return reject();
+    for (auto [ref, input] : llvm::zip(equation.inputs, actual->getOperands()))
+      if (resolve(ref, nodes, mapping, block) != input) return reject();
+    if (!equation.body.empty()) {
+      auto &region = actual->getRegion(0);
+      if (!region.hasOneBlock()) return reject();
+      auto &body = region.front();
+      if (!llvm::equal(body.getArgumentTypes(), equation.arguments)) return reject();
+      for (auto argument : body.getArguments())
+        if (argument.getLoc() != source->getLoc()) return reject();
+      SmallVector<Operation *, 0> children;
+      for (auto &child : body) children.push_back(&child);
+      if (failed(verifyNodes(equation.body, children, mapping, source, budget, &body)))
+        return failure();
+    }
+  }
+  return success();
 }
 } // namespace detail::cdc
 
@@ -372,7 +456,7 @@ LogicalResult verifyFinalHardwareCDCComponent(Operation *witness) {
   auto implementation = witness->getAttrOfType<IntegerAttr>("implementation");
   bool reg = kind && kind.getValue() == "async_reg";
   if (!kind || (!reg && kind.getValue() != "async_fifo") || !implementation ||
-      implementation.getInt() != 1 ||
+      implementation.getInt() != 2 ||
       witness->getNumOperands() != (reg ? 5u : 9u) ||
       witness->getNumResults() || witness->getNumRegions())
     return reject();
@@ -392,9 +476,9 @@ LogicalResult verifyFinalHardwareCDCComponent(Operation *witness) {
   for (auto operand : witness->getOperands())
     identity.map(operand, operand);
   llvm::DenseSet<Operation *> owned(nodes.begin(), nodes.end());
-  for (auto [equation, actual] : llvm::zip(equations->nodes, nodes))
-    if (!llvm::equal(actual->getResultTypes(), equation.types))
-      return reject();
+  if (failed(detail::cdc::verifyNodes(equations->nodes, nodes, identity,
+                                      witness, budget)))
+    return failure();
   llvm::DenseSet<Value> exposed;
   unsigned outputBase = reg ? 4 : 6;
   for (auto [i, ref] : llvm::enumerate(equations->outputs)) {
@@ -403,17 +487,7 @@ LogicalResult verifyFinalHardwareCDCComponent(Operation *witness) {
       return reject();
     exposed.insert(output);
   }
-  for (auto [equation, actual] : llvm::zip(equations->nodes, nodes)) {
-    if (actual->getName().getStringRef() != equation.operation ||
-        actual->getAttrDictionary() !=
-            equation.attributes.getDictionary(witness->getContext()) ||
-        !llvm::equal(actual->getResultTypes(), equation.types) ||
-        actual->getNumOperands() != equation.inputs.size() ||
-        actual->getNumRegions() || actual->getNumSuccessors())
-      return reject();
-    for (auto [ref, input] : llvm::zip(equation.inputs, actual->getOperands()))
-      if (resolve(ref, nodes, identity) != input)
-        return reject();
+  for (auto *actual : nodes) {
     for (auto result : actual->getResults())
       for (auto *user : result.getUsers())
         if (user != witness && !owned.contains(user) &&

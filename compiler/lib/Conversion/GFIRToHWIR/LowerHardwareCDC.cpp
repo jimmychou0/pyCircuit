@@ -90,9 +90,9 @@ DictionaryAttr witnessAttributes(const Circuit &circuit) {
           b.getNamedAttr("declaration",
                          provenance(declaration->getAttrDictionary(), b))}));
   attributes.set("logical_kind", b.getStringAttr(circuit.kind));
-  attributes.set("implementation", b.getI64IntegerAttr(1));
+  attributes.set("implementation", b.getI64IntegerAttr(2));
   if (circuit.depth)
-    attributes.set("depth", b.getI64IntegerAttr(*circuit.depth));
+    attributes.set("depth", circuit.depth);
   return attributes.getDictionary(b.getContext());
 }
 Operation *firstResource(mlir::ModuleOp package) {
@@ -154,6 +154,7 @@ materializeHardwareCDC(mlir::ModuleOp logical,
       OperationState state(circuit.source->getLoc(), node.operation);
       state.addTypes(node.types);
       state.addAttributes(node.attributes);
+      if (!node.body.empty()) state.addRegion();
       nodes.push_back(b.create(state));
     }
     for (auto [original, ref] :
@@ -171,6 +172,23 @@ materializeHardwareCDC(mlir::ModuleOp logical,
       for (auto ref : equation.inputs)
         inputs.push_back(resolve(ref, nodes, mapping));
       operation->setOperands(inputs);
+      if (!equation.body.empty()) {
+        auto *block = new Block;
+        operation->getRegion(0).push_back(block);
+        for (auto type : equation.arguments)
+          block->addArgument(type, circuit.source->getLoc());
+        OpBuilder bodyBuilder(logical.getContext());
+        bodyBuilder.setInsertionPointToEnd(block);
+        SmallVector<Operation *, 0> children;
+        for (auto &child : equation.body) {
+          OperationState state(circuit.source->getLoc(), child.operation);
+          state.addTypes(child.types);
+          state.addAttributes(child.attributes);
+          for (auto ref : child.inputs)
+            state.addOperands(resolve(ref, children, mapping, block));
+          children.push_back(bodyBuilder.create(state));
+        }
+      }
     }
     auto *declaration = mapping.lookup(circuit.source);
     OpBuilder witnessBuilder(declaration);
@@ -194,6 +212,9 @@ materializeHardwareCDC(mlir::ModuleOp logical,
   });
   for (auto *imported : imports)
     imported->erase();
+  // Reuse bound routed admission for every retained generic occurrence.
+  if (failed(verifyRoutedPackage(*result, limits)))
+    return failure();
   return std::move(result);
 }
 namespace {
@@ -270,7 +291,8 @@ class Correspondence {
                   actual->getAttrDictionary() !=
                       node.attributes.getDictionary(op.getContext()) ||
                   !llvm::equal(actual->getResultTypes(), node.types) ||
-                  actual->getLoc() != op.getLoc() || actual->getNumRegions() ||
+                  actual->getLoc() != op.getLoc() ||
+                  actual->getNumRegions() != (node.body.empty() ? 0u : 1u) ||
                   actual->getNumSuccessors())
                 return reject(
                     "generated component kind/type/policy/identity differs");
@@ -352,16 +374,9 @@ public:
           return reject("resource witness SSA connection differs");
       if (failed(verifyHardwareCDCComponent(witness)))
         return failure();
-      for (auto [equation, actual] :
-           llvm::zip(expansion.circuit.nodes, expansion.nodes)) {
-        if (equation.inputs.size() != actual->getNumOperands())
-          return reject("component pin inventory differs");
-        for (auto [ref, input] :
-             llvm::zip(equation.inputs, actual->getOperands()))
-          if (resolve(ref, expansion.nodes, mapping) != input)
-            return reject(
-                "component equation/clock/reset/enable connection differs");
-      }
+      if (failed(detail::cdc::verifyNodes(expansion.circuit.nodes,
+              expansion.nodes, mapping, source, budget)))
+        return failure();
     }
     return success();
   }
@@ -371,7 +386,8 @@ LogicalResult
 verifyHardwareCDCMaterialization(mlir::ModuleOp logical,
                                  mlir::ModuleOp expanded,
                                  HardwareSourceCheckLimits limits) {
-  if (!expanded || failed(verifyRoutedPackage(logical, limits)))
+  if (!expanded || failed(verifyRoutedPackage(logical, limits)) ||
+      failed(verifyRoutedPackage(expanded, limits)))
     return failure();
   return Correspondence(logical, expanded, limits).run();
 }

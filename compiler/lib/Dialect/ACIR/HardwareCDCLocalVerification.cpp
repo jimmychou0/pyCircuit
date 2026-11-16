@@ -71,7 +71,7 @@ LogicalResult verifyCDCRefinementContract(Operation *operation) {
   if (witness.getLogicalKind() != "async_reg" &&
       witness.getLogicalKind() != "async_fifo")
     return witness.emitOpError("unknown logical CDC kind");
-  if (witness.getImplementation() != 1 ||
+  if (witness.getImplementation() != 2 ||
       witness.getNumOperands() != (reg ? 5u : 9u) ||
       witness->getNumResults() || witness->getNumRegions() ||
       witness->getNumSuccessors())
@@ -100,9 +100,8 @@ LogicalResult verifyCDCRefinementContract(Operation *operation) {
       return failure();
   }
   if (!reg) {
-    auto depth = witness->getAttrOfType<IntegerAttr>("depth");
-    if (!depth || !depth.getType().isSignlessInteger(64) ||
-        depth.getInt() <= 0 ||
+    auto depth = witness->getAttrOfType<StaticExprAttr>("depth");
+    if (!depth ||
         !areEquivalentHardwareTypes(witness.getOperand(3).getType(),
                                     witness.getOperand(6).getType()))
       return witness.emitOpError("invalid FIFO witness token/capacity");

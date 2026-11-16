@@ -363,7 +363,8 @@ module attributes {ac.stage = "routed", ac.routed_contract = 7 : i64, ac.source_
   }
 }
 
-std::string genericFIFOSystemIR(bool routed, bool mixed = false) {
+std::string genericFIFOSystemIR(bool routed, bool mixed = false,
+                                bool variableDepth = false) {
   auto replace = [](std::string &text, const std::string &from, const std::string &to) {
     const auto position = text.find(from);
     EXPECT_NE(position, std::string::npos);
@@ -483,6 +484,25 @@ std::string genericFIFOSystemIR(bool routed, bool mixed = false) {
   text += samples + "} : () -> ()\n";
   if (routed)
     text += "\"ac.system\"() {entry = {callee = @\"reset_value.fixture.Held\", parameters = [], type_arguments = []}, domain = \"default\"} : () -> ()\n";
+  if (variableDepth) {
+    text.insert(text.find("module attributes"), R"ir(
+#depth8 = #ac.static_expr<{kind = "literal", value = {kind = "integer", value = #ac.math_int<8>}, origin = #rootocc, location = #span}>
+#capacity = #ac.static_expr<{kind = "reference", ref = {kind = "parameter", owner = @"reset_value.fixture.GenericFIFO", name = "CAPACITY"}, origin = #occ, location = #span}>
+#root_capacity = #ac.static_expr<{kind = "reference", ref = {kind = "parameter", owner = @"reset_value.fixture.Held", name = "CAPACITY"}, origin = #rootocc, location = #span}>
+)ir");
+    if (routed) replace(text, "parameters = [#fifo_depth], type_arguments = [!payload]",
+            "parameters = [#capacity], type_arguments = [!payload]");
+    replace(text, "source_owner = #owner, parameters = [], type_parameters = [\"T\"]",
+            "source_owner = #owner, parameters = [{name = \"CAPACITY\", type = !ac.math_int, default = #fifo_depth}], type_parameters = [\"T\"]");
+    replace(text, "source_owner = #owner, parameters = [], type_parameters = []",
+            "source_owner = #owner, parameters = [{name = \"CAPACITY\", type = !ac.math_int}], type_parameters = []");
+    if (mixed)
+      replace(text, "parameters = [], type_arguments = [!b9]",
+              "parameters = [#root_capacity], type_arguments = [!b9]");
+    if (routed)
+      replace(text, "callee = @\"reset_value.fixture.Held\", parameters = [], type_arguments = []",
+              "callee = @\"reset_value.fixture.Held\", parameters = [#depth8], type_arguments = []");
+  }
   return text + "}\n";
 }
 
@@ -513,6 +533,105 @@ TEST_F(StateResetValueTest, PublishMixedActualFIFOSystemForIndependentScoreboard
   EXPECT_TRUE(mlir::isa<ac::BitsType>(scalar.getResult(0).getType()));
   publishSaved(genericFIFOSystemIR(false, true), routedText,
                "PYCIRCUIT_TEST_MIXED_ACTUAL_FIFO_ANCHOR");
+}
+
+TEST_F(StateResetValueTest, PublishBoundActualFIFOSystemForIndependentScoreboards) {
+  publishSaved(genericFIFOSystemIR(false, true, true),
+               genericFIFOSystemIR(true, true, true),
+               "PYCIRCUIT_TEST_BOUND_ACTUAL_FIFO_ANCHOR");
+  // Reload final into a fresh context: actual restrictions and nominal types
+  // must remain verifiable without an in-memory producer plan.
+  auto logical = mlir::parseSourceString<mlir::ModuleOp>(
+      genericFIFOSystemIR(true, true, true), &context);
+  ASSERT_TRUE(logical);
+  const auto before = print(logical->getOperation());
+  auto final = acir::detail::refineRoutedHardware(*logical);
+  ASSERT_TRUE(mlir::succeeded(final));
+  EXPECT_EQ(print(logical->getOperation()), before);
+  mlir::MLIRContext fresh;
+  fresh.loadDialect<ac::ACIRDialect, gf::GFIRDialect>();
+  auto reloaded = mlir::parseSourceString<mlir::ModuleOp>(
+      print((*final)->getOperation()), &fresh);
+  ASSERT_TRUE(reloaded);
+  EXPECT_TRUE(mlir::succeeded(ac::verifyHardwarePackage(*reloaded)));
+}
+
+// Primitive test adapter: both endpoint clocks deliberately alias one actual
+// clock. Default W therefore owns the external payload and the read observation;
+// ordinary multi-domain timing remains covered by the independent scoreboards.
+std::string fifoExternalPayloadIR(bool routed) {
+  auto text = fifoSystemIR(routed);
+  auto replace = [&](const std::string &from, const std::string &to) {
+    const auto position = text.find(from);
+    EXPECT_NE(position, std::string::npos);
+    if (position != std::string::npos) text.replace(position, from.size(), to);
+  };
+  replace(", ac.root_kind = \"system\"", "");
+  const auto samples = text.find(", ac.system_samples");
+  const auto samplesEnd = text.find("} : () -> ()", samples);
+  text.erase(samples, samplesEnd - samples);
+  replace("^bb0(%wclk: !b1, %rclk: !b1, %rst: !b1):",
+          "^bb0(%wclk: !b1, %rclk: !b1, %rst: !b1, %data: !b9):");
+  if (routed) {
+    replace("\"ac.struct.create\"(%sequence, %checksum)",
+            "\"ac.struct.create\"(%data, %checksum)");
+    replace("    \"ac.yield\"() : () -> ()", R"ir(
+    %observed = "ac.struct.get"(%head) {field = "sequence"} : (!packet) -> !b9
+    "ac.yield"(%observed, %ra) : (!b9, !b1) -> ()
+)ir");
+    replace("ac.domain_clock_inputs = {W = 0 : i32, R = 1 : i32}",
+            "ac.default_domain = \"W\", ac.domain_clock_inputs = {W = 0 : i32, R = 0 : i32}");
+    // Change operand uses, never the declaration of the otherwise unused pin.
+    const auto start = text.find("    %zero =");
+    const auto end = text.find("}) {sym_name", start);
+    auto body = text.substr(start, end - start);
+    size_t cursor = 0;
+    while ((cursor = body.find("%rclk", cursor)) != std::string::npos) {
+      body.replace(cursor, 5, "%wclk"); cursor += 5;
+    }
+    text.replace(start, end - start, body);
+  } else {
+    replace("    \"ac.yield\"() : () -> ()", R"ir(
+    %observed = "ac.bits.constant"() {value = #w0} : () -> !b9
+    %available = "ac.bits.constant"() {value = #w0} : () -> !b1
+    "ac.yield"(%observed, %available) : (!b9, !b1) -> ()
+)ir");
+  }
+  replace("function_type = (!b1, !b1, !b1) -> ()",
+          "function_type = (!b1, !b1, !b1, !b9) -> (!b9, !b1)");
+  replace("input_names = [\"write_clock\", \"pyc_clk\", \"pyc_rst\"]",
+          "input_names = [\"write_clock\", \"pyc_clk\", \"pyc_rst\", \"data\"]");
+  replace("output_names = []", "output_names = [\"head\", \"available\"]");
+  return text;
+}
+
+TEST_F(StateResetValueTest, PublishFIFOExternalPayloadForIndependentFourState) {
+  publishSaved(fifoExternalPayloadIR(false), fifoExternalPayloadIR(true),
+               "PYCIRCUIT_TEST_FIFO_PAYLOAD_ANCHOR");
+}
+
+TEST_F(StateResetValueTest, FIFOEnableRegionYieldRequiresIndependentProof) {
+  auto logical = mlir::parseSourceString<mlir::ModuleOp>(
+      genericFIFOSystemIR(true, true, true), &context);
+  ASSERT_TRUE(logical);
+  auto expanded = ac::materializeHardwareCDC(*logical);
+  ASSERT_TRUE(mlir::succeeded(expanded));
+  ASSERT_TRUE(mlir::succeeded(ac::verifyHardwareCDCMaterialization(*logical, **expanded)));
+  ASSERT_TRUE(mlir::succeeded(ac::verifyFinalHardwareCDCComponents(**expanded)));
+  ac::TableMapOp enableMap;
+  (*expanded)->walk([&](ac::TableMapOp map) { enableMap = map; });
+  ASSERT_TRUE(enableMap);
+  auto &body = enableMap.getBody().front();
+  auto yield = mlir::cast<ac::YieldOp>(body.back());
+  ASSERT_EQ(yield->getNumOperands(), 1u);
+  ASSERT_EQ(body.getNumArguments(), 3u);
+  // Push capture is correctly typed, but omitting address selection enables
+  // every lane. The mutated region remains structurally legal hardware.
+  yield->setOperand(0, body.getArgument(2));
+  mlir::ScopedDiagnosticHandler expectedFailure(
+      &context, [](mlir::Diagnostic &) { return mlir::success(); });
+  EXPECT_TRUE(mlir::failed(ac::verifyHardwareCDCMaterialization(*logical, **expanded)));
+  EXPECT_TRUE(mlir::failed(ac::verifyFinalHardwareCDCComponents(**expanded)));
 }
 
 TEST_F(StateResetValueTest, ResourceSamplingAcceptsActualClockAliases) {
@@ -569,11 +688,19 @@ TEST_F(StateResetValueTest, PublishCDCRollbackForIndependentReplay) {
 }
 
 TEST_F(StateResetValueTest, PublishLogicalDepthThreeFIFOWithoutPhysicalization) {
-  auto text = fifoSystemIR(true);
-  const auto depth = text.find("#ac.math_int<4>");
-  ASSERT_NE(depth, std::string::npos);
-  text.replace(depth, std::string("#ac.math_int<4>").size(), "#ac.math_int<3>");
-  auto source = mlir::parseSourceString<mlir::ModuleOp>(fifoSystemIR(false), &context);
+  auto boundThree = [&](bool routed) {
+    auto text = genericFIFOSystemIR(routed, false, true);
+    const auto alias = text.find("module attributes");
+    text.insert(alias, "#depth3 = #ac.static_expr<{kind = \"literal\", value = {kind = \"integer\", value = #ac.math_int<3>}, origin = #rootocc, location = #span}>\n");
+    const std::string from = "parameters = [], type_arguments = [!packet]";
+    const auto actual = text.find(from);
+    EXPECT_NE(actual, std::string::npos);
+    if (actual != std::string::npos)
+      text.replace(actual, from.size(), "parameters = [#depth3], type_arguments = [!packet]");
+    return text;
+  };
+  auto text = boundThree(true);
+  auto source = mlir::parseSourceString<mlir::ModuleOp>(boundThree(false), &context);
   auto routed = mlir::parseSourceString<mlir::ModuleOp>(text, &context);
   ASSERT_TRUE(source); ASSERT_TRUE(routed);
   ASSERT_TRUE(mlir::succeeded(ac::verifyRoutedPackage(*routed)));

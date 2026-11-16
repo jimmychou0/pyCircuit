@@ -414,7 +414,8 @@ def ACIR_CDCRefinementOp : ACIR_Op<"cdc.refinement", [
     This operation neither allocates a resource nor authorizes a crossing.
   }];
   let arguments = (ins Variadic<ACIR_HardwareType>:$values,
-      StrAttr:$logical_kind, I64Attr:$implementation);
+      StrAttr:$logical_kind, I64Attr:$implementation,
+      OptionalAttr<ACIR_StaticExprAttr>:$depth);
   let hasVerifier = 1;
 }
 

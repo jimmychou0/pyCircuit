@@ -11,6 +11,7 @@ struct CDCPrimitiveLayout {
   HardwareBindings bindings;
   llvm::StringRef kind;
   mlir::Type payloadType;
+  StaticExprAttr depthExpression;
   std::optional<uint64_t> depth;
   bool isFIFO() const { return kind == "async_fifo"; }
   mlir::Value sourceClock() const { return allocation->getOperand(0); }
@@ -31,6 +32,9 @@ struct CDCPrimitiveLayout {
     return isFIFO() ? allocation->getResult(2) : mlir::Value();
   }
 };
+mlir::LogicalResult verifyCDCDepth(
+    const HardwareAnalysis &analysis, StaticExprAttr depth,
+    const HardwareBindings &bindings, mlir::Operation *site);
 bool isCDCPrimitive(mlir::Operation *declaration);
 bool isCDCInstance(InstanceOp instance);
 mlir::LogicalResult verifyCDCPrimitiveDeclaration(

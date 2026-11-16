@@ -517,7 +517,7 @@ def test_mixed_reset_whole_transaction_public_consumers(tmp_path, monkeypatch):
 
 
 def _fifo_scoreboard(
-    records, *, zero_payload=False, push_instance=None, pop_event="fifo pop"
+    records, *, zero_payload=False, push_instance=None, pop_event="fifo pop", capacity=4
 ):
     rows, stopped_release = _fifo_rows()
     observations = {}
@@ -573,11 +573,13 @@ def _fifo_scoreboard(
                 next_token = (next_token + 1) & 511
                 queue.append(0 if zero_payload else value)
                 pushes += 1
-                assert len(queue) <= 4
+                assert len(queue) <= capacity
                 max_depth = max(max_depth, len(queue))
         previous = row
     assert pushes > 20 and pops > 16, "resource failed to make progress or wrap"
-    assert max_depth == 4, "write-only phase did not exercise capacity/backpressure"
+    assert (
+        max_depth == capacity
+    ), "write-only phase did not exercise capacity/backpressure"
     assert not queue, "final read-only phase failed to drain accepted data"
     return observations
 
@@ -617,17 +619,28 @@ def test_fifo_system_saved_anchor_independent_scoreboard(
     assert hashlib.sha256(final.read_bytes()).hexdigest() == digest
 
 
-def test_mixed_actual_fifo_saved_anchor_independent_scoreboards(tmp_path, monkeypatch):
+@pytest.mark.parametrize("bound", [False, True], ids=["same_depth", "bound_depths"])
+def test_mixed_actual_fifo_saved_anchor_independent_scoreboards(
+    tmp_path, monkeypatch, bound
+):
     producer = Path(os.environ["PYC_BUILD_DIR"]) / "bin/ACIRAnchorArtifactTests"
     anchor = tmp_path / "anchor"
-    variable = "PYCIRCUIT_TEST_MIXED_ACTUAL_FIFO_ANCHOR"
+    variable = (
+        "PYCIRCUIT_TEST_BOUND_ACTUAL_FIFO_ANCHOR"
+        if bound
+        else "PYCIRCUIT_TEST_MIXED_ACTUAL_FIFO_ANCHOR"
+    )
+    fixture = (
+        "PublishBoundActualFIFOSystemForIndependentScoreboards"
+        if bound
+        else "PublishMixedActualFIFOSystemForIndependentScoreboards"
+    )
     monkeypatch.setenv(variable, str(anchor))
     _ok(
         _run(
             [
                 str(producer),
-                "--gtest_filter=StateResetValueTest."
-                "PublishMixedActualFIFOSystemForIndependentScoreboards",
+                f"--gtest_filter=StateResetValueTest.{fixture}",
             ]
         )
     )
@@ -650,9 +663,10 @@ def test_mixed_actual_fifo_saved_anchor_independent_scoreboards(tmp_path, monkey
             zero_payload=True,
             push_instance="root/scalar_fifo",
             pop_event="scalar fifo pop",
+            capacity=8 if bound else 4,
         )
         # Each scoreboard independently requires pushes, reads, wrap, full,
-        # backpressure and final drain; an unused specialization cannot pass.
+        # backpressure and final drain; an unused shared instance cannot pass.
         traces.append((packet, scalar))
     assert traces[0] == traces[1] == traces[2]
     assert hashlib.sha256(final.read_bytes()).hexdigest() == digest
@@ -1242,3 +1256,117 @@ def test_table_selected_reset_retains_index_dependency_in_managed_metadata(
         assert reset["input_ordinal"] is None
         assert reset["input_dependencies"] == [0]
         assert (reset["kind"], reset["polarity"]) == ("async", "low")
+
+
+FIFO_PAYLOAD_CPP = r"""
+#include "pycircuit_system.hpp"
+#include <stdexcept>
+using Bit=gfsim::wire<gfsim::Bits<1>>;
+using Word=gfsim::wire<gfsim::Bits<9>>;
+static Bit bit(unsigned v){return Bit::known(gfsim::Bits<1>{v});}
+static void require(bool v){if(!v)throw std::runtime_error("FIFO external X/Z payload oracle");}
+int main(){for(unsigned workers:{1u,2u}){
+  gfsim::WorkExecutor executor(workers);pyc_root dut("root",&executor);
+  // 9'b10xz01zx1: separate known value, known mask and Z mask.
+  const auto expected=gfsim::FourState<9>::fromMasks(
+    gfsim::Bits<9>{0x109},gfsim::Bits<9>{0x199},gfsim::Bits<9>{0x24});
+  auto pins=[&](unsigned clock,unsigned reset){
+    dut.PYC_WRITE_CLOCK=bit(clock);dut.PYC_READ_CLOCK=bit(clock);
+    dut.PYC_RESET=bit(reset);dut.data=Word::fromPacked(expected);
+  };
+  pins(0,1);dut.Reset();dut.Xfer();unsigned reads=0;
+  for(unsigned cycle=0;cycle<32;++cycle)for(unsigned clock:{0u,1u}){
+    pins(clock,cycle==0);dut.Work();
+    gfsim::SimFailureInfo failure{};require(dut.pyc_validate_checks(failure));
+    require(dut.available.packed().isFullyKnown());
+    if(cycle && dut.available.value().value()){
+      require(dut.head.packed().parityEquivalent(expected));reads+=clock;
+    }else require(dut.head.packed().parityEquivalent(
+      gfsim::FourState<9>::known(gfsim::Bits<9>{0})));
+    dut.Xfer();
+  }
+  require(reads>12);
+}}
+"""
+
+
+def _fifo_payload_cpp(ports):
+    names = {row["name"]: row["wire"] for row in ports["inputs"]}
+    return (
+        FIFO_PAYLOAD_CPP.replace("PYC_WRITE_CLOCK", names["write_clock"])
+        .replace("PYC_READ_CLOCK", names["pyc_clk"])
+        .replace("PYC_RESET", names["pyc_rst"])
+    )
+
+
+FIFO_PAYLOAD_RTL = r"""
+module fifo_payload_probe;
+  logic clock=0,rst=1,permit=0;logic[2:0]phase=0;
+  logic[8:0]data=9'b10xz01zx1;wire[8:0]head;
+  wire available,complete,error,sampling;integer reads=0;
+  pyc_root dut(.write_clock(clock),.pyc_7079635f636c6b(clock),
+    .pyc_7079635f727374(rst),.data(data),.head(head),.available(available),
+    .pyc_phase(phase),.pyc_root_commit_ok(permit),.pyc_check_complete(complete),
+    .pyc_sampling_error(sampling),.pyc_local_error(error));
+  task commit;
+    permit=1;phase=2;#1;phase=0;permit=0;#1;
+  endtask
+  task step(input logic level,reset);
+    clock=level;rst=reset;#1;phase=1;#1;
+    if(error!==0 || sampling!==0 || complete!==1)$fatal(1,"FIFO payload work failed");
+    if(!reset && available===1)begin
+      if(head!==9'b10xz01zx1)$fatal(1,"FIFO lost external payload X/Z planes");
+      if(level)reads=reads+1;
+    end else if(available!==0 || head!==9'b0)$fatal(1,"FIFO empty head differs");
+    commit();
+  endtask
+  initial begin
+    phase=4;#1;commit();
+    for(integer cycle=0;cycle<32;cycle=cycle+1)begin
+      step(0,cycle==0);step(1,cycle==0);
+    end
+    if(reads<=12)$fatal(1,"FIFO X/Z payload did not traverse storage");
+    $display("FIFO_PAYLOAD_XZ_OK");$finish;
+  end
+endmodule
+"""
+
+
+def test_fifo_external_payload_preserves_x_and_z(tmp_path, monkeypatch):
+    producer = Path(os.environ["PYC_BUILD_DIR"]) / "bin/ACIRAnchorArtifactTests"
+    anchor = tmp_path / "anchor"
+    variable = "PYCIRCUIT_TEST_FIFO_PAYLOAD_ANCHOR"
+    monkeypatch.setenv(variable, str(anchor))
+    _ok(
+        _run(
+            [
+                str(producer),
+                "--gtest_filter=StateResetValueTest."
+                "PublishFIFOExternalPayloadForIndependentFourState",
+            ]
+        )
+    )
+    monkeypatch.delenv(variable)
+    original = {
+        p.relative_to(anchor): p.read_bytes() for p in anchor.rglob("*") if p.is_file()
+    }
+    _ok(_cli("link", "--from-anchor", str(anchor), "--verify-only"))
+    final = tmp_path / "payload.ac"
+    _ok(
+        _cli(
+            "link", "--from-anchor", str(anchor), "--target", "final", "-o", str(final)
+        )
+    )
+    digest = hashlib.sha256(final.read_bytes()).hexdigest()
+    _build_native_probe(final, tmp_path, _fifo_payload_cpp)
+    generated = tmp_path / "rtl"
+    _ok(_cli("emit", str(final), "--target", "verilog", "-o", str(generated)))
+    bench = tmp_path / "payload.sv"
+    bench.write_text(FIFO_PAYLOAD_RTL)
+    assert "FIFO_PAYLOAD_XZ_OK" in _simulate_rtl(
+        generated, bench, tmp_path / "payload.vvp", "fifo_payload_probe"
+    )
+    assert hashlib.sha256(final.read_bytes()).hexdigest() == digest
+    assert original == {
+        p.relative_to(anchor): p.read_bytes() for p in anchor.rglob("*") if p.is_file()
+    }

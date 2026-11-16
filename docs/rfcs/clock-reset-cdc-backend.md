@@ -1,9 +1,10 @@
 # 时钟域、状态复位与 CDC 后端方案
 
-状态：完整后端实现与集成验证中；设计决策已定案，尚未完成全范围执行验收。
+状态：F1–F6 前后端接口已有确认结论；后端 IR 门禁已有执行证据，实际参数深度展开修复与 F7 前端联调仍分别验收。
 记录日期：2026-11-10。
 增量说明更新：2026-11-12。
 接口与行为示例补充：2026-11-12。
+前后端确认对齐：2026-11-16，依据 [F1–F7 确认评论](https://github.com/jimmychou0/pyCircuit/pull/11#issuecomment-6894231636)。
 初稿源码检查基线：`e2ddd5a9fa9ac7522f9cfb460403b92519f23e0a`。
 状态契约增量对照核对：`5f66e0a5bc8a1bd67e7f19e11a74da61cb8a1621`。
 
@@ -22,7 +23,7 @@ Python 作者接口及其默认参数捕获仍由 #400 的生产侧负责；后�
 
 ## 变更类型与所属领域
 
-Design proposal / RFC；IR、锚点持久化、存储与 CDC 物理化、运行时及代码生成。
+已确认的接口与后端实现方案；IR、锚点持久化、存储与 CDC 物理化、运行时及代码生成。
 
 ## 问题与影响
 
@@ -76,15 +77,83 @@ Design proposal / RFC；IR、锚点持久化、存储与 CDC 物理化、运行�
 
 ## 示例阅读约定
 
-下文用具体例子说明域绑定、新旧状态接口、复位行为和 CDC 资源。
-MLIR 风格代码是**拟议接口示意**，不是当前 parser 已接受的完整语法，也不是 Python
-`ac.state(...)`。为突出增量，省略完整 Module 签名、来源／所有权元数据及无关的逻辑表达式。
-例子中的局部域 `D` 必须通过实际实例绑定解析到确定的逻辑时钟源。
+下文用例说明域绑定、状态策略、复位行为和 CDC 资源。
+Python 写法记录 F1–F6 已确认的作者合同，不代表当前 checkout 已完成前端生产与执行。
+MLIR 片段使用后端 generic IR 形式，省略所在 Module、类型别名和来源元数据的定义；
+`%clk`、`%rst`、`%zero`、`%five` 等值须在所属 Module 中定义，
+`#count_occ`、`#saved_occ` 等 occurrence 须对应真实声明身份。
+实际字段和版本以“实施定案与精确 IR 接口”一节为准。
+CDC 文本资源记录是逻辑连接示意，不是另一套分配操作。
 
-`%zero`、`%five` 分别表示已定义且类型匹配的静态常量 0、5；
-`%candidate`、`%intent` 表示已路由的正常候选值和写意图。
-所有状态例子都显式提供 init，不提前决定省略 init 的语义。
-CDC 资源记录使用说明性文本，不额外引入已经实现的 op 或资源类型拼写。
+## 前端交接确认（F1–F6）
+
+接口确认、代码落实、联调通过分别记录。以下合同来自确认评论；F7 的真实源码生产链仍需验收，
+不能用手写 IR 的后端执行结果替代。
+
+### F1：初始化和复位值
+
+普通状态声明保持现有规则。显式 `ac.state(...)` 只用于声明存储与属性，
+使用 `init` 指定初值，`reset_value` 独立指定硬件复位目标。
+省略 init 表示未指定初值，生产为 `init_kind="unspecified"`，仿真存储位全 X。
+开启复位时，省略 reset_value 则沿用显式 init；两者都没有时报错。
+不根据 reset_value 反推 init，也不隐式补零。
+
+| 显式状态声明中的写法 | 初始化 | 硬件复位目标 |
+| --- | --- | --- |
+| `ac.state(init=3, reset_value=0)` | 3 | 0 |
+| `ac.state(init=3)` | 3 | 3 |
+| `ac.state(reset_value=0)` | X | 0 |
+| `ac.state()` | 默认开启同步复位但缺少目标，拒绝 | — |
+| `ac.state(reset_kind="none")` | X | 无复位 |
+
+这些省略规则不改变普通 `a: ac.u8` 或 `a: ac.u8 = 0` 的既有语义。
+锚点生产侧完成默认值归一：有复位时交付类型匹配的 reset_value SSA，
+未指定初始化时省略 init 操作数；后端不重新选择 Python 默认值。
+
+### F2：状态属性和默认复位
+
+默认 edge 为 posedge，reset_kind 为 sync。省略 reset 时沿用编译器默认复位及其极性；
+显式 reset 的极性默认 high，可由 reset_polarity 覆盖，必要的极性适配由编译器完成。
+reset_kind=none 不生成 reset／reset_value／polarity 字段，同时提供复位相关参数时拒绝，
+仍可独立指定 init。上述规则在进入逻辑锚点前补全，reload／emission 只验证明确合同。
+
+### F3：域参数和独立编译
+
+`domain=` 是特殊静态实例配置，省略时继承父实例默认域；没有默认域而需要时钟时必须显式绑定。
+额外域由普通静态参数及 list／dict 传递，支持静态索引和别名，不引入特殊 domains 参数。
+独立编译接口保留域 formals 和绑定需求，实例化形成 actuals，根装配连接实际逻辑时钟输入。
+使用既定四个域属性，不以名字、频率或容器顺序决定实际域身份。
+Domain 容器接入复用静态绑定基础，不依赖完整 Module 实例列表功能。
+新能力接入 routed7／saved6，旧声明保持既有行为。
+
+### F4：CDC 资源和端点
+
+作者显式选择 AsyncReg／AsyncFIFO。声明创建资源身份，后续赋值、Method 调用和别名引用保持同一资源。
+端点域从实际连接推导，无法唯一确定时要求显式配置；AsyncReg 多消费者必须在同一目标域。
+进入 GFIR 前，生产侧补齐后端原生实例的规范域属性、payload、经过本地 admission 的最终 fire，
+以及既有事务效果和复位元数据。多调用／冲突遵守现有资源所有权规则。
+普通 Method 不能直接跨域；FIFO 两端各自在本地域事务中提交，不形成跨域原子事务。
+
+当前 FIFO recipe 只支持至少 2 的二次幂深度，必须在实际静态参数绑定后检查并保留源码定位，
+不自动调整容量。这个范围是当前实现限制，任意正深度仍是后续实现方向。
+定义内字面量深度与经 Module 静态参数绑定得到的相同深度应有相同行为；
+同一共享定义的不同深度实例必须保留各自绑定与状态身份，不能由首个 actual 改写共享 body。
+
+### F5：CDC 整体复位
+
+资源构造处可显式提供整体 reset 和极性。省略时继承资源声明所在 Module 的默认复位及其极性，
+不从生产者或消费者的复位中自动选择。显式 reset 的极性默认 high，可覆盖；
+共同条件由作者显式提供整体复位信号，不隐式组合两侧复位。
+当前不支持两端独立复位。归零／清空、恢复同步及恢复期间禁止传输由公共后端负责，
+不要求作者编写释放计数或同步 guard。
+
+### F6：普通 Module 和 System 边界
+
+普通 Module 的数据及接口控制输入／输出属于自身域，Reg／Queue 和 Method 的接口信号线同样受约束。
+子 Module 可以属于其他域，普通跨域连接仍经显式 CDC；时钟／复位沿用专门规则。
+Issue #400 前部 Top 示例按补充规则改写为经 CDC 返回，或放到 System 分域观察，普通 Module 不增加跨域 I/O 豁免。
+System 负责多域装配、激励和分域观察，由域配置形成根控制输入、采样映射和实际时钟连接，
+控制脚手架仍由编译器生成。
 
 ## 后端边界与总体流程
 
@@ -241,8 +310,8 @@ flowchart LR
 
 System 分域观察是验证边界，不产生 DUT 跨域数据通路。
 普通父 Module 的输入／输出仍遵守其自身域规则；不能把 slow 输出直接穿过 fast
-父 Module 返回。#400 早先 Top 示例与其后补充的 I/O 规则需要对齐，
-后端不为该示例添加隐式豁免。
+父 Module 返回。F6 已确认 #400 的早先 Top 示例应改写为经 CDC 返回，
+或移到 System 的分域观察边界，不增加普通 Module 的跨域 I/O 豁免。
 
 ### 3. 逻辑状态与复位契约
 
@@ -270,9 +339,9 @@ state.update(Q, candidate, intent)
 | 初始化 | 逻辑 state 要求 initial | 独立 init；unspecified 为 typed packed 全 X |
 | 时钟归属 | 已有 clock 连接和域/事件约束 | 对齐既有逻辑边界，以逻辑域/事件引用具体化表示；属于表示调整 |
 
-例如，新契约拟允许 `init=5, reset_value=0`，分别描述初始化和复位后的值；
+已确认的新契约允许 `init=5, reset_value=0`，分别描述初始化和复位后的值；
 现有逻辑 state 只有一个 initial，不能独立表达这两个值。
-上述新增能力及表示调整均是提案，不代表当前已经支持。
+这些值与策略已由后端 IR 表达；作者源码到该 IR 的生产能力和执行证据单独验收。
 
 **沿用机制**：reset 使用真实逻辑引用或表达式；初始化值及复位值接受类型和静态检查。
 每个状态恰好对应一个 update，无正常写入时保持；复位独立于正常事务激活，
@@ -293,43 +362,30 @@ gfir.state.update(Q, candidate, intent)
 ```
 
 clock、reset 和状态的域/事件归属原本就存在，不是本提案新增的概念或边界。
-拟议新版本用 `domain` 属性引用逻辑更新事件源，替代旧 clock 操作数；
-reset 继续作为逻辑 SSA 控制引用。以下配置保持上升沿、同步高有效、初始值和复位值均为 0：
+新版本保留 clock／reset 的逻辑 SSA 引用，domain 属性与实际 clock 来源共同校验逻辑事件。
+以下配置保持上升沿、同步高有效、初始值和复位值均为 0：
 
 ```mlir
-%q = gfir.state "count"
-    init(%zero)
-    reset(%rst)
-    reset_value(%zero)
-    {
-        domain = "D",
-        edge = "posedge",
-        reset_kind = "sync",
-        reset_polarity = "high"
-    } : !ac.bits<8>
-
-gfir.state.update(%q, %candidate, %intent)
+%q = "gfir.state"(%clk, %rst, %zero, %zero) {
+  instance_name = "count", occurrence = #count_occ, domain = "D",
+  edge = "posedge", reset_kind = "sync", reset_polarity = "high",
+  init_kind = "explicit", operandSegmentSizes = array<i32: 1, 1, 1, 1>
+} : (!b1, !b1, !b8, !b8) -> !b8
+"gfir.state.update"(%q, %candidate, %intent) : (!b8, !b8, !b1) -> ()
 ```
 
 `state.update` 的配对关系和 Q/candidate/intent 机制不变。
-旧 clock 到逻辑域引用的调整属于新版本表示变化，用于对齐既有逻辑边界；
-不能仅加一个属性就宣称已完成迁移。
+逻辑 clock SSA 与 domain 引用必须指向同一实际来源；域属性不代替实例连接证明。
 
 #### 示例二：初始化为 5，低有效异步复位到 0
 
 ```mlir
-%q = gfir.state "count"
-    init(%five)
-    reset(%rst_n)
-    reset_value(%zero)
-    {
-        domain = "D",
-        edge = "posedge",
-        reset_kind = "async",
-        reset_polarity = "low"
-    } : !ac.bits<8>
-
-gfir.state.update(%q, %candidate, %intent)
+%q = "gfir.state"(%clk, %rst_n, %five, %zero) {
+  instance_name = "count", occurrence = #count_occ, domain = "D",
+  edge = "posedge", reset_kind = "async", reset_polarity = "low",
+  init_kind = "explicit", operandSegmentSizes = array<i32: 1, 1, 1, 1>
+} : (!b1, !b1, !b8, !b8) -> !b8
+"gfir.state.update"(%q, %candidate, %intent) : (!b8, !b8, !b1) -> ()
 ```
 
 - 初始化后的逻辑值为 5。
@@ -342,15 +398,12 @@ gfir.state.update(%q, %candidate, %intent)
 #### 示例三：无复位状态与更新边沿
 
 ```mlir
-%q = gfir.state "saved"
-    init(%five)
-    {
-        domain = "D",
-        edge = "posedge",
-        reset_kind = "none"
-    } : !ac.bits<8>
-
-gfir.state.update(%q, %candidate, %intent)
+%q = "gfir.state"(%clk, %five) {
+  instance_name = "saved", occurrence = #saved_occ, domain = "D",
+  edge = "posedge", reset_kind = "none", init_kind = "explicit",
+  operandSegmentSizes = array<i32: 1, 0, 1, 0>
+} : (!b1, !b8) -> !b8
+"gfir.state.update"(%q, %candidate, %intent) : (!b8, !b8, !b1) -> ()
 ```
 
 无复位状态不带 `reset`、`reset_value` 或 `reset_polarity`。
@@ -358,7 +411,7 @@ gfir.state.update(%q, %candidate, %intent)
 若将本例的 `edge` 改为 `"negedge"`，正常更新改为发生在 D 域下降沿。
 同域上升沿状态和下降沿状态不能据此组成一次普通原子事务。
 
-拟议接口的字段归属为：
+当前接口的字段归属为：
 
 | 字段 | 表示与约束 |
 | --- | --- |
@@ -510,21 +563,36 @@ clock/reset 物理端口、使能、数据连接和类型布局在此生成。
 
 **新增实现**：为锚点中已经明确的 AsyncReg/AsyncFIFO 生成公共派生硬件表示。
 “实现选择”只涉及同一逻辑资源的电路实现，不涉及决定电平同步还是队列通信。
-首版拟固定采用以下展开：
+首个 recipe 采用以下展开：
 
 | 逻辑资源 | 首选物理实现 |
 | --- | --- |
 | AsyncReg | 目标域两级状态，同一目标域边沿推进，普通消费者只访问第二级 |
 | AsyncFIFO 控制 | 本地 binary／registered Gray 指针、wrap bit、对端指针两级同步、本地 full／empty |
-| AsyncFIFO 数据 | typed 寄存器 bank 和读选择逻辑 |
+| AsyncFIFO 数据 | shape 为 DEPTH 的 typed Collection 寄存器阵列和 Table 读写选择 |
 | AsyncFIFO 复位恢复 | 共同异步断言、各域两级同步释放、交换 released 信息 |
+
+DEPTH 可以是所属 Module 的静态整数 formal。公共电路保留这个表达式，
+不要求它在共享定义中已经是字面量：阵列 shape 为 `[DEPTH]`，地址位宽为
+`max(1, ceil_log2(DEPTH))`，带 wrap bit 的指针再加一位。
+位宽计算用既有 StaticExpr 的比较、选择和加法表达，不新增源级算术或目标专用 intrinsic。
+每个实际实例仍由现有绑定分析解析深度，并检查当前 recipe 的二次幂限制。
+
+写入使用 `table.map` 为每个槽位生成 `(slot == write_address) & push` 的使能，
+读取使用 `table.get`，不可读时返回 packed zero。指针初始化和复位均为已知零，
+只在通过已知控制检查的提交中递增；失败时不提交，因此有效执行中的读地址保持已知。
+载荷本身允许 X/Z，按已知地址原样传递；这个性质不能用强制篡改内部指针的测试代替。
+
+同一个 `FIFO<T, CAPACITY>` 定义可同时绑定 `FIFO<Packet, 4>` 和 `FIFO<Bits9, 8>`。
+两者复用同一参数化定义，各有自己的状态、容量和指针布局；
+不按第一个 actual 改写共享 body，也不新增模块特化、包装 Module 或未验证的定义裁剪。
 
 #### 示例：将已确定的 AsyncReg 展开为同步链
 
 对上文 `mode_sync`，首选公共实现可以展开成：
 
 ```text
-仅在 slow 域有效边沿准备：
+复位释放完成后，仅在 slow 域有效边沿准备：
     stage1_next = Producer.mode
     stage2_next = old(stage1)
 
@@ -704,7 +772,9 @@ System 与端口描述只承载从锚点导出的逻辑观察／驱动和目标�
 7. 同一 final 的 native workers 1／2 与四态 managed RTL 对应行为一致。
 8. 逻辑合法但实现暂不支持的容量，在物理化时明确失败且不修改原锚点和旧输出。
 
-前端端到端测试验证双方交接，不能替代后端直接锚点覆盖。
+F7 按状态属性、Domain／独立编译／System、CDC 事务接入的顺序实施，再以少量真实源码用例
+验证 compile → link → profile7 锚点 → 保存重载 → 同一 final 的 C++ workers1／2 和四态 RTL。
+复用后端既有数值、时序和回滚 oracle，不复制整套后端矩阵；前端联调不能替代后端直接锚点覆盖。
 Physical 功能与综合展开分别收集证据。
 构建和编译器执行遵循现有 dev 验证流程；长矩阵留在已有 nightly 入口。
 
@@ -766,9 +836,14 @@ push／pop 分别绑定经认证的本地域 sampled Rule final fire 和本地 a
 AsyncReg 公共实现包含两级数据同步和独立的目标域两级释放，释放前数据级保持零，
 不等待源时钟。FIFO 使用两侧本地释放与对端释放同步，不共享跨域 occupancy。
 首个 FIFO 实现接受 2 的幂且至少 2 的容量；其他正容量保持逻辑合法并在物理化时拒绝。
+本次参数化电路将 final 组件 recipe 更新为 `implementation=2`，FIFO 见证的 depth
+保留有类型的 StaticExpr；字面量与静态参数采用同一电路和验证路径。
+旧实验 implementation=1 的 final 组件明确拒绝，逻辑 routed 7／保存 schema 6 不变。
 final 保留自足的 `ac.cdc.refinement` 见证；重新加载 final 也必须重建并核对完整电路及端点，
 不能凭 CDC 标签跳过域检查。独立 correspondence 核对原生实例的全部输入／结果和被移除的
 逻辑 import，包括 AsyncReg 物理电路不用的 source_clock。
+`table.map` 的 region 参数、capture、内部 SSA 与 yield 同样纳入逐项对应证明；
+实际绑定后的深度限制也须在 final 重载时复查，不能仅凭符号电路通过就放行。
 具体 payload 的 packed zero 用已有 Bits constant、`enum.from_bits`、递归 `struct.create` 和
 `table.splat` 表达，不采用 nominal 默认值或第一个 Enum member。
 `ac.value.zero` 仅保留给可复用定义中未解析的 opaque TypeParam 叶子；
@@ -781,6 +856,6 @@ final 保留自足的 `ac.cdc.refinement` 见证；重新加载 final 也必须�
 2026-11-10 的讨论与源码检查记录在忽略的 `docs/gates/logs/` 下；
 它们不是本文件、测试或干净 checkout 的依赖。
 
-事务复位、未指定初值、CDC 恢复、版本与有限 physical 批次合同已完成独立设计审查。
+F1–F6 接口结论与已有后端的事务复位、未指定初值、CDC 恢复、版本和 physical 批次合同分别记录。
 逻辑锚点及域边界仍是沿用要求。当前实施和独立测试继续覆盖全部后端范围，
 任何单项通过都不能代替全部验收；记录按精确候选归档在忽略的 gate evidence 中。
